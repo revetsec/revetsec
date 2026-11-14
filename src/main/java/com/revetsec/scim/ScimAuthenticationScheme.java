@@ -114,9 +114,9 @@ public final class ScimAuthenticationScheme {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimAuthenticationScheme value && primary == value.primary
+        return this == other || (other instanceof ScimAuthenticationScheme value && primary == value.primary
                 && type.equals(value.type) && name.equals(value.name) && description.equals(value.description)
-                && Objects.equals(specUri, value.specUri) && Objects.equals(documentationUri, value.documentationUri);
+                && Objects.equals(specUri, value.specUri) && Objects.equals(documentationUri, value.documentationUri));
     }
 
     /**

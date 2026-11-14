@@ -120,7 +120,7 @@ class ActorOriginTests(unittest.TestCase):
         self.assertEqual('', result.stdout)
 
     def test_legacy_origin_still_accepts_original_default(self):
-        jar = ROOT / 'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'
+        jar = ROOT / 'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0.jar'
         result = self.actor(jar, None)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertTrue(result.stdout.startswith('ROOT\t'))

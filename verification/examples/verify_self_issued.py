@@ -125,7 +125,7 @@ def main():
     run("explicit-nullability", [args.java_home / "bin/java", "-cp", audit_cp.read_text(), checker, source_list,
         audit_cp, example / "target/nullability-audit.json", "21"], example)
     runtime = [Path(x) for x in (example / "target/runtime-classpath.txt").read_text().strip().split(os.pathsep)]
-    if sorted(p.name for p in runtime) != ["revetsec-1.0.0-SNAPSHOT.jar", "revetsec-soklet-1.0.0-SNAPSHOT.jar", "soklet-4.0.0.jar"]:
+    if sorted(p.name for p in runtime) != ["revetsec-1.0.0.jar", "revetsec-soklet-1.0.0.jar", "soklet-4.0.0.jar"]:
         raise RuntimeError("Example runtime must contain exactly core, helper and framework JARs")
     cp = os.pathsep.join([str(example / "target/test-classes"), str(example / "target/classes"), *map(str, runtime)])
     run("annotation-free-runtime", [args.java_home / "bin/java", "-cp", cp,

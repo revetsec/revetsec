@@ -11,11 +11,11 @@ Build the example with its matching core/adapter/framework dependencies. Supply
 each artifact path and its expected SHA-256 explicitly:
 
     python3 verification/scim-directory-soklet/run.py \
-      --application-jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar \
+      --application-jar examples/playground/target/playground-1.0.0.jar \
       --application-sha256 EXPECTED_APPLICATION_SHA256 \
-      --core-jar examples/playground/target/lib/revetsec-1.0.0-SNAPSHOT.jar \
+      --core-jar examples/playground/target/lib/revetsec-1.0.0.jar \
       --core-sha256 EXPECTED_CORE_SHA256 \
-      --adapter-jar examples/playground/target/lib/revetsec-soklet-1.0.0-SNAPSHOT.jar \
+      --adapter-jar examples/playground/target/lib/revetsec-soklet-1.0.0.jar \
       --adapter-sha256 EXPECTED_ADAPTER_SHA256 \
       --framework-jar examples/playground/target/lib/soklet-4.0.0.jar \
       --framework-sha256 EXPECTED_FRAMEWORK_SHA256 \

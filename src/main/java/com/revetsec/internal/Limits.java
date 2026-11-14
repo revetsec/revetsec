@@ -508,8 +508,8 @@ public final class Limits {
 	public static final Limit CIMD_MAXIMUM_DOCUMENT_BYTES = Limit.fromAmounts("CIMD maximum document bytes", Unit.BYTES, 5120, 1024, 5120);
 	/** Opt-in CIMD maximum cache entries: default 128, inclusive interval [1, 4096]. */
 	public static final Limit CIMD_MAXIMUM_CACHE_ENTRIES = Limit.fromAmounts("CIMD maximum cache entries", Unit.COUNT, 128, 1, 4096);
-	/** Opt-in CIMD maximum freshness: default Duration.ofSeconds(300), inclusive interval [Duration.ZERO, Duration.ofHours(1)]. */
-	public static final Limit CIMD_MAXIMUM_FRESHNESS = Limit.fromDurations("CIMD maximum freshness", Duration.ofSeconds(300), Duration.ZERO, Duration.ofHours(1));
+	/** Opt-in CIMD maximum freshness: default Duration.ofMinutes(5), inclusive interval [Duration.ZERO, Duration.ofHours(1)]. */
+	public static final Limit CIMD_MAXIMUM_FRESHNESS = Limit.fromDurations("CIMD maximum freshness", Duration.ofMinutes(5), Duration.ZERO, Duration.ofHours(1));
 	/** Opt-in CIMD maximum concurrent fetches: default 8, inclusive interval [1, 64]. */
 	public static final Limit CIMD_MAXIMUM_CONCURRENT_FETCHES = Limit.fromAmounts("CIMD maximum concurrent fetches", Unit.COUNT, 8, 1, 64);
 	/** Opt-in CIMD maximum resolved addresses: default 16, inclusive interval [1, 64]. */

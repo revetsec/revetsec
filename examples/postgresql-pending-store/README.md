@@ -105,7 +105,7 @@ Then run from the core checkout:
 ```shell
 python3 examples/postgresql-pending-store/run_totp.py \
   --java-home "$JAVA_HOME" \
-  --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
+  --core-jar target/revetsec-1.0.0.jar \
   --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
   --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
   --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
@@ -164,7 +164,7 @@ Use the exact packaged core and dependency artifacts, with `JAVA_HOME` selecting
 ```shell
 python3 examples/postgresql-pending-store/run_scim.py \
   --java-home "$JAVA_HOME" \
-  --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
+  --core-jar target/revetsec-1.0.0.jar \
   --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
   --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
   --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \

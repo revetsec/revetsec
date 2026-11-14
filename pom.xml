@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.revetsec</groupId>
 	<artifactId>revetsec</artifactId>
-	<version>1.0.0-SNAPSHOT</version>
+	<version>1.0.0</version>
 	<packaging>jar</packaging>
 	<name>Revetsec</name>
 	<description>Zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.</description>
@@ -30,6 +30,7 @@
 		<connection>scm:git:git@github.com:revetsec/revetsec.git</connection>
 		<developerConnection>scm:git:git@github.com:revetsec/revetsec.git</developerConnection>
 		<url>https://github.com/revetsec/revetsec</url>
+		<tag>v1.0.0</tag>
 	</scm>
 
 	<!-- Sibling precedent. SNAPSHOTs are not published unless the owner authorizes it (D48). -->
@@ -61,7 +62,10 @@
 		<maven.jar.plugin.version>3.5.1</maven.jar.plugin.version>
 		<maven.javadoc.plugin.version>3.12.0</maven.javadoc.plugin.version>
 		<maven.gpg.plugin.version>3.2.8</maven.gpg.plugin.version>
+		<cyclonedx.maven.plugin.version>2.9.3</cyclonedx.maven.plugin.version>
 		<central.publishing.plugin.version>0.12.0</central.publishing.plugin.version>
+		<!-- A release build creates a complete local Central bundle. Upload requires an explicit owner override. -->
+		<central.skipUpload>true</central.skipUpload>
 
 		<!-- Analysis and quality profiles -->
 		<error.prone.version>2.50.0</error.prone.version>
@@ -548,6 +552,9 @@
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-gpg-plugin</artifactId>
 						<version>${maven.gpg.plugin.version}</version>
+						<configuration>
+							<bestPractices>true</bestPractices>
+						</configuration>
 						<executions>
 							<execution>
 								<id>sign-artifacts</id>
@@ -559,6 +566,33 @@
 						</executions>
 					</plugin>
 					<plugin>
+						<groupId>org.cyclonedx</groupId>
+						<artifactId>cyclonedx-maven-plugin</artifactId>
+						<version>${cyclonedx.maven.plugin.version}</version>
+						<executions>
+							<execution>
+								<id>release-sbom</id>
+								<phase>package</phase>
+								<goals>
+									<goal>makeBom</goal>
+								</goals>
+								<configuration>
+									<projectType>library</projectType>
+									<schemaVersion>1.6</schemaVersion>
+									<includeBomSerialNumber>false</includeBomSerialNumber>
+									<includeCompileScope>false</includeCompileScope>
+									<includeProvidedScope>false</includeProvidedScope>
+									<includeRuntimeScope>false</includeRuntimeScope>
+									<includeSystemScope>false</includeSystemScope>
+									<includeTestScope>false</includeTestScope>
+									<includeLicenseText>false</includeLicenseText>
+									<outputFormat>json</outputFormat>
+									<outputName>${project.build.finalName}-cyclonedx</outputName>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
 						<groupId>org.sonatype.central</groupId>
 						<artifactId>central-publishing-maven-plugin</artifactId>
 						<version>${central.publishing.plugin.version}</version>
@@ -566,6 +600,7 @@
 						<configuration>
 							<publishingServerId>central-portal</publishingServerId>
 							<autoPublish>false</autoPublish>
+							<skipUpload>${central.skipUpload}</skipUpload>
 						</configuration>
 					</plugin>
 				</plugins>
@@ -604,7 +639,7 @@
 								</path>
 							</annotationProcessorPaths>
 							<compilerArgs combine.children="append">
-								<!-- D52 keeps the pinned Spring BCrypt source near-verbatim; Error Prone checks its bounded wrapper. -->
+								<!-- D52 and the cache-reuse pin keep copied sources near-verbatim; Error Prone checks their bounded consumers. -->
 								<arg>-Xmaxwarns</arg>
 								<arg>100000</arg>
 								<arg>-Xmaxerrs</arg>
@@ -612,7 +647,8 @@
 								<arg>-XDcompilePolicy=simple</arg>
 								<arg>--should-stop=ifError=FLOW</arg>
 								<arg>-XDaddTypeAnnotationsToSymbol=true</arg>
-								<arg>-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=com.revetsec -XepExcludedPaths:.*/com/revetsec/internal/password/vendor/spring/BCrypt[.]java$ -Xep:DefaultCharset:ERROR -Xep:StringSplitter:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:ReferenceEquality:ERROR -Xep:EmptyCatch:ERROR -Xep:NullableVoid:ERROR -Xep:AnnotateFormatMethod:ERROR -Xep:UnusedMethod:ERROR -Xep:UnusedVariable:ERROR -Xep:Finally:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:MissingSummary:OFF</arg>
+								<arg>-Xlint:-lossy-conversions</arg>
+								<arg>-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=com.revetsec -XepExcludedPaths:.*/com/revetsec/internal/(?:ConcurrentLruMap|password/vendor/spring/BCrypt)[.]java$ -Xep:DefaultCharset:ERROR -Xep:StringSplitter:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:ReferenceEquality:ERROR -Xep:EmptyCatch:ERROR -Xep:NullableVoid:ERROR -Xep:AnnotateFormatMethod:ERROR -Xep:UnusedMethod:ERROR -Xep:UnusedVariable:ERROR -Xep:Finally:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:OperatorPrecedence:ERROR -Xep:MissingSummary:OFF</arg>
 								<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
 								<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
 								<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>

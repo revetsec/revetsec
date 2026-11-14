@@ -53,7 +53,7 @@ final class OAuthCodeRedemption {
   this.refreshIdle = OAuthGrantRetention.duration(refreshIdle, Duration.ofMinutes(5), Duration.ofDays(7));
   this.refreshAbsolute = OAuthGrantRetention.duration(refreshAbsolute, Duration.ofHours(1), Duration.ofDays(30));
   if (!codec.issuer().equals(encoder.issuer()) || attempts < 1 || attempts > 8 || subjectLimit < 16 || subjectLimit > 1024
-    || refreshEnabled && (accessLifetime.compareTo(refreshIdle) > 0 || refreshIdle.compareTo(refreshAbsolute) > 0)) throw OAuthStoreFormat.invalid();
+    || (refreshEnabled && (accessLifetime.compareTo(refreshIdle) > 0 || refreshIdle.compareTo(refreshAbsolute) > 0))) throw OAuthStoreFormat.invalid();
   this.attempts = attempts; this.subjectLimit = subjectLimit;
  }
  @NonNull OAuthTokenResponse redeem(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientRepository clients,
@@ -86,11 +86,11 @@ final class OAuthCodeRedemption {
    if (!grant.text("codeId").equals(codeId) || !code.sameLineage(grant)) throw new OAuthStoreFailure(CORRUPT_STATE);
    if (!grant.text("clientId").equals(client.getClientId()) || !OAuthAuthorizationRecord.equalDigest(grant.text("clientHash"), fingerprint)
      || !grant.text("resource").equals(request.required("resource")) || !OAuthAuthorizationRecord.equalDigest(code.text("challenge"), verifier)
-     || request.value("redirect_uri") != null && !code.text("redirect").equals(request.value("redirect_uri"))) throw invalid();
+     || (request.value("redirect_uri") != null && !code.text("redirect").equals(request.value("redirect_uri")))) throw invalid();
    if (!code.matchesIssuer(session.issuer()) || !grant.matchesSubject(session.subject(grant.text("subject")))) throw invalid();
    String status = code.text("status");
    if (status.equals("USED")) {
-    if (!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
+    if ((!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED"))
       || code.horizon().isBefore(grant.horizon())) throw new OAuthStoreFailure(CORRUPT_STATE);
     session.requireBefore(code.retention()); session.requireBefore(grant.retention());
     if (grant.text("status").equals("REVOKED")) { if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) throw invalid(); }
@@ -110,7 +110,7 @@ final class OAuthCodeRedemption {
    Map<String, Set<String>> choices = decision.getAuthorizedScopesByResource(); Set<String> selected = choices.get(grant.text("resource"));
    if (!decision.getSubject().orElseThrow(() -> OAuthServerClientAdmission.failure(CONFIGURATION)).equals(grant.text("subject"))
      || choices.size() != 1 || selected == null || !approved.containsAll(selected)
-     || decision.isRefreshTokenPermitted() && !grant.refresh()) throw OAuthServerClientAdmission.failure(CONFIGURATION);
+     || (decision.isRefreshTokenPermitted() && !grant.refresh())) throw OAuthServerClientAdmission.failure(CONFIGURATION);
    if (selected.isEmpty()) { if (terminate(session, codeKey, code, grantKey, grant)) throw invalid(); else continue; }
    Instant issued = session.effectiveNow();
    Instant expires = prepared(() -> OAuthGrantRetention.expiry(session.effectiveNow(), this.accessLifetime));
@@ -150,10 +150,10 @@ final class OAuthCodeRedemption {
   OAuthAuthorizationRecord code = observed.credential(), grant = observed.grant();
   if (!grant.text("codeId").equals(codeId) || !code.sameLineage(grant)) throw new OAuthStoreFailure(CORRUPT_STATE);
   if (!grant.text("resource").equals(request.required("resource")) || !OAuthAuthorizationRecord.equalDigest(code.text("challenge"), verifier)
-    || request.value("redirect_uri") != null && !code.text("redirect").equals(request.value("redirect_uri"))
+    || (request.value("redirect_uri") != null && !code.text("redirect").equals(request.value("redirect_uri")))
     || !code.matchesIssuer(session.issuer()) || !grant.matchesSubject(session.subject(grant.text("subject")))) throw invalid();
   if (code.text("status").equals("USED")) {
-   if (!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
+   if ((!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED"))
      || code.horizon().isBefore(grant.horizon())) throw new OAuthStoreFailure(CORRUPT_STATE);
    // A bound retained replay can still revoke an active grant, but cannot repeatedly fetch after revocation.
    if (!grant.text("status").equals("ACTIVE")) throw invalid();

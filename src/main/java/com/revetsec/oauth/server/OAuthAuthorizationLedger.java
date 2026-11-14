@@ -196,7 +196,7 @@ final class OAuthAuthorizationLedger {
        Set<String> narrowed = current.getAuthorizedScopesByResource().get(resource);
        if (!current.getSubject().orElseThrow(OAuthAuthorizationLedger::decisionInvalid).equals(subject)
          || current.getAuthorizedScopesByResource().size() != 1 || narrowed == null || !approved.containsAll(narrowed)
-         || current.isRefreshTokenPermitted() && !refresh) throw decisionInvalid();
+         || (current.isRefreshTokenPermitted() && !refresh)) throw decisionInvalid();
        approved = narrowed; refresh = current.isRefreshTokenPermitted();
       }
      }
@@ -233,7 +233,7 @@ final class OAuthAuthorizationLedger {
   if (!record.text("status").equals("PENDING") || !record.matchesIssuer(session.issuer())
     || !session.effectiveNow().isBefore(record.expires())
     || !OAuthAuthorizationRecord.equalDigest(record.text("browserHash"), browserHash)
-    || fingerprint != null && !OAuthAuthorizationRecord.equalDigest(record.text("clientHash"), fingerprint)) throw invalid();
+    || (fingerprint != null && !OAuthAuthorizationRecord.equalDigest(record.text("clientHash"), fingerprint))) throw invalid();
   return record;
  }
  private @NonNull OAuthStoreKey interactionKey(@NonNull String credential) {

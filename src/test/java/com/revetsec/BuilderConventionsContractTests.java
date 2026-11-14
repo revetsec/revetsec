@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.util.ElementFilter;
 import java.io.IOException;
@@ -41,15 +42,19 @@ final class BuilderConventionsContractTests {
 	}
 
 	@Test
-	void rejectsMissingCrvOuterNonnullableAndPrimitiveDeclarations() throws IOException {
+	void rejectsMissingCrvOuterNonnullableAndPrimitivePublicApiDeclarations() throws IOException {
 		List<String> violations = findViolations(ContractSupport.repositoryRoot()
 				.resolve("src/test/resources/contract-fixtures/builder-conventions"));
 		assertEquals(List.of(
+				"com.revetsec.BuilderConventionsFixture#LIMIT: primitive public field",
+				"com.revetsec.BuilderConventionsFixture#count(): primitive value return",
 				"com.revetsec.BuilderConventionsFixture#isReady(): primitive value return",
+				"com.revetsec.BuilderConventionsFixture#select(int,java.lang.String): primitive public parameter index",
 				"com.revetsec.BuilderConventionsFixture#withValue(java.lang.String): with factory must return a builder",
 				"com.revetsec.BuilderConventionsFixture$Builder: missing CheckReturnValue",
 				"com.revetsec.BuilderConventionsFixture$Builder#attempts(int): property argument must be nullable and boxed",
 				"com.revetsec.BuilderConventionsFixture$Builder#put(java.lang.String): property argument must be nullable and boxed",
+				"com.revetsec.BuilderConventionsFixture$Builder#range(java.lang.String,int): primitive public parameter limit",
 				"com.revetsec.BuilderConventionsFixture$Builder#token(java.lang.String): property argument must be nullable and boxed",
 				"com.revetsec.BuilderConventionsFixture$Builder#values(java.util.List): property argument must be nullable and boxed").stream().sorted().toList(), violations);
 	}
@@ -66,30 +71,43 @@ final class BuilderConventionsContractTests {
 			if (builder && type.getAnnotationMirrors().stream().noneMatch(annotation ->
 					annotation.getAnnotationType().toString().equals("com.google.errorprone.annotations.CheckReturnValue")))
 				violations.add(name + ": missing CheckReturnValue");
-			for (ExecutableElement method : ElementFilter.methodsIn(analysis.getElements().getAllMembers(type))) {
+			for (VariableElement field : ElementFilter.fieldsIn(type.getEnclosedElements())) {
+				if (ContractSupport.isPublicOrProtected(field) && analysis.isSourceAuthored(field)
+						&& field.asType().getKind().isPrimitive())
+					violations.add(name + "#" + field.getSimpleName() + ": primitive public field");
+			}
+			List<ExecutableElement> executables = new ArrayList<>();
+			executables.addAll(ElementFilter.constructorsIn(type.getEnclosedElements()));
+			executables.addAll(ElementFilter.methodsIn(analysis.getElements().getAllMembers(type)));
+			for (ExecutableElement method : executables) {
 				if (!ContractSupport.isPublicOrProtected(method) || !analysis.isSourceAuthored(method)) continue;
 				String description = name + "#" + analysis.describe(method);
 				String methodName = method.getSimpleName().toString();
 				if (method.getModifiers().contains(Modifier.STATIC)
-						&& (methodName.equals("with") || methodName.startsWith("with")
-								&& methodName.length() > 4 && Character.isUpperCase(methodName.charAt(4)))
+						&& (methodName.equals("with") || (methodName.startsWith("with")
+								&& methodName.length() > 4 && Character.isUpperCase(methodName.charAt(4))))
 						&& !(analysis.getTypes().asElement(method.getReturnType()) instanceof TypeElement returnedType
 								&& returnedType.getSimpleName().toString().endsWith("Builder")))
 					violations.add(description + ": with factory must return a builder");
-				if (builder && method.getParameters().size() == 1
+				boolean propertyMethod = builder && method.getParameters().size() == 1
 						&& analysis.getTypes().isSameType(analysis.getTypes().erasure(method.getReturnType()),
 								analysis.getTypes().erasure(type.asType()))
 						&& !(name.equals("com.revetsec.json.JsonObject$Builder")
 								&& method.getSimpleName().contentEquals("putNull"))
 						&& !(name.equals("com.revetsec.jose.JwtClaimsSet$Builder")
-								&& method.getSimpleName().contentEquals("claimNull"))) {
+								&& method.getSimpleName().contentEquals("claimNull"));
+				if (propertyMethod) {
 					var parameter = method.getParameters().get(0).asType();
 					boolean nullable = parameter.getAnnotationMirrors().stream().anyMatch(annotation ->
 							annotation.getAnnotationType().toString().equals("org.jspecify.annotations.Nullable"));
 					if (parameter.getKind().isPrimitive() || !nullable)
 						violations.add(description + ": property argument must be nullable and boxed");
 				}
-				if (!method.getModifiers().contains(Modifier.STATIC) && method.getReturnType().getKind().isPrimitive()
+				if (!propertyMethod)
+					for (VariableElement parameter : method.getParameters())
+						if (parameter.asType().getKind().isPrimitive())
+							violations.add(description + ": primitive public parameter " + parameter.getSimpleName());
+				if (method.getReturnType().getKind().isPrimitive()
 						&& method.getReturnType().getKind() != TypeKind.VOID && !objectPrimitiveOverride(method, analysis))
 					violations.add(description + ": primitive value return");
 			}
@@ -99,9 +117,9 @@ final class BuilderConventionsContractTests {
 	}
 
 	private static boolean objectPrimitiveOverride(@NonNull ExecutableElement method, @NonNull SourceAnalysis analysis) {
-		return method.getSimpleName().contentEquals("hashCode") && method.getParameters().isEmpty()
-				|| method.getSimpleName().contentEquals("equals") && method.getParameters().size() == 1
+		return (method.getSimpleName().contentEquals("hashCode") && method.getParameters().isEmpty())
+				|| (method.getSimpleName().contentEquals("equals") && method.getParameters().size() == 1
 				&& analysis.getTypes().isSameType(analysis.getTypes().erasure(method.getParameters().get(0).asType()),
-						analysis.getElements().getTypeElement("java.lang.Object").asType());
+						analysis.getElements().getTypeElement("java.lang.Object").asType()));
 	}
 }

@@ -81,7 +81,7 @@ final class OidcLogoutSupport {
 		text(uri.toString(), FIELD_LIMIT);
 		String scheme = uri.getScheme(), host = uri.getHost();
 		if (!uri.isAbsolute() || uri.isOpaque() || scheme == null || host == null || uri.getRawUserInfo() != null || uri.getRawFragment() != null
-				|| uri.getRawQuery() != null || uri.getPort() == 0 || uri.getPort() > 65_535 || !(scheme.equalsIgnoreCase("https") || scheme.equalsIgnoreCase("http") && loopback && HostClassifier.isPlainHttpLoopbackHost(host))) throw invalid();
+				|| uri.getRawQuery() != null || uri.getPort() == 0 || uri.getPort() > 65_535 || !(scheme.equalsIgnoreCase("https") || (scheme.equalsIgnoreCase("http") && loopback && HostClassifier.isPlainHttpLoopbackHost(host)))) throw invalid();
 		return uri;
 	}
 	static void endpoint(@NonNull URI uri) {

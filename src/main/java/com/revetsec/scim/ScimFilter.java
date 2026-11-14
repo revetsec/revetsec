@@ -146,7 +146,7 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof And filter && this.operands.equals(filter.operands);
+            return this == other || (other instanceof And filter && this.operands.equals(filter.operands));
         }
         /** Returns the structural hash.
          * @return hash
@@ -201,7 +201,7 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof Or filter && this.operands.equals(filter.operands);
+            return this == other || (other instanceof Or filter && this.operands.equals(filter.operands));
         }
         /** Returns the structural hash.
          * @return hash
@@ -257,8 +257,8 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof Not filter
-                    && this.operand.equals(filter.operand);
+            return this == other || (other instanceof Not filter
+                    && this.operand.equals(filter.operand));
         }
         /** Returns the structural hash.
          * @return hash
@@ -328,8 +328,8 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof Comparison filter
-                    && this.attributePath.equals(filter.attributePath) && this.operator.equals(filter.operator) && this.value.equals(filter.value);
+            return this == other || (other instanceof Comparison filter
+                    && this.attributePath.equals(filter.attributePath) && this.operator.equals(filter.operator) && this.value.equals(filter.value));
         }
         /** Returns the structural hash.
          * @return hash
@@ -385,8 +385,8 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof Present filter
-                    && this.attributePath.equals(filter.attributePath);
+            return this == other || (other instanceof Present filter
+                    && this.attributePath.equals(filter.attributePath));
         }
         /** Returns the structural hash.
          * @return hash
@@ -449,8 +449,8 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof ValuePath filter
-                    && this.attributePath.equals(filter.attributePath) && this.filter.equals(filter.filter);
+            return this == other || (other instanceof ValuePath filter
+                    && this.attributePath.equals(filter.attributePath) && this.filter.equals(filter.filter));
         }
         /** Returns the structural hash.
          * @return hash

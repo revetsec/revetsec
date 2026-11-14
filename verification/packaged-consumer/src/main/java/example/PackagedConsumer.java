@@ -138,7 +138,7 @@ import com.revetsec.oidc.OidcProviderMetadata;
 import com.revetsec.oidc.OidcSessionReference;
 import com.revetsec.oidc.OidcUserInfo;
 import com.revetsec.oidc.OidcValidationException;
-import com.revetsec.oidc.OidcRefreshResult;
+import com.revetsec.oidc.OidcRefresh;
 import com.revetsec.oidc.PendingOidcLogout;
 import com.revetsec.oidc.PendingOidcLogoutSource;
 import com.revetsec.json.JsonArray;
@@ -306,7 +306,7 @@ import com.revetsec.oauth.OAuthEndpointError;
 import com.revetsec.oauth.OAuthTokenRequestResult;
 import com.revetsec.oauth.PendingAuthorizationSaveResult;
 import com.revetsec.oidc.OidcProviderMetadataParseResult;
-import com.revetsec.oidc.OidcRefreshOutcome;
+import com.revetsec.oidc.OidcRefreshResult;
 import com.revetsec.oidc.OidcSessionReferenceParseResult;
 import com.revetsec.oidc.OidcUserInfoResult;
 import com.revetsec.password.Argon2idParameters;
@@ -784,8 +784,8 @@ public final class PackagedConsumer {
 			OidcLogoutHintParseResult.Rejected.class, OidcLogoutRequest.class, OidcLogoutResult.class,
 			OidcLogoutResult.Returned.class, OidcLogoutResult.Rejected.class, OidcLogoutResult.Reason.class,
 			PendingOidcLogout.class, PendingOidcLogoutSource.class,
-			OidcProviderMetadataParseResult.class, OidcRefreshOutcome.class, OidcRefreshOutcome.Succeeded.class,
-			OidcRefreshOutcome.Rejected.class, OidcRefreshOutcome.RejectedEndpoint.class,
+			OidcProviderMetadataParseResult.class, OidcRefreshResult.class, OidcRefreshResult.Succeeded.class,
+			OidcRefreshResult.Rejected.class, OidcRefreshResult.RejectedEndpoint.class,
 			OidcSessionReferenceParseResult.class, OidcSessionReferenceParseResult.Succeeded.class,
 			OidcSessionReferenceParseResult.Rejected.class, OidcUserInfoResult.class, OidcUserInfoResult.Succeeded.class,
 			OidcUserInfoResult.Rejected.class, OidcUserInfoResult.RejectedEndpoint.class
@@ -1511,7 +1511,7 @@ public final class PackagedConsumer {
 		Class<?>[] exported = {OidcIssuerPolicy.class, IdToken.class, OidcAuthentication.class, OidcAuthenticationOptions.class,
 				OidcAuthenticationOptions.Builder.class, OidcClient.class, OidcClient.Builder.class, OidcException.class,
 				OidcObserver.class, OidcProviderMetadata.class, OidcProviderMetadata.Builder.class, OidcSessionReference.class,
-				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefreshResult.class, OidcCompatibilityMode.class,
+				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefresh.class, OidcCompatibilityMode.class,
 				OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class, OidcAuthenticationResult.Denied.class,
 				OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class,
 				OidcAuthenticationResult.Failed.class};

@@ -134,7 +134,8 @@ final class OAuthClientMetadataCacheCodec {
   } finally { if (plaintext != null) Arrays.fill(plaintext, (byte)0); if (body != null) Arrays.fill(body, (byte)0); }
  }
  private void times(@NonNull Instant fetched, @NonNull Instant expiry, @NonNull Instant now) {
-  if (fetched.isAfter(now) || expiry.getNano() != 0 || !now.isBefore(expiry) || !fetched.isBefore(expiry)
+  if (fetched.isAfter(now) || !expiry.equals(expiry.truncatedTo(java.time.temporal.ChronoUnit.SECONDS))
+    || !now.isBefore(expiry) || !fetched.isBefore(expiry)
     || expiry.isAfter(fetched.plus(this.policy.getMaximumFreshness()))) throw OAuthStoreFormat.invalid();
  }
  private byte @NonNull [] bounded(@NonNull String text) {

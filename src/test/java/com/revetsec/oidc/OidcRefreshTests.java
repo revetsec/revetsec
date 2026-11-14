@@ -54,14 +54,14 @@ final class OidcRefreshTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).jwksSource(keys()).build(); Login login = login(server, client, CLOCK);
 			OidcClient remote = builder(server).jwksSource(null).build(); respond(server, response(null, null, "bEaReR"));
-			OidcRefreshResult result = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, remote.refreshResult(login.refresh(), login.reference())).getRefreshResult();
+			OidcRefresh result = assertInstanceOf(OidcRefreshResult.Succeeded.class, remote.refreshResult(login.refresh(), login.reference())).getRefresh();
 			assertTrue(result.getIdToken().isEmpty()); assertSame(login.refresh(), result.getRefreshToken()); assertSame(login.reference(), result.getSessionReference());
 			assertTrue(result.getTokens().getRefreshToken().isEmpty()); assertTrue(result.getTokens().getGrantedScopes().isEmpty()); assertEquals(ACCESS, result.getTokens().getAccessToken().getValue());
 			assertTrue(result.getTokens().getParameter("id_token").isEmpty()); assertEquals(0, server.getHitCount("/jwks")); assertRedacted(result.toString());
 			QueryParameters form = QueryParameters.parse(server.getRequests("/token").get(1).getBodyAsString());
 			assertEquals(List.of("refresh_token"), form.getValues("grant_type")); assertEquals(List.of(OLD_REFRESH), form.getValues("refresh_token"));
 			for (String name : List.of("scope", "resource", "nonce", "code", "code_verifier", "redirect_uri")) assertTrue(form.getValues(name).isEmpty(), name);
-			respond(server, response(null, NEW_REFRESH, "Bearer")); OidcRefreshResult rotated = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, remote.refreshResult(result.getRefreshToken(), result.getSessionReference())).getRefreshResult();
+			respond(server, response(null, NEW_REFRESH, "Bearer")); OidcRefresh rotated = assertInstanceOf(OidcRefreshResult.Succeeded.class, remote.refreshResult(result.getRefreshToken(), result.getSessionReference())).getRefresh();
 			assertEquals(NEW_REFRESH, rotated.getRefreshToken().getValue()); assertEquals(Optional.of(rotated.getRefreshToken()), rotated.getTokens().getRefreshToken()); assertEquals(3, server.getHitCount("/token"));
 		}
 	}
@@ -73,8 +73,8 @@ final class OidcRefreshTests {
 				@Override public void didRefreshTokens(@NonNull Boolean id, @NonNull Boolean refresh) { events.add("success:"+id+":"+refresh); throw new IllegalStateException(SECRET); }
 			}).build(); Login login = login(server, client, CLOCK); Map<String,String> claims = claims(server); claims.put("nonce", JsonText.string(login.nonce()));
 			claims.put("at_hash", JsonText.string(IdTokenHash.hash(JwsAlgorithm.RS256, ACCESS))); String compact = sign(claims, false); respond(server, response(compact, NEW_REFRESH, "Bearer"));
-			OidcRefreshResult result = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.refresh(), login.reference(), TokenRequestOptions.builder().scopes(Set.of("email"))
-					.resources(List.of(URI.create("https://api.example/resource"))).additionalParameters(Map.of("audience", "api")).build())).getRefreshResult();
+			OidcRefresh result = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.refresh(), login.reference(), TokenRequestOptions.builder().scopes(Set.of("email"))
+					.resources(List.of(URI.create("https://api.example/resource"))).additionalParameters(Map.of("audience", "api")).build())).getRefresh();
 			assertEquals(compact, result.getIdToken().orElseThrow().toCompactSerialization()); assertSame(login.reference(), result.getSessionReference());
 			assertEquals(NEW_REFRESH, result.getRefreshToken().getValue()); assertTrue(result.getTokens().getParameter("id_token").isEmpty()); assertEquals(Optional.of(Set.of("email")), result.getTokens().getGrantedScopes());
 			assertEquals(List.of("success:true:true"), events); assertRedacted(result.toString()+events+result.getIdToken().orElseThrow());
@@ -87,10 +87,10 @@ final class OidcRefreshTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			TestClock clock = TestClock.fromInstant(NOW); OidcClient client = builder(server).clock(clock).maximumIdTokenAge(Duration.ofMinutes(1)).build(); Login login = login(server, client, clock);
 			clock.advance(Duration.ofHours(1)); Map<String,String> claims = claims(server); claims.put("iat", Long.toString(NOW.plusSeconds(3000).getEpochSecond())); claims.put("exp", Long.toString(NOW.plusSeconds(7200).getEpochSecond()));
-			respond(server, response(sign(claims,false), null,"Bearer")); assertTrue(assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.refresh(), login.reference())).getRefreshResult().getIdToken().isPresent());
-			claims.remove("auth_time"); respond(server, response(sign(claims,false), null,"Bearer")); OidcRefreshResult result = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefreshResult();
+			respond(server, response(sign(claims,false), null,"Bearer")); assertTrue(assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.refresh(), login.reference())).getRefresh().getIdToken().isPresent());
+			claims.remove("auth_time"); respond(server, response(sign(claims,false), null,"Bearer")); OidcRefresh result = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefresh();
 			assertSame(login.reference(),result.getSessionReference()); claims.put("auth_time", Long.toString(NOW.plusSeconds(1).getEpochSecond())); respond(server,response(sign(claims,false),null,"Bearer"));
-			assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH, assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(result.getRefreshToken(), result.getSessionReference())).getReason());
+			assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH, assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(result.getRefreshToken(), result.getSessionReference())).getReason());
 		}
 	}
 
@@ -99,11 +99,11 @@ final class OidcRefreshTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).trustedAudiences(Set.of("trusted")).build(); Login login = login(server, client, CLOCK, c -> c.put("aud", "[\"client\",\"trusted\"]"));
 			Map<String,String> claims = claims(server); claims.put("aud", "[\"trusted\",\"client\"]"); claims.put("nonce",JsonText.string(login.nonce())); respond(server,response(sign(claims,false),null,"Bearer"));
-			assertTrue(assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefreshResult().getIdToken().isPresent());
+			assertTrue(assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefresh().getIdToken().isPresent());
 		}
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client=builder(server).build(); Login login=login(server,client,CLOCK); Map<String,String> claims=claims(server); claims.put("aud","[\"client\"]"); respond(server,response(sign(claims,false),null,"Bearer"));
-			assertTrue(assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefreshResult().getIdToken().isPresent());
+			assertTrue(assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefresh().getIdToken().isPresent());
 		}
 	}
 
@@ -138,7 +138,7 @@ final class OidcRefreshTests {
 					@Override public void didRejectRefresh(@NonNull OidcValidationException failure){ observed.set(failure); throw new IllegalStateException(ACCESS); }
 					@Override public void didRefreshTokens(@NonNull Boolean id,@NonNull Boolean refresh){successes.incrementAndGet();}
 				}).build(); Login login=login(server,client,CLOCK); Map<String,String> claims=claims(server);test.change().accept(claims); String compact=sign(claims,test.name().equals("bad signature")); respond(server,response(compact,NEW_REFRESH,"Bearer"));
-				OidcRefreshOutcome.Rejected failure=assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(login.refresh(),login.reference())); assertEquals(test.reason(),failure.getReason()); assertEquals(failure.getReason(),java.util.Objects.requireNonNull(observed.get()).getReason()); assertEquals(0,successes.get()); assertSafe(failure,compact); assertEquals(2,server.getHitCount("/token"));
+				OidcRefreshResult.Rejected failure=assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(login.refresh(),login.reference())); assertEquals(test.reason(),failure.getReason()); assertEquals(failure.getReason(),java.util.Objects.requireNonNull(observed.get()).getReason()); assertEquals(0,successes.get()); assertSafe(failure,compact); assertEquals(2,server.getHitCount("/token"));
 			}
 		}));
 	}
@@ -148,7 +148,7 @@ final class OidcRefreshTests {
 		return Stream.of("null","1","{}","[]","\"\"","\"malformed\"").map(value->DynamicTest.dynamicTest(value,()->{
 			try(TestHttpsServer server=TestHttpsServer.start()){
 				OidcClient client=builder(server).build();Login login=login(server,client,CLOCK);respond(server,"{\"access_token\":"+JsonText.string(ACCESS)+",\"token_type\":\"Bearer\",\"id_token\":"+value+"}");
-				OidcRefreshOutcome.Rejected failure=assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(login.refresh(),login.reference()));assertEquals(OidcValidationException.Reason.ID_TOKEN_MALFORMED,failure.getReason());assertSafe(failure,value);
+				OidcRefreshResult.Rejected failure=assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(login.refresh(),login.reference()));assertEquals(OidcValidationException.Reason.ID_TOKEN_MALFORMED,failure.getReason());assertSafe(failure,value);
 			}
 		}));
 	}
@@ -159,14 +159,14 @@ final class OidcRefreshTests {
 			OidcClient client=builder(server).trustedAuthorizedParties(Set.of("trusted-party")).build();Login login=login(server,client,CLOCK,c->c.put("azp","\"client\""));
 			for(String value:List.of("absent","trusted-party")){
 				Map<String,String> claims=claims(server);if(!value.equals("absent"))claims.put("azp",JsonText.string(value));respond(server,response(sign(claims,false),null,"Bearer"));
-				assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(login.refresh(),login.reference())).getReason());
+				assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(login.refresh(),login.reference())).getReason());
 			}
 			com.revetsec.json.JsonObject envelope=(com.revetsec.json.JsonObject)com.revetsec.internal.json.JsonCodec.parse(login.reference().toSerializedForm().getBytes(StandardCharsets.UTF_8),com.revetsec.internal.json.JsonLimits.protocolDocument(64*1024));
 			Map<String,JsonValue> originalClaims=new LinkedHashMap<>(((JsonObject)Objects.requireNonNull(envelope.getMembers().get("claims"))).getMembers()); originalClaims.remove("auth_time");
 			Map<String,JsonValue> storage=new LinkedHashMap<>(envelope.getMembers()); storage.put("claims",JsonObject.fromMembers(originalClaims));
 			OidcSessionReference withoutTime=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(JsonObject.fromMembers(storage).toJson())).getReference();
 			Map<String,String> claims=claims(server);claims.put("azp","\"client\"");respond(server,response(sign(claims,false),null,"Bearer"));
-			assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(login.refresh(),withoutTime)).getReason());
+			assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(login.refresh(),withoutTime)).getReason());
 		}
 	}
 
@@ -175,7 +175,7 @@ final class OidcRefreshTests {
 		try(TestHttpsServer server=TestHttpsServer.start()){
 			Login login=login(server,builder(server).build(),CLOCK);
 			for(OidcClient client:List.of(lazy(server).clientId("other").trustedAudiences(Set.of("client")).build(),OidcClient.withIssuer(server.uri("/other").toString()).clientId("client").redirectUri(CALLBACK).httpClient(TestTls.httpClient()).clock(CLOCK).build())) {
-				assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(login.refresh(),login.reference())).getReason());
+				assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(login.refresh(),login.reference())).getReason());
 			}
 			assertEquals(1,server.getRequests().size());
 		}
@@ -185,7 +185,7 @@ final class OidcRefreshTests {
 	void refreshRetainsOidcDiscoveryOrderAndChecksDeadlineBeforeCredentialPost() throws Exception {
 		try(TestHttpsServer server=TestHttpsServer.start()){
 			Login login=login(server,builder(server).build(),CLOCK);discovery(server);respond(server,response(sign(claims(server),false),null,"Bearer"));
-			OidcClient client=lazy(server).build();assertTrue(assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefreshResult().getIdToken().isPresent());
+			OidcClient client=lazy(server).build();assertTrue(assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.refresh(),login.reference())).getRefresh().getIdToken().isPresent());
 			assertEquals(List.of("/token","/.well-known/openid-configuration","/token"),server.getRequests().stream().map(TestHttpsServer.RecordedRequest::getPath).toList());
 			OidcClient exhausted=lazy(server).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(new OidcObserver(){
 				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){if(endpoint==OAuthEndpoint.METADATA)pause();}
@@ -204,7 +204,7 @@ final class OidcRefreshTests {
 			OidcClient slow=builder(server).clock(clock).jwksSource(null).clockSkew(Duration.ZERO).observer(new OidcObserver(){
 				@Override public void didFetchJwks(@NonNull URI uri,@NonNull Integer usable,@NonNull Integer skipped,@NonNull Duration ttl,@NonNull Duration elapsed){clock.advance(Duration.ofSeconds(2));}
 			}).build();Map<String,String> claims=claims(server);claims.put("exp",Long.toString(NOW.plusSeconds(1).getEpochSecond()));respond(server,response(sign(claims,false),null,"Bearer"));
-			assertEquals(OidcValidationException.Reason.EXPIRED,assertInstanceOf(OidcRefreshOutcome.Rejected.class, slow.refreshResult(login.refresh(),login.reference())).getReason());assertEquals(1,server.getHitCount("/jwks"));
+			assertEquals(OidcValidationException.Reason.EXPIRED,assertInstanceOf(OidcRefreshResult.Rejected.class, slow.refreshResult(login.refresh(),login.reference())).getReason());assertEquals(1,server.getHitCount("/jwks"));
 		}
 	}
 
@@ -215,7 +215,7 @@ final class OidcRefreshTests {
 				OidcClient client=builder(server).build();Login login=login(server,client,CLOCK);
 				if(name.equals("redirect")){server.script("/token",TestHttpsServer.Script.fromRedirect(302,server.uri("/attack").toString()));assertEquals(OAuthException.Reason.REDIRECT_NOT_FOLLOWED,assertThrows(OAuthException.class,()->client.refreshResult(login.refresh(),login.reference())).getReason());assertEquals(0,server.getHitCount("/attack"));}
 				else if(name.equals("503")){server.script("/token",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(503,"{\"error\":\"temporarily_unavailable\",\"error_description\":"+JsonText.string(ACCESS)+"}")));OAuthErrorResponseException failure=assertThrows(OAuthErrorResponseException.class,()->client.refreshResult(login.refresh(),login.reference()));assertEquals(503,failure.getStatus());assertRedacted(failure.toString());}
-				else {respond(server,response(null,null,"DPoP"));assertEquals(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED,assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(login.refresh(),login.reference())).getReason());}
+				else {respond(server,response(null,null,"DPoP"));assertEquals(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED,assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(login.refresh(),login.reference())).getReason());}
 				assertEquals(2,server.getHitCount("/token"));
 			}
 		}));
@@ -243,7 +243,7 @@ final class OidcRefreshTests {
 	private static void assertSafe(@NonNull Object failure,@NonNull String compact)throws Exception{
 		if (failure instanceof Throwable throwable) { assertNull(throwable.getCause());throwable.addSuppressed(new IllegalStateException(ACCESS));assertEquals(0,throwable.getSuppressed().length); }assertRedacted(failure.toString());if(compact.length()>10)assertFalse(failure.toString().contains(compact));
 		for(Class<?> type=failure.getClass();type!=RuntimeException.class&&type!=Object.class;type=type.getSuperclass())for(var field:type.getDeclaredFields()){
-			if(java.lang.reflect.Modifier.isStatic(field.getModifiers()))continue;field.setAccessible(true);Object value=field.get(failure);assertFalse(value instanceof OidcRefreshResult||value instanceof IdToken||value instanceof Jwt||value instanceof AccessToken||value instanceof RefreshToken);if(value instanceof String text)assertRedacted(text);
+			if(java.lang.reflect.Modifier.isStatic(field.getModifiers()))continue;field.setAccessible(true);Object value=field.get(failure);assertFalse(value instanceof OidcRefresh||value instanceof IdToken||value instanceof Jwt||value instanceof AccessToken||value instanceof RefreshToken);if(value instanceof String text)assertRedacted(text);
 		}
 	}
 }

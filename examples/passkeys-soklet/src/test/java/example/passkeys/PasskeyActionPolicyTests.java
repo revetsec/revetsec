@@ -410,7 +410,7 @@ final class PasskeyActionPolicyTests {
         long counter;
         CoreFixture(byte @NonNull [] account, @NonNull String namespace, @NonNull WebAuthnRecoveryGate gate) throws Exception {
             this.authenticator = new SyntheticAuthenticator(account);
-            WebAuthnStore delegate = InMemoryWebAuthnStore.fromLimits(1024, 8_388_608);
+            WebAuthnStore delegate = InMemoryWebAuthnStore.fromLimits(1024, 8_388_608L);
             WebAuthnStore store = new WebAuthnStore() {
                 @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remaining) { return delegate.read(keys, remaining); }
                 @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write, @NonNull Duration remaining) { commits.incrementAndGet();return delegate.compareAndCommit(write, remaining); }

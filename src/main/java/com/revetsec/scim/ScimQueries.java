@@ -254,7 +254,7 @@ final class ScimQueries {
         if (value.length() > maximum) return false;
         for (int index = 0; index < value.length(); index++) {
             char unit = value.charAt(index);
-            if (!(unit >= 'A' && unit <= 'Z' || unit >= 'a' && unit <= 'z' || unit >= '0' && unit <= '9'
+            if (!((unit >= 'A' && unit <= 'Z') || (unit >= 'a' && unit <= 'z') || (unit >= '0' && unit <= '9')
                     || unit == '-' || unit == '.' || unit == '_' || unit == '~')) return false;
         }
         return true;
@@ -353,16 +353,16 @@ final class ScimQueries {
                     if (codePoint < 0x80) octets[position++] = (byte) codePoint;
                     else if (codePoint < 0x800) {
                         octets[position++] = (byte) (0xc0 | codePoint >> 6);
-                        octets[position++] = (byte) (0x80 | codePoint & 0x3f);
+                        octets[position++] = (byte) (0x80 | (codePoint & 0x3f));
                     } else if (codePoint < 0x10000) {
                         octets[position++] = (byte) (0xe0 | codePoint >> 12);
-                        octets[position++] = (byte) (0x80 | codePoint >> 6 & 0x3f);
-                        octets[position++] = (byte) (0x80 | codePoint & 0x3f);
+                        octets[position++] = (byte) (0x80 | (codePoint >> 6 & 0x3f));
+                        octets[position++] = (byte) (0x80 | (codePoint & 0x3f));
                     } else {
                         octets[position++] = (byte) (0xf0 | codePoint >> 18);
-                        octets[position++] = (byte) (0x80 | codePoint >> 12 & 0x3f);
-                        octets[position++] = (byte) (0x80 | codePoint >> 6 & 0x3f);
-                        octets[position++] = (byte) (0x80 | codePoint & 0x3f);
+                        octets[position++] = (byte) (0x80 | (codePoint >> 12 & 0x3f));
+                        octets[position++] = (byte) (0x80 | (codePoint >> 6 & 0x3f));
+                        octets[position++] = (byte) (0x80 | (codePoint & 0x3f));
                     }
                 }
             }

@@ -11,7 +11,7 @@ class SelectedInputTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name).resolve()
         common=self.root/'rp-initiated-logout/target';carrier=self.root/'rp-initiated-logout-soklet/target'
-        self.paths={'common':common/'revetsec-rp-initiated-logout-1.0.0-SNAPSHOT.jar','fixture':common/'revetsec-rp-initiated-logout-1.0.0-SNAPSHOT-tests.jar','core':common/'lib/revetsec-1.0.0-SNAPSHOT.jar','carrier':carrier/'rp-initiated-logout-soklet-1.0.0-SNAPSHOT.jar','framework':carrier/'lib/soklet-4.0.0.jar'}
+        self.paths={'common':common/'revetsec-rp-initiated-logout-1.0.0.jar','fixture':common/'revetsec-rp-initiated-logout-1.0.0-tests.jar','core':common/'lib/revetsec-1.0.0.jar','carrier':carrier/'rp-initiated-logout-soklet-1.0.0.jar','framework':carrier/'lib/soklet-4.0.0.jar'}
         for path in self.paths.values():
             path.parent.mkdir(parents=True,exist_ok=True)
             with zipfile.ZipFile(path,'w')as jar:jar.writestr('META-INF/MANIFEST.MF','Manifest-Version: 1.0\n\n')

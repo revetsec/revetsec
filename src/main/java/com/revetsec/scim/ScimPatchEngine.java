@@ -136,11 +136,11 @@ final class ScimPatchEngine {
             for (ScimAttributeDefinition definition:extension.getSchema().getAttributes()) {
                 if (!spend(1)) return null;
                 JsonValue value=object.getMembers().get(definition.getName());
-                if (ScimResourceValidation.assigned(value)
+                if ((ScimResourceValidation.assigned(value)
                         && definition.getMutability() != ScimMutability.READ_WRITE
-                        && definition.getMutability() != ScimMutability.WRITE_ONLY
-                        || !type.isStandardEnterpriseManagerPath(schema+":"+definition.getName())
-                        && protectedChildren(definition,value)) {
+                        && definition.getMutability() != ScimMutability.WRITE_ONLY)
+                        || (!type.isStandardEnterpriseManagerPath(schema+":"+definition.getName())
+                        && protectedChildren(definition,value))) {
                     if (error == null) error=ScimError.mutabilityInstance();
                     return null;
                 }
@@ -511,8 +511,8 @@ final class ScimPatchEngine {
         if (!spend(definition.getSubAttributes().size())) return false;
         ScimAttributeDefinition primary=ScimSchemas.attribute(definition.getSubAttributes(),"primary").orElse(null);
         if (primary == null || primary.getType() != ScimAttributeType.BOOLEAN) return false;
-        return primary.getName().equals(suffix) && incoming instanceof JsonBoolean value && value.getValue()
-                || suffix == null && incoming instanceof JsonObject object && object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false);
+        return (primary.getName().equals(suffix) && incoming instanceof JsonBoolean value && value.getValue())
+                || (suffix == null && incoming instanceof JsonObject object && object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false));
     }
     private @Nullable JsonValue removeIds(@Nullable JsonValue old,@NonNull JsonArray ids) {
         ScimMemberIndex index = ScimMemberIndex.fromValues(ids.getElements(), work);
@@ -550,8 +550,8 @@ final class ScimPatchEngine {
         if (value instanceof JsonObject object) for (ScimAttributeDefinition child : definition.getSubAttributes()) {
             if (!spend(1)) return true;
             JsonValue data=object.getMembers().get(child.getName());
-            if (ScimResourceValidation.assigned(data) && child.getMutability() != ScimMutability.READ_WRITE
-                    && child.getMutability() != ScimMutability.WRITE_ONLY || protectedChildren(child,data)) return true;
+            if ((ScimResourceValidation.assigned(data) && child.getMutability() != ScimMutability.READ_WRITE
+                    && child.getMutability() != ScimMutability.WRITE_ONLY) || protectedChildren(child,data)) return true;
         }
         return false;
     }
@@ -630,7 +630,7 @@ final class ScimPatchEngine {
             return result;
         }
         boolean absent=value == null || value instanceof JsonNull
-                || definition.isMultiValued() && value instanceof JsonArray array && array.getElements().isEmpty();
+                || (definition.isMultiValued() && value instanceof JsonArray array && array.getElements().isEmpty());
         if (literal instanceof ScimFilterValue.NullValue) return operator == ScimComparisonOperator.EQ ? absent : !absent;
         if (absent) return operator == ScimComparisonOperator.NE;
         if (value instanceof JsonString string && literal instanceof ScimFilterValue.StringValue text) {

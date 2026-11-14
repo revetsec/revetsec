@@ -213,7 +213,7 @@ final class WebAuthnRecordCodec {
                     byte[] chunk = Base64Url.decode(encoded);
                     try {
                         if (chunk.length == 0 || chunk.length > chunkSize
-                                || index + 1 < count && chunk.length != chunkSize
+                                || (index + 1 < count && chunk.length != chunkSize)
                                 || size > MAXIMUM_PLAINTEXT_BYTES - chunk.length)
                             throw new WebAuthnRecordException();
                         System.arraycopy(chunk, 0, plaintext, size, chunk.length);

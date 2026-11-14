@@ -18,7 +18,7 @@ CADDY_IMAGE = "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc2406
 JAVA_IMAGE = "sha256:b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87"
 NODE_IMAGE = "sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d"
 ALPINE_IMAGE = "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
-FRAMEWORK_SHA256 = "2ebff62b5ec1fd6d86761d8a894276a07efdaa12859badc8e376a2c1ca87960d"
+FRAMEWORK_SHA256 = "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce"
 
 
 def digest(path):
@@ -137,9 +137,9 @@ def main():
     if not args.output.is_absolute() or args.output.exists():
         parser.error("Use a new absolute output directory")
     artifact_paths = {
-        "core": ROOT / "target/revetsec-1.0.0-SNAPSHOT.jar",
-        "common": ROOT / "examples/provider-backend-tokens/target/revetsec-provider-backend-tokens-1.0.0-SNAPSHOT.jar",
-        "carrier": ROOT / "examples/provider-backend-tokens-soklet/target/provider-backend-tokens-soklet-1.0.0-SNAPSHOT.jar",
+        "core": ROOT / "target/revetsec-1.0.0.jar",
+        "common": ROOT / "examples/provider-backend-tokens/target/revetsec-provider-backend-tokens-1.0.0.jar",
+        "carrier": ROOT / "examples/provider-backend-tokens-soklet/target/provider-backend-tokens-soklet-1.0.0.jar",
         "framework": ROOT / "examples/provider-backend-tokens-soklet/target/lib/soklet-4.0.0.jar",
     }
     test_classes = ROOT / "examples/provider-backend-tokens-soklet/target/test-classes"

@@ -16,7 +16,7 @@ from pathlib import Path
 class InputSelectionTests(unittest.TestCase):
  def invoke(self,root,kind,value):
   examples=root/'examples';module=examples/'playground';libs=module/'target/lib';libs.mkdir(parents=True)
-  paths={'application':module/'target/playground-1.0.0-SNAPSHOT.jar','core':libs/'revetsec-1.0.0-SNAPSHOT.jar','adapter':libs/'revetsec-soklet-1.0.0-SNAPSHOT.jar','framework':libs/'soklet-4.0.0.jar'}
+  paths={'application':module/'target/playground-1.0.0.jar','core':libs/'revetsec-1.0.0.jar','adapter':libs/'revetsec-soklet-1.0.0.jar','framework':libs/'soklet-4.0.0.jar'}
   for name,p in paths.items():p.write_bytes(('private-placeholder-'+name).encode())
   command=[sys.executable,'-B',str(Path(__file__).with_name('run.py')),'--examples-root',str(examples),'--java-home',str(root),'--repository',str(root),'--output',str(root/'evidence')]
   for name,p in paths.items():command+=['--'+name+'-sha256',value if name==kind else hashlib.sha256(p.read_bytes()).hexdigest()]

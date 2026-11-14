@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build unpublished examples using source pins and a private Maven repository."""
+"""Build unpublished examples from source pins and published Central dependencies."""
 import argparse
 import hashlib
 import json
@@ -45,23 +45,21 @@ def main():
     parser.add_argument("--core-source", required=True, type=Path)
     parser.add_argument("--core-revision", help="Exact core commit for this build; defaults to the recorded pin")
     parser.add_argument("--adapter-source", required=True, type=Path)
-    parser.add_argument("--framework-source", type=Path)
-    parser.add_argument("--framework-jar", type=Path)
+    parser.add_argument("--framework-jar", required=True, type=Path)
+    parser.add_argument("--framework-pom", required=True, type=Path)
     parser.add_argument("--repository-tail", type=Path)
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     if (not args.work.is_absolute() or args.work.exists() or not args.maven.is_file()
             or not (args.java_home / "bin/java").is_file() or not (args.java_home / "bin/javac").is_file()
-            or bool(args.framework_source) == bool(args.framework_jar)):
-        parser.error("Use a new absolute work directory, real tools, and one framework source or pinned JAR")
+            or not args.framework_jar.is_file() or not args.framework_pom.is_file()):
+        parser.error("Use a new absolute work directory, real tools, and the published framework JAR and POM")
     if args.core_revision is not None and re.fullmatch(r"[0-9a-f]{40}", args.core_revision) is None:
         parser.error("The core revision must be a full lowercase commit SHA")
     compiler = subprocess.check_output([str(args.java_home / "bin/javac"), "-version"], text=True).strip()
     compiler_version = re.fullmatch(r"javac (\d+)(?:\..*)?", compiler)
     if compiler_version is None or int(compiler_version.group(1)) < PINS["framework"]["minimum_java"]:
         parser.error("Soklet applications require JDK 21 or newer; core remains compatible with Java 17")
-    if args.framework_source and compiler != "javac " + PINS["framework"]["build_java_version"]:
-        parser.error("Build framework source with its pinned compiler, or supply the checksum-pinned JAR")
     pins = {**PINS, "core": {**PINS["core"], "revision": args.core_revision or PINS["core"]["revision"]}}
     args.work.mkdir(parents=True, mode=0o700)
     env = {**os.environ, "JAVA_HOME": str(args.java_home),
@@ -108,24 +106,18 @@ def main():
     core = copy_source("core", args.core_source, require_exact=args.core_revision is not None)
     adapter = copy_source("adapter", args.adapter_source)
     run("core-install", command + ["-DskipTests", "clean", "install"], core)
-    if args.framework_source:
-        framework = copy_source("framework", args.framework_source, require_exact=True)
-        run("framework-install", command + ["-Dmaven.test.skip=true", "clean", "install"], framework)
-        framework_jar = framework / "target/soklet-4.0.0.jar"
-        if sha(framework_jar) != pins["framework"]["jar_sha256"]:
-            raise RuntimeError("Framework source build does not match its recorded artifact pin")
-    else:
-        framework_jar = args.framework_jar.resolve()
-        if sha(framework_jar) != pins["framework"]["jar_sha256"]:
-            raise RuntimeError("Framework JAR checksum does not match the approved source-built artifact")
-        framework_path = repo / "com/soklet/soklet/4.0.0"
-        framework_path.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(framework_jar, framework_path / "soklet-4.0.0.jar")
-        (framework_path / "soklet-4.0.0.pom").write_text(
-            '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>'
-            '<groupId>com.soklet</groupId><artifactId>soklet</artifactId><version>4.0.0</version></project>')
+    framework_jar = args.framework_jar.resolve()
+    framework_pom = args.framework_pom.resolve()
+    if sha(framework_jar) != pins["framework"]["jar_sha256"]:
+        raise RuntimeError("Framework JAR checksum does not match the published Central artifact")
+    if sha(framework_pom) != pins["framework"]["pom_sha256"]:
+        raise RuntimeError("Framework POM checksum does not match the published Central artifact")
+    framework_path = repo / "com/soklet/soklet/4.0.0"
+    framework_path.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(framework_jar, framework_path / "soklet-4.0.0.jar")
+    shutil.copy2(framework_pom, framework_path / "soklet-4.0.0.pom")
     # The adapter's Soklet dependency is provided scope, but javac still needs
-    # the pinned framework artifact in this private repository.
+    # the checksum-bound Central framework artifact in this private repository.
     compatibility = adapter_compatibility.prepare_adapter(core, adapter, pins["adapter"]["revision"])
     compatibility_path = args.work / "ADAPTER-COMPATIBILITY.json"
     compatibility_path.write_text(json.dumps(compatibility, indent=2) + "\n")
@@ -159,12 +151,12 @@ def main():
             audit_classpath.read_text(), str(checker), str(source_list), str(audit_classpath),
             str(example / "target/nullability-audit.json"), "21"], example)
         dependencies = [Path(x) for x in (example / "target/runtime-classpath.txt").read_text().strip().split(os.pathsep)]
-        expected = {"revetsec-1.0.0-SNAPSHOT.jar", "revetsec-soklet-1.0.0-SNAPSHOT.jar", "soklet-4.0.0.jar"}
+        expected = {"revetsec-1.0.0.jar", "revetsec-soklet-1.0.0.jar", "soklet-4.0.0.jar"}
         if len(dependencies) != 3 or {x.name for x in dependencies} != expected:
             raise RuntimeError("Unexpected runtime dependencies for " + name)
         framework_dependency = next(x for x in dependencies if x.name.startswith("soklet-"))
         if sha(framework_dependency) != pins["framework"]["jar_sha256"]:
-            raise RuntimeError("Pinned framework artifact changed")
+            raise RuntimeError("Published framework artifact changed")
         artifacts = [*dependencies, *sorted((example / "target").glob("*.jar"))]
         result["examples"][name] = {"directory": str(example), "runtimeDependencies": [str(x) for x in dependencies],
                                     "nullability": json.loads((example / "target/nullability-audit.json").read_text()),

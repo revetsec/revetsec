@@ -20,7 +20,7 @@ Launch the application with the scoped provider truststore described in the pare
 ```sh
 java -Djavax.net.ssl.trustStore=/private/tls/java-trust.p12 \
   -Djavax.net.ssl.trustStorePassword=changeit \
-  -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
+  -jar examples/playground/target/playground-1.0.0.jar
 ```
 
 Frontend HTTP binds 127.0.0.1:8080 and MCP binds 127.0.0.1:8081. The trusted resource is `https://localhost:8443/mcp`, metadata is `https://localhost:8443/.well-known/oauth-protected-resource/mcp`, and OIDC callback is `https://localhost:8443/oidc/callback`. The edge preserves the frontend Host and uses the exact backend MCP Host; applications never derive security identities from forwarded headers.

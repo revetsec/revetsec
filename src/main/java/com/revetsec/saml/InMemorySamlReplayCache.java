@@ -79,8 +79,10 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
      * @return a new empty cache
      * @since 1.0.0
      */
-    public static @NonNull InMemorySamlReplayCache fromLimit(@NonNull Clock clock, int maximumEntries) {
+    public static @NonNull InMemorySamlReplayCache fromLimit(@NonNull Clock clock,
+            @NonNull Integer maximumEntries) {
         Objects.requireNonNull(clock);
+        Objects.requireNonNull(maximumEntries);
         if (maximumEntries < 1 || maximumEntries > MAXIMUM_ENTRIES)
             throw new IllegalArgumentException("Invalid SAML replay cache capacity");
         return new InMemorySamlReplayCache(clock, maximumEntries, null);

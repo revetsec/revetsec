@@ -136,12 +136,12 @@ final class OAuthClientMetadataDocument {
   boolean singular = json.getMembers().containsKey("token_endpoint_auth_method");
   Set<String> methods = plural ? methods(json, "token_endpoint_auth_methods_supported") : Set.of();
   String selected = singular ? method(string(json, "token_endpoint_auth_method", null)) : null;
-  if (methods.stream().anyMatch(SECRET_METHODS::contains) || selected != null && SECRET_METHODS.contains(selected)) throw invalid();
+  if (methods.stream().anyMatch(SECRET_METHODS::contains) || (selected != null && SECRET_METHODS.contains(selected))) throw invalid();
   if (!plural) {
    if (selected != null && !selected.equals("none")) throw invalid();
    return;
   }
-  if (!methods.contains("none") || selected != null && !methods.contains(selected)) throw invalid();
+  if (!methods.contains("none") || (selected != null && !methods.contains(selected))) throw invalid();
  }
  private static @NonNull Set<@NonNull String> methods(@NonNull JsonObject json, @NonNull String name) {
   JsonValue value = json.getMembers().get(name);

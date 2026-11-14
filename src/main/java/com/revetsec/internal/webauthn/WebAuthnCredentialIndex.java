@@ -142,7 +142,7 @@ final class WebAuthnCredentialIndex {
             for (int index = 0; index < ids.size(); index++) {
                 byte[] id = requireNonNull(ids.get(index));
                 if (id.length < 1 || id.length > 1_023
-                        || previous != null && Arrays.compareUnsigned(previous, id) >= 0)
+                        || (previous != null && Arrays.compareUnsigned(previous, id) >= 0))
                     throw new IllegalArgumentException("Invalid WebAuthn credential index");
                 this.credentialIds[index] = id.clone();
                 previous = id;

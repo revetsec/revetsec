@@ -1,0 +1,33 @@
+{
+  "schema": "revetsec.owner-acceptance.v1",
+  "version": "1.0.0",
+  "gate": "",
+  "disposition": "PENDING",
+  "acceptedAt": "",
+  "acceptedBy": "",
+  "repositories": [
+    {
+      "name": "revetsec",
+      "commit": ""
+    },
+    {
+      "name": "revetsec-soklet",
+      "commit": ""
+    },
+    {
+      "name": "revetsec-servlet-jakarta",
+      "commit": ""
+    },
+    {
+      "name": "revetsec-servlet-javax",
+      "commit": ""
+    }
+  ],
+  "evidence": [
+    {
+      "path": "",
+      "sha256": ""
+    }
+  ],
+  "notes": []
+}

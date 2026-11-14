@@ -157,7 +157,7 @@ final class ScimFilterEvaluation {
             return result;
         }
         boolean absent=value == null || value instanceof JsonNull
-                || definition.isMultiValued() && value instanceof JsonArray array && array.getElements().isEmpty();
+                || (definition.isMultiValued() && value instanceof JsonArray array && array.getElements().isEmpty());
         if (literal instanceof ScimFilterValue.NullValue) return operator == ScimComparisonOperator.EQ ? absent : !absent;
         if (absent) return operator == ScimComparisonOperator.NE;
         if (value instanceof JsonString string && literal instanceof ScimFilterValue.StringValue text) {
@@ -273,7 +273,7 @@ final class ScimFilterEvaluation {
                     else result+=4;
                 }
             }
-            return result < 0 || enforceRenderedLength && result > limits.getMaximumExpressionCharacters() ? -1 : result;
+            return result < 0 || (enforceRenderedLength && result > limits.getMaximumExpressionCharacters()) ? -1 : result;
         }
         private long operands(@NonNull List<@NonNull ScimFilter> operands,int separator,int precedence,int depth) {
             long result=0;

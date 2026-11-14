@@ -197,7 +197,7 @@ final class OAuthClientMetadataFetcher {
    Instant previous = this.observedTime.get();
    Instant sampled = now(deadline);
    if (first == null) first = sampled;
-   boolean rollback = sampled.isBefore(first) || previous != null && sampled.isBefore(previous);
+   boolean rollback = sampled.isBefore(first) || (previous != null && sampled.isBefore(previous));
    Instant highest = first;
    if (previous != null && previous.isAfter(highest)) highest = previous;
    if (sampled.isAfter(highest)) highest = sampled;

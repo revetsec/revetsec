@@ -16,8 +16,8 @@
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
  <modelVersion>4.0.0</modelVersion>
- <parent><groupId>com.revetsec.examples</groupId><artifactId>revetsec-examples</artifactId><version>1.0.0-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+ <parent><groupId>com.revetsec.examples</groupId><artifactId>revetsec-examples</artifactId><version>1.0.0</version><relativePath>../pom.xml</relativePath></parent>
  <artifactId>rp-initiated-logout-soklet</artifactId><name>Revetsec Soklet local-first logout recipe (unpublished)</name><properties><maven.compiler.release>21</maven.compiler.release></properties>
- <dependencies><dependency><groupId>com.revetsec</groupId><artifactId>revetsec</artifactId></dependency><dependency><groupId>com.revetsec.examples</groupId><artifactId>revetsec-rp-initiated-logout</artifactId><version>1.0.0-SNAPSHOT</version></dependency><dependency><groupId>com.revetsec.examples</groupId><artifactId>revetsec-rp-initiated-logout</artifactId><version>1.0.0-SNAPSHOT</version><type>test-jar</type><classifier>tests</classifier><scope>test</scope></dependency><dependency><groupId>com.soklet</groupId><artifactId>soklet</artifactId></dependency></dependencies>
+ <dependencies><dependency><groupId>com.revetsec</groupId><artifactId>revetsec</artifactId></dependency><dependency><groupId>com.revetsec.examples</groupId><artifactId>revetsec-rp-initiated-logout</artifactId><version>1.0.0</version></dependency><dependency><groupId>com.revetsec.examples</groupId><artifactId>revetsec-rp-initiated-logout</artifactId><version>1.0.0</version><type>test-jar</type><classifier>tests</classifier><scope>test</scope></dependency><dependency><groupId>com.soklet</groupId><artifactId>soklet</artifactId></dependency></dependencies>
  <build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><configuration><failIfNoTests>true</failIfNoTests></configuration></plugin></plugins></build>
 </project>

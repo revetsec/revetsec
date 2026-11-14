@@ -486,37 +486,23 @@ jobs:
           path: .example-inputs/adapter
           persist-credentials: false
 
-      - name: Check out pinned Soklet framework
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: soklet/soklet
-          ref: 157fbe587e177e7332fcbaffe51e7a2138685bd2
-          path: .example-inputs/framework
-          persist-credentials: false
-
-      - name: Download checksum-pinned Corretto 21.0.11 for Soklet
-        run: >-
-          bash .github/scripts/download-pinned-corretto21-linux-x64.sh
-          "$RUNNER_TEMP/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
-
-      - name: Set up Corretto 21.0.11 for pinned Soklet artifact
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: jdkfile
-          java-version: '21.0.11'
-          jdk-file: ${{ runner.temp }}/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz
-
-      - name: Build exact Soklet 4.0.0 artifact
-        working-directory: .example-inputs/framework
-        run: |
-          mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true clean package
-          echo "2ebff62b5ec1fd6d86761d8a894276a07efdaa12859badc8e376a2c1ca87960d  target/soklet-4.0.0.jar" | sha256sum --check
-
       - name: Set up Corretto
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: ${{ matrix.java }}
+
+      - name: Download checksum-bound Soklet 4.0.0 from Maven Central
+        run: |
+          destination="$RUNNER_TEMP/soklet-central"
+          base="https://repo.maven.apache.org/maven2/com/soklet/soklet/4.0.0"
+          mkdir -p "$destination"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
+            "$base/soklet-4.0.0.jar" --output "$destination/soklet-4.0.0.jar"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
+            "$base/soklet-4.0.0.pom" --output "$destination/soklet-4.0.0.pom"
+          echo "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce  $destination/soklet-4.0.0.jar" | sha256sum --check --strict
+          echo "496cdb065ffc2db4b17a6c1ced6262d261a752883e689fdfc72c52143b99b8ba  $destination/soklet-4.0.0.pom" | sha256sum --check --strict
 
       - name: Build exact artifacts and verify both unpublished examples
         run: |
@@ -526,7 +512,8 @@ jobs:
             --core-source "$GITHUB_WORKSPACE/.example-inputs/core" \
             --core-revision "$GITHUB_SHA" \
             --adapter-source "$GITHUB_WORKSPACE/.example-inputs/adapter" \
-            --framework-jar "$GITHUB_WORKSPACE/.example-inputs/framework/target/soklet-4.0.0.jar"
+            --framework-jar "$RUNNER_TEMP/soklet-central/soklet-4.0.0.jar" \
+            --framework-pom "$RUNNER_TEMP/soklet-central/soklet-4.0.0.pom"
 
       - name: Build and test the complete Maven examples reactor
         run: |
@@ -647,7 +634,7 @@ jobs:
         run: |
           python3 examples/postgresql-pending-store/run_totp.py \
             --java-home "$JAVA_HOME" \
-            --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
+            --core-jar target/revetsec-1.0.0.jar \
             --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
             --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
             --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
@@ -988,9 +975,8 @@ jobs:
   # discovery/JWKS/SAML metadata against the latest fixture snapshot.
 
   # examples: from M5. Gating on PR. Install core (-DskipTests -Dmaven.javadoc.skip=true), check out
-  # revetsec/revetsec-soklet at the SHA in examples/revetsec-soklet.sha and install it against this
-  # core, then `mvn -B -ntp -f examples/pom.xml verify`. Soklet is built at a pinned SHA until 4.0.0 is
-  # on Central.
+  # revetsec/revetsec-soklet at the SHA in examples/pins.json and install it against this
+  # core, then `mvn -B -ntp -f examples/pom.xml verify`. Soklet 4.0.0 resolves from Maven Central.
 
   # interop: from M6. Advisory; nightly + dispatch, never on fork PRs. Machine-to-machine live probes
   # (Entra, Okta, Auth0, GitHub, GitHub Actions OIDC). Secrets only in the `interop` environment

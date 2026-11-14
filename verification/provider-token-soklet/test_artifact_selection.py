@@ -18,9 +18,9 @@ class SelectedArtifactTests(unittest.TestCase):
     def setUp(self):
         self.examples = Path(os.environ.get("PROVIDER_SOKLET_EXAMPLES_ROOT", ROOT / "examples")).resolve()
         self.java = Path(os.environ["PROVIDER_SOKLET_JAVA_HOME"])
-        self.common = self.examples / "provider-backend-tokens/target/revetsec-provider-backend-tokens-1.0.0-SNAPSHOT.jar"
-        self.carrier = self.examples / "provider-backend-tokens-soklet/target/provider-backend-tokens-soklet-1.0.0-SNAPSHOT.jar"
-        self.core = self.common.parent / "lib/revetsec-1.0.0-SNAPSHOT.jar"
+        self.common = self.examples / "provider-backend-tokens/target/revetsec-provider-backend-tokens-1.0.0.jar"
+        self.carrier = self.examples / "provider-backend-tokens-soklet/target/provider-backend-tokens-soklet-1.0.0.jar"
+        self.core = self.common.parent / "lib/revetsec-1.0.0.jar"
         self.framework = self.carrier.parent / "lib/soklet-4.0.0.jar"
         self.core_hash = hashlib.sha256(self.core.read_bytes()).hexdigest()
         self.framework_hash = hashlib.sha256(self.framework.read_bytes()).hexdigest()

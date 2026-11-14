@@ -93,7 +93,7 @@ final class OAuthServerRequest {
 	/** Same aggregate admission as parse, with the public fixed method verdict. */
 	static @NonNull OAuthServerRequest parseForServer(@NonNull Endpoint endpoint,@NonNull String method,@Nullable String query,
 		byte @NonNull [] body,@NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers,@NonNull OAuthServerIngressLimits limits) {
-		if(body.length>limits.bodyBytes || query!=null && query.length()>limits.queryLength) throw invalid();
+		if(body.length>limits.bodyBytes || (query!=null && query.length()>limits.queryLength)) throw invalid();
 		headers(headers,limits.headerBytes);
 		if(!method.equals(endpoint==Endpoint.AUTHORIZATION ? "GET" : "POST")) throw OAuthServerValidationException.fromReason(OAuthServerException.Reason.METHOD_NOT_ALLOWED);
 		return parse(endpoint,method,query,body,headers,limits);

@@ -514,7 +514,7 @@ public final class OAuthAuthorizationServer {
   OAuthServerConfiguration.text(uri.toString(),2048);
   boolean loopback="http".equalsIgnoreCase(uri.getScheme()) && ("127.0.0.1".equals(uri.getHost()) || "[::1]".equals(uri.getHost()));
   if(uri.isOpaque() || uri.getHost()==null || uri.getRawUserInfo()!=null || uri.getRawQuery()!=null || uri.getRawFragment()!=null
-    || uri.getPort()==0 || uri.getPort()>65535 || !("https".equalsIgnoreCase(uri.getScheme()) || insecure && loopback)) throw OAuthServerConfiguration.invalid();
+    || uri.getPort()==0 || uri.getPort()>65535 || !("https".equalsIgnoreCase(uri.getScheme()) || (insecure && loopback))) throw OAuthServerConfiguration.invalid();
   return uri;
  }
  private static void checkRoute(@NonNull URI issuer,@NonNull URI route,boolean insecure,@NonNull Set<@NonNull String> routes) {

@@ -52,6 +52,7 @@ public abstract sealed class OAuthServerException extends RevetsecException perm
 	 * @return fixed description
 	 * @since 1.0.0
 	 */
+	@SuppressWarnings("OverrideThrowableToString") // The exact redacted diagnostic is part of the public safety contract.
 	@Override public final @NonNull String toString() { return "OAuthServerException{"+this.reason+"}"; }
 	enum Kind { VALIDATION, STORE, TRANSPORT, CONFIGURATION, SIGNING }
 	/** Fixed classifications; a later release may add values. Callers must include a default branch rather than

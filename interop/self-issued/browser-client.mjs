@@ -74,7 +74,7 @@ try{
   command('/runtime/java/bin/keytool',['-importcert','-noprompt','-alias','local-cimd-ca','-file',root+'/ca.pem','-keystore',root+'/cimd-trust.p12','-storetype','PKCS12','-storepass','public-test-ca']);
  }
  const javaTrust=cimd?['-Djavax.net.ssl.trustStore='+root+'/cimd-trust.p12','-Djavax.net.ssl.trustStorePassword=public-test-ca']:[];
- const cp=['self-issued-1.0.0-SNAPSHOT.jar','revetsec-1.0.0-SNAPSHOT.jar','revetsec-soklet-1.0.0-SNAPSHOT.jar','soklet-4.0.0.jar'].map(n=>'/app/'+n).join(':');
+ const cp=['self-issued-1.0.0.jar','revetsec-1.0.0.jar','revetsec-soklet-1.0.0.jar','soklet-4.0.0.jar'].map(n=>'/app/'+n).join(':');
  managed('application','/runtime/java/bin/java',[...javaTrust,'-cp',cp,'example.issuer.IssuerPlayground'],{env:{...shared,
   ...(cimd?{REVETSEC_ISSUER_CIMD_ORIGIN:'https://cimd.example.com:6277',REVETSEC_ISSUER_CIMD_ADDRESS:'8.8.8.8'}:{}),REVETSEC_ISSUER_SECOND_RESOURCE:String(input.secondResource),REVETSEC_ISSUER_FRESH_NAMESPACE:'true',REVETSEC_ISSUER_ORIGIN:issuer,REVETSEC_ISSUER_RESOURCE:resource,
   REVETSEC_ISSUER_REDIRECT:registeredRedirect,REVETSEC_ISSUER_BROWSER_ORIGIN:origin,REVETSEC_ISSUER_HTTP_PORT:'8089',REVETSEC_ISSUER_MCP_PORT:String(input.port),

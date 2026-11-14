@@ -740,9 +740,9 @@ public final class ScimServiceProvider {
         StringBuilder segment = new StringBuilder();
         for (byte octet : authoritativeId.getBytes(StandardCharsets.UTF_8)) {
             int value = octet & 255;
-            if (value >= 'a' && value <= 'z'
-                    || value >= 'A' && value <= 'Z'
-                    || value >= '0' && value <= '9'
+            if ((value >= 'a' && value <= 'z')
+                    || (value >= 'A' && value <= 'Z')
+                    || (value >= '0' && value <= '9')
                     || value == '-'
                     || value == '.'
                     || value == '_'
@@ -917,7 +917,7 @@ public final class ScimServiceProvider {
                             return responseError(ScimError.responseTooLargeInstance());
                         values.add(body);
                     }
-                    LinkedHashMap<String, JsonValue> body = list(values);
+                    Map<String, JsonValue> body = list(values);
                     page.getTotalResults()
                             .ifPresent(
                                     value -> body.put("totalResults", JsonNumber.fromValue(value)));
@@ -1059,7 +1059,7 @@ public final class ScimServiceProvider {
                     }
                     JsonObject output;
                     if (kind.equals("types") || kind.equals("schemas")) {
-                        LinkedHashMap<String, JsonValue> members = list(values);
+                        Map<String, JsonValue> members = list(values);
                         members.put("totalResults", JsonNumber.fromValue((long) values.size()));
                         members.put("startIndex", JsonNumber.fromValue(1L));
                         output = JsonObject.fromMembers(members);
@@ -1294,7 +1294,7 @@ public final class ScimServiceProvider {
                 : Map.of();
     }
 
-    private static @NonNull LinkedHashMap<@NonNull String, @NonNull JsonValue> list(
+    private static @NonNull Map<@NonNull String, @NonNull JsonValue> list(
             @NonNull List<@NonNull JsonValue> resources) {
         LinkedHashMap<String, JsonValue> body = new LinkedHashMap<>();
         body.put(
@@ -1418,7 +1418,7 @@ public final class ScimServiceProvider {
                             "SCIM application endpoint collides with discovery.");
             if (!names.add(type.getName())
                     || !endpoints.add(type.getEndpoint())
-                    || type.getId().isPresent() && !ids.add(type.getId().get()))
+                    || (type.getId().isPresent() && !ids.add(type.getId().get())))
                 throw new IllegalArgumentException("Duplicate SCIM resource registration.");
             for (ScimSchema schema : ScimSchemas.allSchemas(type)) {
                 for (ScimSchema builtin : reserved)

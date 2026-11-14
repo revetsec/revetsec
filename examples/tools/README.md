@@ -5,7 +5,7 @@ passkey and self-issued demos. Build it with `mvn -f examples/tools/pom.xml pack
 from the core repository root (or build the complete examples reactor), then run:
 
 ```sh
-java -jar examples/tools/target/example-tools-1.0.0-SNAPSHOT.jar \
+java -jar examples/tools/target/example-tools-1.0.0.jar \
   /absolute/private/new-access-key
 ```
 

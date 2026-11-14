@@ -79,7 +79,7 @@ public final class ScimCompatibility {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimCompatibility value && features.equals(value.features);
+        return this == other || (other instanceof ScimCompatibility value && features.equals(value.features));
     }
 
     /**

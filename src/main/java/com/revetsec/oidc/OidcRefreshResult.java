@@ -16,67 +16,109 @@
 
 package com.revetsec.oidc;
 
-import com.revetsec.oauth.RefreshToken;
-import com.revetsec.oauth.TokenResponse;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
-import java.util.Optional;
 import static java.util.Objects.requireNonNull;
+import com.revetsec.oauth.OAuthEndpointError;
+import com.revetsec.oauth.OAuthErrorResponseException;
+import com.revetsec.jose.JoseException;
+import org.jspecify.annotations.Nullable;
+import java.util.Optional;
 
 /**
- * Tokens from one refresh, released after any returned ID token passes signature, profile and original-session
- * continuity checks. An omitted ID token yields no new identity. The original reference remains a continuity
- * comparison value and is not proof of identity. Applications serialize concurrent refreshes and store tokens.
+ * The result of an OIDC token refresh.
+ * Local validation and non-transient endpoint client errors return fixed rejections. Transport, metadata,
+ * malformed endpoint responses, transient endpoint failures and invalid HMAC configuration remain exceptions.
+ * Applications receive outcomes from the operation and cannot construct them. A later release may add variants;
+ * consuming switches should include a rejecting default branch.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
 @Immutable
-public final class OidcRefreshResult {
-	private final TokenResponse tokens;
-	private final @Nullable IdToken idToken;
-	private final RefreshToken refreshToken;
-	private final OidcSessionReference original;
-	private final @Nullable Object owner;
-	OidcRefreshResult(@NonNull TokenResponse tokens, @Nullable IdToken idToken, @NonNull RefreshToken previous, @NonNull OidcSessionReference original) {
-		this(tokens, idToken, previous, original, null);
+public abstract sealed class OidcRefreshResult permits OidcRefreshResult.Succeeded, OidcRefreshResult.Rejected, OidcRefreshResult.RejectedEndpoint {
+	OidcRefreshResult() { }
+	static @NonNull OidcRefreshResult fromRefresh(@NonNull OidcRefresh value) { return new Succeeded(requireNonNull(value)); }
+	static @NonNull OidcRefreshResult fromRejection(@NonNull OidcValidationException failure) {
+		return new Rejected(failure.getReason(), failure.getJoseReason().orElse(null));
 	}
-	OidcRefreshResult(@NonNull TokenResponse tokens, @Nullable IdToken idToken, @NonNull RefreshToken previous,
-			@NonNull OidcSessionReference original, @Nullable Object owner) {
-		this.owner = owner;
-		this.tokens = requireNonNull(tokens); this.idToken = idToken; this.original = requireNonNull(original);
-		this.refreshToken = tokens.getRefreshToken().orElse(requireNonNull(previous));
+	static @NonNull OidcRefreshResult fromEndpoint(@NonNull OAuthErrorResponseException failure) {
+		return new RejectedEndpoint(OAuthEndpointError.fromWireValue(failure.getErrorCode().orElse("")), failure.getStatus());
 	}
-	@SuppressWarnings("ReferenceEquality") // Logout hint creation requires the exact producing client's private capability.
-	boolean belongsTo(@NonNull Object owner) { return this.owner == owner; }
 	/**
-	 * Returns the endpoint tokens. The raw id_token is absent from its safe parameter view.
-	 * @return token response
-	 * @since 1.0.0
-	 */
-	public @NonNull TokenResponse getTokens() { return this.tokens; }
-	/**
-	 * Returns the newly verified ID token, if the provider returned one. An absent value establishes no new identity.
-	 * @return verified ID token
-	 * @since 1.0.0
-	 */
-	public @NonNull Optional<@NonNull IdToken> getIdToken() { return Optional.ofNullable(this.idToken); }
-	/**
-	 * Returns the replacement refresh token, or the previous token when no replacement was returned.
-	 * @return refresh credential to retain securely
-	 * @since 1.0.0
-	 */
-	public @NonNull RefreshToken getRefreshToken() { return this.refreshToken; }
-	/**
-	 * Returns the original reference for subsequent refresh comparisons. Parsing it never authenticates identity.
-	 * @return original continuity reference
-	 * @since 1.0.0
-	 */
-	public @NonNull OidcSessionReference getSessionReference() { return this.original; }
-	/**
-	 * Redacts tokens and continuity data.
+	 * Returns the outcome kind with all values redacted.
 	 * @return redacted description
 	 * @since 1.0.0
 	 */
-	@Override public @NonNull String toString() { return "OidcRefreshResult{credentials=<redacted>, session=<redacted>}"; }
+	@Override
+	public final @NonNull String toString() {
+		return "OidcRefreshResult{outcome=" + getClass().getSimpleName() + ", data=<redacted>}";
+	}
+	/**
+	 * The refresh completed and any returned ID token passed continuity checks.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class Succeeded extends OidcRefreshResult {
+		private final @NonNull OidcRefresh value;
+		private Succeeded(@NonNull OidcRefresh value) { this.value = requireNonNull(value); }
+		/**
+		 * Returns the value released after all operation checks passed.
+		 * @return checked value
+		 * @since 1.0.0
+		 */
+		public @NonNull OidcRefresh getRefresh() { return this.value; }
+	}
+	/**
+	 * A local OIDC check rejected the operation. No identity, claim or token value is released.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class Rejected extends OidcRefreshResult {
+		private final OidcValidationException.@NonNull Reason reason;
+		private final JoseException.@Nullable Reason joseReason;
+		private Rejected(OidcValidationException.@NonNull Reason reason, JoseException.@Nullable Reason joseReason) {
+			this.reason = requireNonNull(reason); this.joseReason = joseReason;
+		}
+		/**
+		 * Returns the fixed OIDC rejection reason.
+		 * @return rejection reason
+		 * @since 1.0.0
+		 */
+		public OidcValidationException.@NonNull Reason getReason() { return this.reason; }
+		/**
+		 * Returns the fixed lower-layer reason when JOSE rejected the input.
+		 * @return optional JOSE reason
+		 * @since 1.0.0
+		 */
+		public @NonNull Optional<JoseException.@NonNull Reason> getJoseReason() {
+			return Optional.ofNullable(this.joseReason);
+		}
+	}
+	/**
+	 * The endpoint returned a non-transient client error. No response body or credential is retained.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class RejectedEndpoint extends OidcRefreshResult {
+		private final @NonNull OAuthEndpointError error;
+		private final int status;
+		private RejectedEndpoint(@NonNull OAuthEndpointError error, int status) {
+			this.error = requireNonNull(error); this.status = status;
+		}
+		/**
+		 * Returns the fixed endpoint error; unrecognized or absent codes use the same fallback.
+		 * @return fixed endpoint error
+		 * @since 1.0.0
+		 */
+		public @NonNull OAuthEndpointError getError() { return this.error; }
+		/**
+		 * Returns the endpoint's HTTP status.
+		 * @return endpoint status
+		 * @since 1.0.0
+		 */
+		public @NonNull Integer getStatus() { return this.status; }
+	}
 }

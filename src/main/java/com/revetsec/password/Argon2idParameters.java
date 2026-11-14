@@ -19,6 +19,8 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.Immutable;
 
+import static java.util.Objects.requireNonNull;
+
 /** Argon2id version 19 parameters for newly created password hashes.
  * @since 1.0.0 */
 @Immutable
@@ -40,7 +42,11 @@ public final class Argon2idParameters {
      * @param lanes degree of parallelism (Argon2 lanes, not library worker threads)
      * @return validated parameters
      * @since 1.0.0 */
-    public static @NonNull Argon2idParameters fromCosts(int memoryKiB, int passes, int lanes) {
+    public static @NonNull Argon2idParameters fromCosts(@NonNull Integer memoryKiB, @NonNull Integer passes,
+            @NonNull Integer lanes) {
+        requireNonNull(memoryKiB);
+        requireNonNull(passes);
+        requireNonNull(lanes);
         if (lanes < 1 || lanes > 8 || passes < 1 || passes > 10
                 || memoryKiB > 262_144 || memoryKiB < 8 * lanes
                 || (passes == 1 ? memoryKiB < 47_104 : memoryKiB < 19_456)) {

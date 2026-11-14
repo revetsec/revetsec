@@ -21,7 +21,12 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 
 public final class BuilderConventionsFixture {
+	public static final int LIMIT = 1;
 	private BuilderConventionsFixture() { }
+	public static int count() { return 0; }
+	public static @NonNull BuilderConventionsFixture select(int index, @NonNull String name) {
+		return new BuilderConventionsFixture();
+	}
 	public static @NonNull BuilderConventionsFixture withValue(@NonNull String value) {
 		return new BuilderConventionsFixture();
 	}
@@ -34,6 +39,7 @@ public final class BuilderConventionsFixture {
 		public @NonNull Builder token(@NonNull String value) { return this; }
 		public @NonNull Builder values(@NonNull List<@Nullable String> value) { return this; }
 		public @NonNull Builder put(@NonNull String value) { return this; }
+		public @NonNull Builder range(@Nullable String start, int limit) { return this; }
 		public @NonNull Builder route(@Nullable String value) { return this; }
 		public @NonNull BuilderConventionsFixture build() { return new BuilderConventionsFixture(); }
 	}

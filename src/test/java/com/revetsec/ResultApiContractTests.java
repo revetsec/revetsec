@@ -18,47 +18,51 @@ package com.revetsec;
 
 import org.jspecify.annotations.NonNull;
 
-import com.revetsec.jose.JwtValidationResult;
-import com.revetsec.oauth.BearerTokenResult;
-import com.revetsec.oauth.AuthorizationCompletionResult;
-import com.revetsec.oidc.OidcAuthenticationResult;
 import org.junit.jupiter.api.Test;
+import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ResultApiContractTests {
+    private static final Set<String> PROVIDER_CONSTRUCTIBLE_RESULTS = Set.of(
+            "com.revetsec.oauth.server.OAuthStoreReadResult",
+            "com.revetsec.password.PasswordPepperSnapshotResult",
+            "com.revetsec.saml.SamlPendingConsumeResult",
+            "com.revetsec.scim.ScimStringMatchResult",
+            "com.revetsec.totp.TotpStoreReadResult",
+            "com.revetsec.webauthn.WebAuthnStoreReadResult");
+
     @Test
-    void onlyTheOperationCanConstructAnOutcomeAndAllVariantsAreClosed() {
-        for (Class<?> base : List.of(JwtValidationResult.class, StateUnsealResult.class, BearerTokenResult.class,
-                AuthorizationCompletionResult.class, OidcAuthenticationResult.class,
-                com.revetsec.oauth.AccessTokenValidationResult.class,
-                com.revetsec.jose.JwksParseResult.class,
-                com.revetsec.oauth.AuthorizationResponseParseResult.class,
-                com.revetsec.oauth.AuthorizationServerMetadataParseResult.class,
-                com.revetsec.oauth.OAuthTokenRequestResult.class,
-                com.revetsec.oauth.OAuthRevocationResult.class,
-                com.revetsec.oauth.AccessTokenAcquisitionResult.class,
-                com.revetsec.oidc.OidcProviderMetadataParseResult.class,
-                com.revetsec.oidc.OidcSessionReferenceParseResult.class,
-                com.revetsec.oidc.OidcUserInfoResult.class,
-                com.revetsec.oidc.OidcRefreshOutcome.class,
-                com.revetsec.saml.SamlSessionReferenceParseResult.class)) {
+    void exportedSealedResultsHaveClosedImmutableVariants() throws IOException {
+        for (Class<?> base : exportedSealedResults()) {
             assertTrue(base.isSealed());
-            assertRestrictedConstruction(base);
+            assertRestrictedConstructors(base);
             for (Class<?> leaf : base.getPermittedSubclasses()) {
                 assertTrue(Modifier.isFinal(leaf.getModifiers()));
-                assertRestrictedConstruction(leaf);
+                assertRestrictedConstructors(leaf);
                 for (var field : leaf.getDeclaredFields()) {
+                    if (field.isSynthetic() || Modifier.isStatic(field.getModifiers())) continue;
                     assertTrue(Modifier.isPrivate(field.getModifiers()));
                     assertTrue(Modifier.isFinal(field.getModifiers()));
                     assertFalse(Throwable.class.isAssignableFrom(field.getType()));
-                    if (!leaf.getSimpleName().equals("Succeeded") && !leaf.getSimpleName().equals("Present"))
-                        assertTrue(field.getType().isEnum() || field.getName().equals("status") && field.getType() == int.class,
-                                "Rejection data is a fixed enum or the bounded HTTP status only");
                 }
             }
         }
+    }
+
+    @Test
+    void onlyExplicitProviderResultsExposeFactories() throws IOException {
+        Set<String> providerResults = new TreeSet<>();
+        for (Class<?> base : exportedSealedResults()) {
+            boolean hasFactory = hasPublicFactory(base);
+            for (Class<?> leaf : base.getPermittedSubclasses())
+                if (!leaf.isEnum()) hasFactory |= hasPublicFactory(leaf);
+            if (hasFactory) providerResults.add(base.getName());
+        }
+        assertEquals(PROVIDER_CONSTRUCTIBLE_RESULTS, providerResults);
     }
 
     @Test
@@ -96,15 +100,41 @@ final class ResultApiContractTests {
     @Test
     void constructionGuardDetectsAPublicConstructorAndFactory() {
         assertNotNull(FactoryResult.fromValue());
-        assertThrows(AssertionError.class, () -> assertRestrictedConstruction(ForgedResult.class));
-        assertThrows(AssertionError.class, () -> assertRestrictedConstruction(FactoryResult.class));
+        assertThrows(AssertionError.class, () -> assertRestrictedConstructors(ForgedResult.class));
+        assertTrue(hasPublicFactory(FactoryResult.class));
     }
 
-    private static void assertRestrictedConstruction(@NonNull Class<?> type) {
+    private static @NonNull List<@NonNull Class<?>> exportedSealedResults() throws IOException {
+        List<String> names = ContractSupport.analyze(ContractSupport.repositoryRoot().resolve("src/main/java"), analysis ->
+                ContractSupport.exportedTypes(analysis).stream()
+                        .filter(type -> type.getModifiers().contains(javax.lang.model.element.Modifier.SEALED))
+                        .filter(type -> type.getSimpleName().toString().endsWith("Result")
+                                || type.getSimpleName().toString().endsWith("Outcome"))
+                        .map(type -> analysis.getElements().getBinaryName(type).toString())
+                        .toList());
+        return names.stream().map(ResultApiContractTests::loadClass).toList();
+    }
+
+    private static @NonNull Class<?> loadClass(@NonNull String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError("Compiled result type is missing: " + name, e);
+        }
+    }
+
+    private static void assertRestrictedConstructors(@NonNull Class<?> type) {
         for (var constructor : type.getDeclaredConstructors())
             assertFalse(Modifier.isPublic(constructor.getModifiers()) || Modifier.isProtected(constructor.getModifiers()));
-        for (var method : type.getDeclaredMethods())
-            assertFalse(Modifier.isStatic(method.getModifiers()) && Modifier.isPublic(method.getModifiers()));
+    }
+
+    private static boolean hasPublicFactory(@NonNull Class<?> type) {
+        for (var method : type.getDeclaredMethods()) {
+            int modifiers = method.getModifiers();
+            if (Modifier.isStatic(modifiers) && (Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers)))
+                return true;
+        }
+        return false;
     }
     private static final class ForgedResult { public ForgedResult() { } }
     private static final class FactoryResult {

@@ -20,9 +20,9 @@ import org.jspecify.annotations.NonNull;
 
 @javax.annotation.concurrent.NotThreadSafe
 final class InMemoryWebAuthnStoreConformanceTests extends WebAuthnStoreConformanceTests {
- @Override protected @NonNull WebAuthnStore newStore(){return InMemoryWebAuthnStore.fromLimits(16,10000);}
+ @Override protected @NonNull WebAuthnStore newStore(){return InMemoryWebAuthnStore.fromLimits(16,10000L);}
  @Override protected @NonNull WebAuthnStore newStoreWithEntryLimit(int maximumEntries){
-  return InMemoryWebAuthnStore.fromLimits(maximumEntries,10000);
+  return InMemoryWebAuthnStore.fromLimits(maximumEntries,10000L);
  }
  @Override protected void advanceAuthorityPast(@NonNull WebAuthnStore store,@NonNull Instant exclusiveEnd)
    throws InterruptedException {Thread.sleep(1);}

@@ -45,6 +45,7 @@ final class OAuthStoreCoordinator {
  private final @NonNull OAuthStoreRecordCodec codec;
  private final @NonNull Clock workerClock;
  private final int maximumAttempts, maximumSubjectLength;
+ @SuppressWarnings("ThreadLocalUsage") // Coordination is deliberately scoped to this server instance and caller thread.
  private final @NonNull ThreadLocal<@Nullable Operation> operation = new ThreadLocal<>();
  OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
    @NonNull Clock clock, int maximumAttempts, int maximumSubjectLength) {

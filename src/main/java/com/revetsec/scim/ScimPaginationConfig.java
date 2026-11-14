@@ -53,8 +53,8 @@ public final class ScimPaginationConfig {
         if (cursorTimeout != null) Limits.SCIM_CURSOR_TIMEOUT.require(cursorTimeout);
         if (!indexSupported && !cursorSupported)
             throw new IllegalArgumentException("At least one SCIM pagination method must be supported.");
-        if (defaultMethod == ScimPaginationMethod.INDEX && !indexSupported
-                || defaultMethod == ScimPaginationMethod.CURSOR && !cursorSupported)
+        if ((defaultMethod == ScimPaginationMethod.INDEX && !indexSupported)
+                || (defaultMethod == ScimPaginationMethod.CURSOR && !cursorSupported))
             throw new IllegalArgumentException("The default SCIM pagination method must be supported.");
         if (defaultPageSize > maximumPageSize)
             throw new IllegalArgumentException("SCIM default page size must not exceed maximum page size.");
@@ -118,10 +118,10 @@ public final class ScimPaginationConfig {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimPaginationConfig value
+        return this == other || (other instanceof ScimPaginationConfig value
                 && indexSupported == value.indexSupported && cursorSupported == value.cursorSupported
                 && defaultMethod == value.defaultMethod && defaultPageSize == value.defaultPageSize
-                && maximumPageSize == value.maximumPageSize && Objects.equals(cursorTimeout, value.cursorTimeout);
+                && maximumPageSize == value.maximumPageSize && Objects.equals(cursorTimeout, value.cursorTimeout));
     }
 
     /**

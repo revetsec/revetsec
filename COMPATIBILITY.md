@@ -2,9 +2,7 @@
 
 **2026-10-30 shared-clock source join:** the TOTP/WebAuthn/issuer transition adds 15 store declarations, 15 restricted reconciliation leaves, 56 source-declared store methods, seven existing-type getters and 17 enum constants. The 11 selected contract signature replacements also require two concrete in-memory override return replacements, for 13 binary replacements. Java's two generated `Purpose` enum methods are counted separately. This is a coordinated pre-1.0 source break with no legacy SPI wrapper or worker-clock fallback. [The joined contract](docs/shared-clock-stores.md) describes result branches, raw factual receipts and migration/readiness boundaries. Current compiled candidate acceptance does not grant release-owner approval or qualify a live shared clock/store deployment.
 
-Revetsec is pre-release. The version is `1.0.0-SNAPSHOT`, and **there is no compatibility promise before 1.0.0**. Until then, any public type, member, default or behavior may change incompatibly, without deprecation.
-
-From 1.0.0, Revetsec follows [Semantic Versioning](https://semver.org/), with release tags `vX.Y.Z`:
+Version 1.0.0 establishes Revetsec's first public compatibility baseline. Revetsec follows [Semantic Versioning](https://semver.org/) from this version, with release tags `vX.Y.Z`:
 
 * **Major** (`2.0.0`): may remove or incompatibly change public API. Migration notes are provided in the CHANGELOG.
 * **Minor** (`1.1.0`): additive public API, and behavior changes documented under "Migration Notes" in the CHANGELOG.
@@ -14,7 +12,7 @@ The [security-tightening policy](#security-tightening-policy) below is the one d
 
 ## What counts as public API
 
-Public top-level types in the exported packages below, and their reachable public or protected members, are API. Public or protected member types are included recursively when every enclosing type is exported. Reachable public or protected members inherited from a non-exported Revetsec base are API too. A public declaration inside an internal or otherwise non-exported enclosing type does not by itself export that type. The package layout is still under review and may change before 1.0.0. Each package's API is frozen when its protocol area is ready for release.
+Public top-level types in the exported packages below, and their reachable public or protected members, are API. Public or protected member types are included recursively when every enclosing type is exported. Reachable public or protected members inherited from a non-exported Revetsec base are API too. A public declaration inside an internal or otherwise non-exported enclosing type does not by itself export that type. The exported package layout is part of the 1.0.0 public API.
 
 | Package | Planned contents |
 | --- | --- |
@@ -30,13 +28,13 @@ Public top-level types in the exported packages below, and their reachable publi
 | `com.revetsec.password` | Argon2id password hashing, explicit legacy verification and migration, bounded work and pepper rotation |
 | `com.revetsec.totp` | TOTP enrollment and verification, recovery codes, durable record/store contracts and recovery fencing |
 
-### Current declaration inventory (2026-11-06)
+### 1.0.0 declaration inventory (2026-11-13)
 
-The [complete current type list](docs/public-api-inventory.md) measures this uncommitted `1.0.0-SNAPSHOT` source using the same exported-type rules as `PublicApiContractTests`, cross-checked against compiled declarations. Count each public top-level declaration once and each accessible public or protected nested declaration once under its declaring type. Builders, enums and restricted result variants count as types; methods, constructors, fields, enum constants and compiler-generated helpers do not. No protected nested declarations occur in this snapshot. Adapter artifacts and internal packages are outside these totals.
+The [complete current type list](docs/public-api-inventory.md) measures the `1.0.0` release source using the same exported-type rules as `PublicApiContractTests`, cross-checked against compiled declarations. Count each public top-level declaration once and each accessible public or protected nested declaration once under its declaring type. Builders, enums and restricted result variants count as types; methods, constructors, fields, enum constants and compiler-generated helpers do not. No protected nested declarations occur in this release. Adapter artifacts and internal packages are outside these totals.
 
 | Package | Top-level | Nested | Total |
 | --- | ---: | ---: | ---: |
-| [`com.revetsec`](docs/public-api-inventory.md#comrevetsec) | 15 | 6 | 21 |
+| [`com.revetsec`](docs/public-api-inventory.md#comrevetsec) | 16 | 6 | 22 |
 | [`com.revetsec.jose`](docs/public-api-inventory.md#comrevetsecjose) | 26 | 13 | 39 |
 | [`com.revetsec.json`](docs/public-api-inventory.md#comrevetsecjson) | 7 | 1 | 8 |
 | [`com.revetsec.oauth`](docs/public-api-inventory.md#comrevetsecoauth) | 52 | 37 | 89 |
@@ -47,13 +45,13 @@ The [complete current type list](docs/public-api-inventory.md) measures this unc
 | [`com.revetsec.scim`](docs/public-api-inventory.md#comrevetsecscim) | 58 | 59 | 117 |
 | [`com.revetsec.totp`](docs/public-api-inventory.md#comrevetsectotp) | 34 | 67 | 101 |
 | [`com.revetsec.webauthn`](docs/public-api-inventory.md#comrevetsecwebauthn) | 26 | 49 | 75 |
-| **Total** | **340** | **362** | **702** |
+| **Total** | **341** | **362** | **703** |
 
-This is a dated type inventory, not an API freeze or release qualification. The current API-BIND candidate adds `BrowserBinding` and `OperationBinding` over the sealed 700-type Release25 component and removes no type. A `javap -protected -s` comparison finds 15 changed or added declaration blocks: the two new carriers and 13 existing declarations whose selected browser or operation correlation parameters/returns change from raw `String` to the appropriate carrier. Those existing declarations are `PendingAuthorization`, `PendingAuthorizationSource`, `OAuthAuthorizationServer`, `PendingOidcLogout`, `PendingOidcLogoutSource`, `PendingSamlAuthentication`, `PendingSamlAuthenticationSource`, `PendingSamlLogout`, `PendingSamlLogoutSource`, `RecoveryCodeUse`, `TotpAuthenticator`, `TotpVerification` and `WebAuthnRelyingParty`. Low-level store SPIs intentionally remain raw-string compatibility boundaries. The broad browser carrier rejects values above 65,536 Java UTF-16 code units, so sufficiently provisioned OAuth/OIDC pending stores that accepted larger well-formed values have a pre-1.0 compatibility loss; only deployments retaining an affected live correlation need drain or rotate it. No account, credential, reference-PostgreSQL schema, key or codec migration follows. The bounded classfile comparison does not flatten inherited members or establish generic source compatibility, defaults, behavior, effects or serialized/store compatibility; those remain part of the consolidated compatibility review. The earlier snapshots below are retained as history; use the current linked lists for present type names and counts. Refresh this inventory when exported declarations change.
+This dated inventory is the 1.0.0 source baseline. It does not by itself qualify a runtime, provider or deployment. The final pre-release API-BIND component added `BrowserBinding` and `OperationBinding` over the sealed 700-type Release25 component and removed no type. Its bounded `javap -protected -s` comparison found 15 changed or added declaration blocks: the two new carriers and 13 existing declarations whose selected browser or operation correlation parameters or returns changed from raw `String` to the appropriate carrier. The detailed transition remains recorded in the [complete inventory](docs/public-api-inventory.md). The earlier snapshots below are retained as history.
 
 ### Earlier public-type snapshot
 
-Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH, membership reduction and the optional evaluator are implemented, with local integration and security/mutation qualification recorded. The SCIM API freeze recorded on 2026-10-14 and the SAML RC-2 review predate later public-contract changes; those changes require re-review before 1.0.0.
+Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. At this historical checkpoint the SAML service-provider API remained pre-release; SCIM schema/resource/query/response primitives, ordered PATCH, membership reduction and the optional evaluator were implemented, with local integration and security/mutation qualification recorded. The SCIM API freeze recorded on 2026-10-14 and the SAML RC-2 review predated later public-contract changes; the 1.0.0 inventory and release review above supersede that checkpoint.
 
 The table below retains an earlier package snapshot and its historical counts. It predates the result-only migration, typed JWT signing and standalone JWKS publication and is not the current exported declaration inventory. In particular, current JOSE APIs also include `JwtClaimsSet`, `JwtSigningHeader`, `JwtType`, `PublishedJwk`, `JwksPublisher` and `JwksResponse`; see [signing](docs/supported-algorithms.md#bounded-signing-jwssigner) and [JWKS publication](docs/jwks-publication.md). The current measured inventory above supersedes these counts; the consolidated release review must remeasure the final candidate.
 
@@ -63,7 +61,7 @@ The table below retains an earlier package snapshot and its historical counts. I
 | `com.revetsec.json` | `JsonValue` (sealed), `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `JsonBoolean`, `JsonNull` | 7, plus 1 nested: `JsonObject.Builder` |
 | `com.revetsec.jose` | `JwtValidator`, `Jwt`, `JwtClaims`, `JwsAlgorithm`, `Jwk`, `Jwks`, `JwkSkipReason`, `JwksSource` (sealed), `StaticJwksSource`, `RemoteJwksSource`, `JoseObserver`, `JoseException` (abstract, sealed), `MalformedJoseInputException`, `UnsupportedJoseFeatureException`, `JwtValidationException`, `JwksUnavailableException`, `JwtValidationResult`, `JwsSigner`, `JwsSigningException` | 19, plus 6 nested: two builders, `JoseException.Reason`, `JwsSigningException.Reason` and two validation result variants |
 | `com.revetsec.oauth` | `OAuthClient`, `AuthorizationServerMetadata`, `ClientAuthentication`, `ClientAssertionAudience`, `ClientAssertionKeyProvider`, `ClientAssertionSigningKey`, `OAuthConfigurationException`, `ClientSecretBasicEncoding`, `AuthorizationRequestOptions`, `AuthorizationRedirect`, `PendingAuthorization`, `PendingAuthorizationSource`, `PendingAuthorizationStore`, `InMemoryPendingAuthorizationStore`, `AuthorizationResponse`, `TokenResponse`, `AccessToken`, `RefreshToken`, `TokenRequestOptions`, `TokenTypeHint`, `ClientCredentialsTokenSource`, `IssuerParameterPolicy`, `OAuthObserver`, `OAuthEndpoint`, `OAuthException`, six final OAuth exception leaves, `BearerToken`, `BearerError`, `BearerChallenge`, `ProtectedResourceMetadata`, `AccessTokenValidationException`, `BearerTokenResult`, `AuthorizationCompletionResult`, `AccessTokenValidator`, `JwtAccessTokenValidator`, `TokenIntrospectionClient`, `VerifiedAccessToken`, `AccessTokenCompatibilityMode`, `AccessTokenObserver`, `AccessTokenValidationResult` | 45, plus 23 nested: twelve builders, three enums and eight result variants |
-| `com.revetsec.oidc` | `OidcClient`, `OidcProviderMetadata`, `OidcAuthenticationOptions`, `IdToken`, `OidcAuthentication`, `OidcSessionReference`, `OidcRefreshResult`, `OidcUserInfo`, `OidcCompatibilityMode`, `OidcObserver`, `OidcIssuerPolicy`, `OidcException` (abstract, sealed), `OidcValidationException`, `OidcAuthenticationResult` | 14, plus 8 nested: three builders, `OidcValidationException.Reason` and four authentication result variants |
+| `com.revetsec.oidc` | `OidcClient`, `OidcProviderMetadata`, `OidcAuthenticationOptions`, `IdToken`, `OidcAuthentication`, `OidcSessionReference`, `OidcRefresh`, `OidcRefreshResult`, `OidcUserInfo`, `OidcCompatibilityMode`, `OidcObserver`, `OidcIssuerPolicy`, `OidcException` (abstract, sealed), `OidcValidationException`, `OidcAuthenticationResult` | 15, plus 11 nested: three builders, `OidcValidationException.Reason`, four authentication result variants and three refresh result variants |
 | `com.revetsec.saml` | `SamlServiceProvider`, `SamlIdentityProvider`, metadata and credential types, signed binding messages, authentication and logout results, subject/session types, replay and pending-state interfaces and defaults | 41 top-level types, plus nested builders and result variants; see [the SAML SP guide](docs/saml-sp.md) |
 | `com.revetsec.scim` | Schema-bound query/resource/response primitives, filter AST/policy/evaluator, ordered PATCH, membership reduction, configuration and fixed result/error types, including `ScimResourceWorkLimitException` | 58 top-level types, 117 including nested declarations; see [the SCIM server guide](docs/scim-server-primitives.md) |
 | `com.revetsec.oauth.server` | Not enumerated in this earlier snapshot; see the [current complete type list](docs/public-api-inventory.md#comrevetsecoauthserver) | Not measured in this snapshot |
@@ -71,14 +69,14 @@ The table below retains an earlier package snapshot and its historical counts. I
 
 ### Selected application-security packages
 
-The following packages are present in the current pre-release core source. They were added after the dated counts above; those counts must not be used as the final 1.0.0 declaration inventory. The selected implementations and their public contracts still require release review.
+The following packages are present in the 1.0.0 core source. They were added after the historical counts below and are included in the 1.0.0 declaration inventory above.
 
 | Package | Surface overview (not a complete type list) | Documentation |
 | --- | --- | --- |
 | `com.revetsec.password` | `PasswordHasher`, `Argon2idParameters`, `PasswordWorkGate`, `PasswordVerificationLimits`, result and rejection types, optional pepper source/key/snapshot types, and explicit legacy preparation/HMAC selectors | [Password hashing](docs/password-hashing.md), [source and verification](docs/password-vendored-source.md) |
 | `com.revetsec.totp` | `TotpAuthenticator`, enrollment/verification/status and recovery-code results, `TotpStore` and its record/read/commit types, `TotpRecoveryGate`, and the bounded volatile `InMemoryTotpStore` | [TOTP and recovery](docs/totp-recovery.md) |
 
-`com.revetsec.internal.password` and the TOTP implementation helpers under `com.revetsec.internal` remain internal implementation, subject to the exclusion below. Neither public package supplies an application account database, login sessions or an HTTP adapter API; the TOTP package includes a store SPI and bounded volatile in-memory store. The final release inventory, compatibility review and API freeze must cover these new public declarations.
+`com.revetsec.internal.password` and the TOTP implementation helpers under `com.revetsec.internal` remain internal implementation, subject to the exclusion below. Neither public package supplies an application account database, login sessions or an HTTP adapter API; the TOTP package includes a store SPI and bounded volatile in-memory store. The 1.0.0 inventory, compatibility review and public baseline cover these declarations.
 
 `OutboundUriPolicy` has its final shape: two presets, `defaultInstance()` and `publicAddressesOnlyInstance()`, and `permits(URI)`. The addresses and names each preset rejects are dated lists, and adding to them is a security tightening (see below). `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below). `JwsAlgorithm`, `JwsSigningException.Reason`, `JoseException.Reason`, `JwkSkipReason`, `AccessTokenCompatibilityMode`, `BearerError` and `AccessTokenValidationException.Reason` are not switch-stable: a later release may add constants, so a `switch` over one needs a default branch. Nor are the sealed `JwksSource`, `AccessTokenValidator` and operation result hierarchies: a later release may add permitted implementations or outcomes. Result switches need a rejecting default. Result payload accessors exist only on their appropriate variant; applications cannot construct outcomes. Operations with several expected outcomes expose one result entry point; the earlier Optional/throwing facades have been removed without deprecated aliases. Genuine optional properties remain Optional. Infrastructure and configuration failures retain their documented exception boundaries; see the [validation-outcome overview](README.md#validation-outcomes).
 
@@ -93,7 +91,7 @@ These are not API:
 
 A sealed type whose Javadoc designates it for exhaustive `switch` keeps its permitted subtypes within a major version. Other sealed types may gain subtypes in a minor release.
 
-The adapters (`revetsec-soklet`, `revetsec-servlet-jakarta` and `revetsec-servlet-javax`) are separate artifacts in their own repositories. Each starts at `1.0.0-SNAPSHOT`, releases 1.0.0 together with core, and then has its own version line. From 1.0.0, each adapter's README states the minimum core version it requires.
+The adapters (`revetsec-soklet`, `revetsec-servlet-jakarta` and `revetsec-servlet-javax`) are separate artifacts in their own repositories. Each starts at 1.0.0 and then has its own version line. Each adapter's README states the minimum core version it requires.
 
 Custom `PendingSamlAuthenticationStore` implementations used for logout must implement
 `consumeIfMatches`, validating and atomically removing only the same approved live sealed
@@ -103,13 +101,13 @@ login's unconditional consume operation remains available. See [the SAML SP guid
 
 ## How the policy is enforced
 
-Before 1.0.0, contract tests run in every build:
+Contract tests run in every build:
 
 * `PublicApiContractTests` checks the shape of the public API: no public records, JSpecify nullness annotations on every public element, and exactly one thread-safety annotation on every exported type.
 * `PackageDependencyTests` checks the allowed dependencies between packages, and that no `internal` type appears in a public or protected signature.
 * `SourcePolicyTests` bans a list of source constructs, including `sun.*` imports and `setAccessible`.
 
-From 1.0.0, the [japicmp](https://siom79.github.io/japicmp/) Maven plugin (the `api-diff` profile) compares each build with the previous release. It fails the build on binary- or source-incompatible changes and checks the version number against the nature of the change. Until 1.0.0 the profile is a stub, because there is no baseline.
+For releases after 1.0.0, the [japicmp](https://siom79.github.io/japicmp/) Maven plugin (the `api-diff` profile) compares the build with the previous release. It fails the build on binary- or source-incompatible changes and checks the version number against the nature of the change. The profile is skipped for 1.0.0 itself because no earlier public baseline exists.
 
 ## Security-tightening policy
 

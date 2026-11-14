@@ -18,7 +18,7 @@ The node preset also supports `OIDC_RESPONSE_MODE=form_post`. Configure the [HTT
 ```sh
 java -Djavax.net.ssl.trustStore=/private/tls/java-trust.p12 \
   -Djavax.net.ssl.trustStorePassword=changeit \
-  -jar examples/barebones-oidc/target/revetsec-barebones-oidc-1.0.0-SNAPSHOT.jar
+  -jar examples/barebones-oidc/target/revetsec-barebones-oidc-1.0.0.jar
 ```
 
 The callback is exactly `https://localhost:8445/callback`. A public client omits `OIDC_CLIENT_SECRET`; its registration must use `token_endpoint_auth_method=none`.

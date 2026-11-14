@@ -92,8 +92,8 @@ final class WebAuthnAuthenticatorData {
         int flags = reader.unsignedByte();
         if ((flags & (USER_PRESENT | USER_VERIFIED)) != (USER_PRESENT | USER_VERIFIED)
             || (flags & RESERVED) != 0
-            || !registration && (flags & EXTENSION_DATA) != 0
-            || (flags & BACKUP_STATE) != 0 && (flags & BACKUP_ELIGIBLE) == 0
+            || (!registration && (flags & EXTENSION_DATA) != 0)
+            || ((flags & BACKUP_STATE) != 0 && (flags & BACKUP_ELIGIBLE) == 0)
             || ((flags & ATTESTED_CREDENTIAL_DATA) != 0) != registration) throw new WebAuthnCborException();
         long counter = reader.unsignedInt();
         return new Header(reader, counter, (flags & BACKUP_ELIGIBLE) != 0, (flags & BACKUP_STATE) != 0,

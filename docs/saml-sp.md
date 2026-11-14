@@ -8,9 +8,9 @@ application explicitly calls `acknowledgeGlobalSecureValidationDisabled(true)`. 
 is reported to [`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html) at build time. Revetsec sets secure validation on each
 verification context and enforces its signature allowlists even when the JVM policy differs.
 The application owns its users, account links, browser sessions, pending-state transport,
-and the decision to end a session. SAML support is pre-release; the scripted IdP and a
-pinned Keycloak container exercise browser flows. [RC-2 SAML readiness](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14)
-closed on 2026-10-14; other 1.0.0 release checkpoints remain open.
+and the decision to end a session. SAML support is part of Revetsec 1.0.0; the scripted IdP and a
+pinned Keycloak container exercise bounded browser flows. [RC-2 SAML readiness](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14)
+closed on 2026-10-14 as historical supporting evidence, not an independent audit or universal provider qualification.
 
 Configure [`SamlServiceProvider.Builder`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProvider.Builder.html)`.observer(`[`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html)`)` to receive one start and
 one terminal event for each SP operation. Events contain fixed operation and
@@ -488,6 +488,6 @@ exercise protocol partners.
 
 Structural SAML `xsi:type` declarations are accepted only when the type uses the consumed element's own nonempty prefix, its expanded namespace is the expected type namespace, and its local type name is exact. This keeps type interpretation tied to a visibly used element-name binding when that element is covered by the required signature. Signature coverage, structural validation and all transaction/identity/replay checks must each still pass.
 
-A prefix used only inside an attribute value can be omitted by exclusive canonicalization; see the [W3C limitations](https://www.w3.org/TR/xml-exc-c14n/#sec-Limitations). Merely declaring that prefix locally does not authenticate the binding. Revetsec deliberately refuses such aliases and redundant XML Schema type annotations on SAML text fields, including `xs:anyURI`, even if a particular signer included extra namespace context. Have the sender omit redundant annotations or use the supported SAML element prefix before signing. Never strip or rewrite a received signed document to make it fit. This narrows the pre-release accepted input profile; qualify actual IdP output after adoption.
+A prefix used only inside an attribute value can be omitted by exclusive canonicalization; see the [W3C limitations](https://www.w3.org/TR/xml-exc-c14n/#sec-Limitations). Merely declaring that prefix locally does not authenticate the binding. Revetsec deliberately refuses such aliases and redundant XML Schema type annotations on SAML text fields, including `xs:anyURI`, even if a particular signer included extra namespace context. Have the sender omit redundant annotations or use the supported SAML element prefix before signing. Never strip or rewrite a received signed document to make it fit. This is the accepted 1.0.0 input profile; qualify actual IdP output after adoption.
 
 The earlier AttributeValue rule is unchanged: leaf text is exposed without interpreting mutable type-prefix bindings, while literal `xsi:nil` and element structure still apply. It creates no typed Boolean/number or whole-schema-validation claim. Unprefixed or malformed type values, wrong type-local names and nilled structural data retain refusal. Logout request/response/issuer/session-index callers use the same declaration rule; full browser/provider and final candidate qualification remain separate.

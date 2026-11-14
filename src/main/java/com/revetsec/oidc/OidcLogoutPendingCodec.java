@@ -56,7 +56,7 @@ final class OidcLogoutPendingCodec {
 	static @NonNull Decoded decode(@NonNull String encoded) {
 		JsonObject object = OidcLogoutSupport.object(encoded, OidcLogoutSupport.PENDING_LIMIT); OidcLogoutSupport.version(object);
 		Set<String> keys = object.getMembers().keySet();
-		if (!(keys.equals(REQUIRED) || keys.size() == REQUIRED.size() + 1 && keys.containsAll(REQUIRED) && keys.contains("binding_digest"))
+		if (!(keys.equals(REQUIRED) || (keys.size() == REQUIRED.size() + 1 && keys.containsAll(REQUIRED) && keys.contains("binding_digest")))
 				|| !OidcLogoutSupport.field(object, "purpose", 32).equals("oidc-logout")) throw OidcLogoutSupport.invalid();
 		String issuer = OidcLogoutSupport.field(object, "issuer", OidcLogoutSupport.FIELD_LIMIT), client = OidcLogoutSupport.field(object, "client_id", OidcLogoutSupport.FIELD_LIMIT);
 		URI callback; Instant created, expires;

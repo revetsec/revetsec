@@ -218,11 +218,11 @@ public final class ScimResourceType {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimResourceType value
+        return this == other || (other instanceof ScimResourceType value
                 && name.equals(value.name) && Objects.equals(id, value.id)
                 && Objects.equals(description, value.description) && endpoint.equals(value.endpoint)
                 && schema.equals(value.schema) && schemaExtensions.equals(value.schemaExtensions)
-                && patchResponseNoContent == value.patchResponseNoContent;
+                && patchResponseNoContent == value.patchResponseNoContent);
     }
 
     /**

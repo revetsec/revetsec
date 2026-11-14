@@ -253,7 +253,7 @@ final class ScimFilterParser {
             if (inAuthority && index >= authorityStart && (character == '/' || character == '?' || character == '#'))
                 inAuthority = false;
             if (character == '[' && inAuthority
-                    && (index == authorityStart || index > authorityStart && this.expression.charAt(index - 1) == '@')) {
+                    && (index == authorityStart || (index > authorityStart && this.expression.charAt(index - 1) == '@'))) {
                 ++index;
                 while (index < this.expression.length() && this.expression.charAt(index) != ']'
                         && !whitespace(this.expression.charAt(index))) ++index;
@@ -261,7 +261,7 @@ final class ScimFilterParser {
                 return index;
             }
             if (whitespace(character) || character == '[' || character == ']'
-                    || !qualified && (character == '(' || character == ')')) break;
+                    || (!qualified && (character == '(' || character == ')'))) break;
             ++index;
         }
         if (qualified) {
@@ -370,7 +370,7 @@ final class ScimFilterParser {
             while (index < end && digit(this.expression.charAt(index))) {
                 int nextDigit = this.expression.charAt(index) - '0';
                 if (magnitude > this.maximumExponent / 10
-                        || magnitude == this.maximumExponent / 10 && nextDigit > this.maximumExponent % 10) {
+                        || (magnitude == this.maximumExponent / 10 && nextDigit > this.maximumExponent % 10)) {
                     reject(index); return null;
                 }
                 magnitude = magnitude * 10 + nextDigit;
@@ -430,7 +430,7 @@ final class ScimFilterParser {
         return value == ' ' || value == '\t' || value == '\r' || value == '\n' || value == '\f';
     }
 
-    private static boolean asciiLetter(char value) { return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'; }
+    private static boolean asciiLetter(char value) { return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z'); }
     private static boolean digit(char value) { return value >= '0' && value <= '9'; }
     private static boolean nameCharacter(char value) { return asciiLetter(value) || digit(value) || value == '_' || value == '-'; }
     private static int hex(char value) {

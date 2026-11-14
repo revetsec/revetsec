@@ -45,7 +45,7 @@ final class WebAuthnEcdsaDer {
     private static boolean copyPositiveMinimalInteger(byte @NonNull [] der, int start, int length,
                                                        byte @NonNull [] fixed, int destination) {
         int first = der[start] & 0xff;
-        if ((first & 0x80) != 0 || length > 1 && first == 0 && (der[start + 1] & 0x80) == 0)
+        if ((first & 0x80) != 0 || (length > 1 && first == 0 && (der[start + 1] & 0x80) == 0))
             return false;
         int skip = length == 33 ? 1 : 0;
         if (length == 33 && first != 0) return false;

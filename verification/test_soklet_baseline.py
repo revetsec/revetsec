@@ -19,24 +19,20 @@ import hashlib
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
 import re
-import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
 import xml.etree.ElementTree as ET
-import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = json.loads((ROOT / "examples/pins.json").read_text())
 CONFIG_PATHS = (
     ".github/workflows/ci.yml", ".github/workflows/scim-interop.yml", "pom.xml",
-    ".github/scripts/download-pinned-corretto21-linux-x64.sh",
     "examples/barebones-oidc/pom.xml", "examples/playground/pom.xml",
     "examples/self-issued/pom.xml", "examples/rsa-oidc/pom.xml",
     "examples/passkeys-soklet/pom.xml", "examples/totp-soklet/pom.xml",
@@ -78,19 +74,15 @@ def check_configuration(files, pins):
     """Check relationships between independently maintained build entry points."""
     core_release = 17
     minimum = pins["framework"]["minimum_java"]
-    compiler = pins["framework"]["build_java_version"]
-    if minimum <= core_release or int(compiler.split(".")[0]) != minimum:
-        raise AssertionError("Framework compiler and minimum Java must agree above core Java 17")
-    archive = "amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
-    downloader = ".github/scripts/download-pinned-corretto21-linux-x64.sh"
-    source = files[downloader]
-    for required in (
-            "archive=" + archive,
-            "sha256=5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394",
-            "url=https://corretto.aws/downloads/resources/21.0.11.10.1/$archive",
-            "sha256sum --check --strict"):
-        if required not in source:
-            raise AssertionError("Pinned Corretto download guard drift: " + required)
+    if minimum <= core_release:
+        raise AssertionError("Framework minimum Java must remain above core Java 17")
+    if pins["framework"]["repository"] != "https://repo.maven.apache.org/maven2":
+        raise AssertionError("Framework repository must be canonical Maven Central")
+    if pins["framework"]["coordinates"] != "com.soklet:soklet:4.0.0":
+        raise AssertionError("Framework coordinates drift")
+    for name in ("jar_sha256", "pom_sha256"):
+        if re.fullmatch(r"[0-9a-f]{64}", pins["framework"].get(name, "")) is None:
+            raise AssertionError("Framework published checksum is invalid: " + name)
     for path, expected in (("pom.xml", core_release), ("examples/rsa-oidc/pom.xml", core_release),
                            *(("examples/" + name + "/pom.xml", minimum)
                              for name in ("barebones-oidc", "playground", "self-issued", "passkeys-soklet", "totp-soklet"))):
@@ -111,38 +103,21 @@ def check_configuration(files, pins):
 
     for label, workflow in (("examples", examples),
                             ("SCIM", job(files[".github/workflows/scim-interop.yml"], "qualify"))):
-        for repository, revision in (("soklet/soklet", pins["framework"]["revision"]),
-                                     ("revetsec/revetsec-soklet", pins["adapter"]["revision"])):
-            found = re.search(r"repository: " + re.escape(repository) + r"\n\s+ref: ([^\s]+)", workflow)
-            if found is None or found.group(1) != revision:
-                raise AssertionError(label + " checkout pin drift: " + repository)
-        builds = list(re.finditer(r"^      - name:.*?(?=^      - name:|\Z)", workflow, re.M | re.S))
-        framework_build = next((step for step in builds if re.search(
-            r"working-directory: [^\n]*/framework\n", step.group())), None)
-        if framework_build is None or "sha256sum --check" not in framework_build.group():
-            raise AssertionError(label + " missing framework checksum verification")
-        checksums = re.findall(r'([0-9a-f]{64})  target/soklet-[^\s\"]+\.jar', framework_build.group())
-        if checksums != [pins["framework"]["jar_sha256"]]:
-            raise AssertionError(label + " framework checksum drift")
-        setups = [step for step in builds[:builds.index(framework_build)]
-                  if "actions/setup-java@" in step.group()]
-        if not setups or not re.search(r"java-version: ['\"]" + re.escape(compiler) + r"['\"]",
-                                       setups[-1].group()):
-            raise AssertionError(label + " framework must build under its exact pinned compiler")
-        setup = setups[-1].group()
-        if ("distribution: jdkfile" not in setup or
-                "jdk-file: ${{ runner.temp }}/" + archive not in setup):
-            raise AssertionError(label + " framework compiler must use the verified local archive")
-        setup_index = builds.index(setups[-1])
-        if setup_index == 0 or ("bash " + downloader not in builds[setup_index - 1].group() or
-                                '"$RUNNER_TEMP/' + archive + '"' not in builds[setup_index - 1].group()):
-            raise AssertionError(label + " framework compiler archive must be downloaded immediately before setup")
-        if "working-directory:" not in framework_build.group() or "framework" not in framework_build.group():
-            raise AssertionError(label + " framework checksum must accompany the framework build")
+        found = re.search(r"repository: revetsec/revetsec-soklet\n\s+ref: ([^\s]+)", workflow)
+        if found is None or found.group(1) != pins["adapter"]["revision"]:
+            raise AssertionError(label + " checkout pin drift: revetsec/revetsec-soklet")
+        for forbidden in ("repository: soklet/soklet\n", ".scim-inputs/framework",
+                          ".example-inputs/framework", "-f soklet/pom.xml"):
+            if forbidden in workflow:
+                raise AssertionError(label + " retains a Soklet source-commit pin")
+        for name in ("jar_sha256", "pom_sha256"):
+            if pins["framework"][name] not in workflow:
+                raise AssertionError(label + " framework checksum drift: " + name)
+        if "https://repo.maven.apache.org/maven2" not in workflow:
+            raise AssertionError(label + " framework repository drift")
         if label == "examples":
-            later = workflow[framework_build.end():]
-            if "java-version: ${{ matrix.java }}" not in later or "--framework-jar" not in later:
-                raise AssertionError("Examples must select their runtime JDK after the pinned framework build")
+            if "--framework-jar" not in workflow or "--framework-pom" not in workflow:
+                raise AssertionError("Examples must supply both published framework artifacts")
 
     audit = files["verification/examples/NullabilityAudit.java"]
     if not re.search(r'arguments\.length\s*==\s*4\s*\?\s*arguments\[3\]\s*:\s*"17"', audit):
@@ -158,38 +133,15 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
     def test_current_workflows_and_poms_form_one_coherent_baseline(self):
         check_configuration(self.files, PINS)
 
-    def test_corrupt_pinned_jdk_download_is_rejected_and_removed(self):
-        downloader = ROOT / ".github/scripts/download-pinned-corretto21-linux-x64.sh"
-        self.assertEqual(0, subprocess.run(["bash", "-n", str(downloader)], check=False).returncode)
-        with tempfile.TemporaryDirectory(prefix="revetsec-corretto-pin-test-") as temporary:
-            root = Path(temporary)
-            archive = root / "amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
-            fake_bin = root / "bin"
-            fake_bin.mkdir()
-            curl = fake_bin / "curl"
-            curl.write_text("#!/usr/bin/env bash\nprintf 'corrupt archive' > \"${@: -1}\"\n")
-            curl.chmod(0o755)
-            environment = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"])
-            result = subprocess.run(["bash", str(downloader), str(archive)], check=False,
-                                    capture_output=True, text=True, env=environment)
-            self.assertNotEqual(0, result.returncode)
-            self.assertFalse(archive.exists(), "A failed checksum must not leave an installable archive")
-
-    def test_guard_detects_independent_pin_checksum_and_compiler_drift(self):
+    def test_guard_detects_independent_pin_and_central_artifact_drift(self):
         replacements = (
             (".github/workflows/ci.yml", PINS["adapter"]["revision"], "a" * 40, "checkout pin"),
-            (".github/workflows/scim-interop.yml", PINS["framework"]["revision"], "b" * 40, "checkout pin"),
             (".github/workflows/ci.yml", PINS["framework"]["jar_sha256"], "c" * 64, "checksum"),
-            (".github/workflows/scim-interop.yml", PINS["framework"]["jar_sha256"], "d" * 64, "checksum"),
-            (".github/workflows/ci.yml", "java-version: '" + PINS["framework"]["build_java_version"] + "'",
-             "java-version: '27'", "pinned compiler"),
-            (".github/workflows/ci.yml", "distribution: jdkfile", "distribution: corretto",
-             "verified local archive"),
-            (".github/workflows/scim-interop.yml", "jdk-file: ${{ runner.temp }}/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz",
-             "jdk-file: ${{ runner.temp }}/different.tar.gz", "verified local archive"),
-            (".github/scripts/download-pinned-corretto21-linux-x64.sh",
-             "5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394",
-             "0" * 64, "download guard"),
+            (".github/workflows/ci.yml", PINS["framework"]["pom_sha256"], "d" * 64, "checksum"),
+            (".github/workflows/scim-interop.yml", PINS["framework"]["jar_sha256"], "e" * 64, "checksum"),
+            (".github/workflows/scim-interop.yml", PINS["framework"]["pom_sha256"], "f" * 64, "checksum"),
+            (".github/workflows/scim-interop.yml", "https://repo.maven.apache.org/maven2",
+             "https://example.invalid/maven2", "repository"),
         )
         for path, before, after, reason in replacements:
             with self.subTest(path=path, reason=reason):
@@ -215,15 +167,10 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError, reason):
                     check_configuration(altered, PINS)
 
-    def test_guard_rejects_framework_build_before_compiler_setup(self):
+    def test_guard_rejects_reintroduced_framework_source_checkout(self):
         path = ".github/workflows/scim-interop.yml"
-        text = self.files[path]
-        setup = re.search(r"^      - name: Set up Corretto.*?(?=^      - name:)", text, re.M | re.S).group()
-        build = re.search(r"^      - name: Build and verify pinned framework.*?(?=^      - name:)",
-                          text, re.M | re.S).group()
-        altered = {**self.files, path: text.replace(setup + build, build + setup)}
-        self.assertNotEqual(altered[path], text)
-        with self.assertRaisesRegex(AssertionError, "pinned compiler"):
+        altered = {**self.files, path: self.files[path] + "\nrepository: soklet/soklet\n"}
+        with self.assertRaisesRegex(AssertionError, "source-commit pin"):
             check_configuration(altered, PINS)
 
 
@@ -247,11 +194,16 @@ class SokletBaselineRunnerTests(unittest.TestCase):
         for name in ("core", "framework", "adapter", "pyranid", "driver", "jspecify", "jsr305"):
             self.jars[name] = self.work / (name + ".jar")
             self.jars[name].write_bytes(name.encode())
-        self.framework_pin = {**PINS["framework"], "jar_sha256": hashlib.sha256(
-            self.jars["framework"].read_bytes()).hexdigest()}
+        self.framework_pom = self.work / "framework.pom"
+        self.framework_pom.write_bytes(b"published framework POM")
+        self.framework_pin = {
+            **PINS["framework"],
+            "jar_sha256": hashlib.sha256(self.jars["framework"].read_bytes()).hexdigest(),
+            "pom_sha256": hashlib.sha256(self.framework_pom.read_bytes()).hexdigest(),
+        }
         self.maven = self.work / "mvn"
         self.maven.touch()
-        for name in ("core-source", "adapter-source", "framework-source"):
+        for name in ("core-source", "adapter-source"):
             (self.work / name).mkdir()
 
     def postgres_arguments(self):
@@ -260,12 +212,12 @@ class SokletBaselineRunnerTests(unittest.TestCase):
             result.extend(("--" + name + "-jar", str(self.jars[name])))
         return result
 
-    def examples_arguments(self, source=False):
+    def examples_arguments(self):
         return ["build.py", "--work", str(self.work / "output"), "--maven", str(self.maven),
                 "--java-home", str(self.java), "--core-source", str(self.work / "core-source"),
                 "--adapter-source", str(self.work / "adapter-source"),
-                *( ["--framework-source", str(self.work / "framework-source")] if source else
-                   ["--framework-jar", str(self.jars["framework"])])]
+                "--framework-jar", str(self.jars["framework"]),
+                "--framework-pom", str(self.framework_pom)]
 
     def test_all_runners_read_the_canonical_framework_pin(self):
         self.assertEqual(self.examples.PINS, PINS)
@@ -309,26 +261,16 @@ class SokletBaselineRunnerTests(unittest.TestCase):
             run.assert_not_called()
         self.assertFalse((self.work / "output").exists())
 
-    def test_framework_source_requires_exact_compiler_but_jar_mode_allows_newer_jdk(self):
-        class ReachedSourceCheck(Exception):
-            pass
-
-        for source, compiler, accepted in ((True, PINS["framework"]["build_java_version"], True),
-                                            (True, "27", False), (False, "27", True)):
-            with self.subTest(source=source, compiler=compiler):
-                output = self.work / "output"
-                def check_output(command, **unused):
-                    if command[-1] == "-version":
-                        return "javac " + compiler
-                    raise ReachedSourceCheck()
-                with mock.patch.object(sys, "argv", self.examples_arguments(source)), mock.patch.object(
-                        self.examples.subprocess, "check_output", side_effect=check_output), \
-                        contextlib.redirect_stderr(io.StringIO()):
-                    with self.assertRaises(ReachedSourceCheck if accepted else SystemExit):
-                        self.examples.main()
-                self.assertEqual(output.exists(), accepted)
-                if output.exists():
-                    output.rmdir()
+    def test_examples_require_both_published_framework_artifacts(self):
+        for omitted in ("--framework-jar", "--framework-pom"):
+            arguments = self.examples_arguments()
+            index = arguments.index(omitted)
+            del arguments[index:index + 2]
+            with self.subTest(omitted=omitted), mock.patch.object(sys, "argv", arguments), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    self.examples.main()
+            self.assertFalse((self.work / "output").exists())
 
     def test_wrong_framework_jar_never_reaches_adapter_or_example_build(self):
         calls = []
@@ -346,6 +288,27 @@ class SokletBaselineRunnerTests(unittest.TestCase):
                 self.examples.main()
         maven_calls = [command for command in calls if command[0] == str(self.maven)]
         self.assertEqual(len(maven_calls), 1)  # Only core installation precedes JAR admission.
+        self.assertFalse((self.work / "output/examples").exists())
+
+    def test_wrong_framework_pom_never_reaches_adapter_or_example_build(self):
+        calls = []
+        def check_output(command, **unused):
+            if command[-1] == "-version":
+                return "javac 27"
+            return "" if "ls-files" in command else PINS["core"]["revision"]
+        def run(command, **unused):
+            calls.append(command)
+            return SimpleNamespace(returncode=0)
+        framework = {**PINS["framework"], "jar_sha256": hashlib.sha256(
+            self.jars["framework"].read_bytes()).hexdigest()}
+        with mock.patch.object(sys, "argv", self.examples_arguments()), mock.patch.object(
+                self.examples.subprocess, "check_output", side_effect=check_output), mock.patch.object(
+                self.examples.subprocess, "run", side_effect=run), mock.patch.object(
+                self.examples, "PINS", {**PINS, "framework": framework}):
+            with self.assertRaisesRegex(RuntimeError, "Framework POM checksum"):
+                self.examples.main()
+        maven_calls = [command for command in calls if command[0] == str(self.maven)]
+        self.assertEqual(len(maven_calls), 1)
         self.assertFalse((self.work / "output/examples").exists())
 
 

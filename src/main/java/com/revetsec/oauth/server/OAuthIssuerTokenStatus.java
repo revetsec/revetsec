@@ -196,7 +196,7 @@ final class OAuthIssuerTokenStatus {
   OAuthServerClientAdmission.remaining(deadline);
   JsonObject claims = jwt.getClaims().toJsonObject();
   if (!claims.getMembers().keySet().equals(CLAIMS) || jwt.getKeyId().isEmpty()
-    || claimString(claims, "aud").isEmpty() || resource != null && !resource.equals(claimString(claims, "aud").orElse(null))) throw invalid();
+    || claimString(claims, "aud").isEmpty() || (resource != null && !resource.equals(claimString(claims, "aud").orElse(null)))) throw invalid();
   String jti = claimString(claims, "jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
   try { OAuthStoreFormat.nonce(jti); } catch (IllegalArgumentException rejection) { throw invalid(); }
   return claims;

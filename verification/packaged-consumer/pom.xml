@@ -32,7 +32,7 @@
 
 	<properties>
 		<!-- The core version under test. verify-packaged-consumer.py passes the version from the core pom. -->
-		<revetsec.version>1.0.0-SNAPSHOT</revetsec.version>
+		<revetsec.version>1.0.0</revetsec.version>
 		<maven.compiler.release>17</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.build.outputTimestamp>2026-09-01T00:00:00Z</project.build.outputTimestamp>

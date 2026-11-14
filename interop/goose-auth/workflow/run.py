@@ -3,7 +3,7 @@
 import argparse,hashlib,json,subprocess,tempfile,uuid
 from pathlib import Path
 import xml.etree.ElementTree as ET
-NAMES={'revetsec-soklet-1.0.0-SNAPSHOT.jar', 'self-issued-1.0.0-SNAPSHOT.jar', 'revetsec-1.0.0-SNAPSHOT.jar', 'soklet-4.0.0.jar'}
+NAMES={'revetsec-soklet-1.0.0.jar', 'self-issued-1.0.0.jar', 'revetsec-1.0.0.jar', 'soklet-4.0.0.jar'}
 REQUIRED_CHILDREN={'after-expiry', 'edge', 'initial', 'wire', 'browser', 'application'}
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()

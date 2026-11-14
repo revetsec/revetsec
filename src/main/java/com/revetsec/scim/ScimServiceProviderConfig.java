@@ -148,12 +148,12 @@ public final class ScimServiceProviderConfig {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimServiceProviderConfig value
+        return this == other || (other instanceof ScimServiceProviderConfig value
                 && patchSupported == value.patchSupported && filterSupported == value.filterSupported
                 && sortSupported == value.sortSupported && changePasswordSupported == value.changePasswordSupported
                 && etagSupported == value.etagSupported && filterMaximumResults == value.filterMaximumResults
                 && pagination.equals(value.pagination) && authenticationSchemes.equals(value.authenticationSchemes)
-                && Objects.equals(documentationUri, value.documentationUri);
+                && Objects.equals(documentationUri, value.documentationUri));
     }
 
     /**

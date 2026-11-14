@@ -186,7 +186,7 @@ public final class ClientAuthentication {
 		 * @since 1.0.0
 		 */
 		public @NonNull PrivateKeyJwtBuilder assertionLifetime(@Nullable Duration value) {
-			if (value != null && value.getNano() != 0) throw new IllegalArgumentException("The assertion lifetime must contain exact whole seconds.");
+			if (value != null && value.toNanosPart() != 0) throw new IllegalArgumentException("The assertion lifetime must contain exact whole seconds.");
 			this.lifetime = value == null ? Limits.CLIENT_ASSERTION_LIFETIME.getDefaultDuration() : Limits.CLIENT_ASSERTION_LIFETIME.require(value);
 			return this;
 		}

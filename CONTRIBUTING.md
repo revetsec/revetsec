@@ -4,7 +4,7 @@
 
 Pull requests and bug reports are welcomed. For enhancement pull requests, please ask first to save time! It's possible the proposed enhancement is outside the scope or design goals of the project.
 
-Revetsec is pre-release and its public API is still being designed, so please open an issue before starting any change that touches public API.
+Public API and behavior are governed by the [compatibility policy](COMPATIBILITY.md). Please open an issue before starting a public-API change so its versioning and migration effects can be reviewed first.
 
 Report suspected security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in an issue or pull request.
 
@@ -22,7 +22,7 @@ $ export PATH="$JAVA_HOME/bin:$PATH"
 $ mvn -B -ntp -Dmaven.javadoc.skip=true verify
 ```
 
-This compiles, runs every test (including the contract tests) and packages the JAR. Use `install` instead of `verify` to put `1.0.0-SNAPSHOT` into your local Maven repository, for example to build an adapter repository against it.
+This compiles, runs every test (including the contract tests) and packages the JAR. Use `install` instead of `verify` to put `1.0.0` into your local Maven repository, for example to build an adapter repository against it.
 
 `-Dmaven.javadoc.skip=true` skips the Javadoc JAR, which the build otherwise generates with a separate JDK 26, the version the pom's offline Java API links are for. CI checks the Javadoc in its own job. To run that check locally, point `REVETSEC_JAVADOC_HOME` at a JDK 26 and leave the flag off:
 
@@ -118,3 +118,5 @@ The container runs as uid 65534, so the output directory must be writable by any
 #### Publishing
 
 Publishing is a project-owner operation, not the last step of an ordinary contributor build. Do not run `mvn deploy`. Releases are signed and published to Maven Central by the project owner. Snapshot builds are not published.
+
+The owner-only [release runbook](RELEASING.md) documents the guarded local-bundle, verification and manual Central Portal process.

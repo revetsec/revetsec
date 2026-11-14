@@ -52,7 +52,7 @@ final class SamlNamespaceCoverageTests {
         var tests=new ArrayList<DynamicTest>();for(Shape shape:shapes())for(String mode:List.of("absent","visible","unused-alias","wrong-type","nil"))
             tests.add(DynamicTest.dynamicTest(shape.element()+"/"+shape.type()+"/"+mode,()->{
                 String attributes=switch(mode){case "absent"->"";case "visible"->"xsi:type='n:"+shape.type()+"'";case "unused-alias"->"xsi:type='t:"+shape.type()+"'";case "wrong-type"->"xsi:type='n:DifferentType'";case "nil"->"xsi:nil='true'";default->throw new AssertionError();};
-                boolean expected=mode.equals("absent") || mode.equals("visible")&&shape.elementNs().equals(shape.typeNs());
+                boolean expected=mode.equals("absent") || (mode.equals("visible")&&shape.elementNs().equals(shape.typeNs()));
                 assertEquals(expected,SamlResponseSemantics.scalarDeclarationAllowed(element(shape,attributes),shape.typeNs(),shape.type()));
             }));return tests;
     }

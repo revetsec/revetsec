@@ -62,8 +62,8 @@ final class OidcPerFlowAssuranceTests {
     var client=OidcRefreshTests.builder(server).requiredAcrValues(value.defaults()).build();var login=login(server,client,value.policy(),value.loginAcr());var reference=login.authentication().getSessionReference();
     if(value.restore()){var sealer=StateSealer.withActiveKey(TestSealers.fixedKey("stored-flow")).clock(CLOCK).build();reference=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class,OidcSessionReference.fromSealedFormResult(reference.toSealedForm(sealer,"stored-flow",Duration.ofHours(1)),sealer,"stored-flow")).getReference();}
     if(value.replaceClient())client=OidcRefreshTests.builder(server).requiredAcrValues(Set.of()).build();respond(server,token(value.id()?claims(server,null,value.refreshAcr()):null));var outcome=client.refreshResult(login.authentication().getTokens().getRefreshToken().orElseThrow(),reference);
-    if(value.accepted()){var refreshed=assertInstanceOf(OidcRefreshOutcome.Succeeded.class,outcome).getRefreshResult();assertSame(reference,refreshed.getSessionReference());assertEquals(value.id(),refreshed.getIdToken().isPresent());}
-    else assertEquals(OidcValidationException.Reason.INSUFFICIENT_ACR,assertInstanceOf(OidcRefreshOutcome.Rejected.class,outcome).getReason());
+    if(value.accepted()){var refreshed=assertInstanceOf(OidcRefreshResult.Succeeded.class,outcome).getRefresh();assertSame(reference,refreshed.getSessionReference());assertEquals(value.id(),refreshed.getIdToken().isPresent());}
+    else assertEquals(OidcValidationException.Reason.INSUFFICIENT_ACR,assertInstanceOf(OidcRefreshResult.Rejected.class,outcome).getReason());
     assertEquals(2,server.getHitCount("/token"));assertEquals(0,server.getHitCount("/jwks"));assertFalse(outcome.toString().contains("TEST-ONLY"));
    }
   }));return tests;

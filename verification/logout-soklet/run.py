@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def inputs(args):
-    root=args.examples_root.resolve();common=root/'rp-initiated-logout/target/revetsec-rp-initiated-logout-1.0.0-SNAPSHOT.jar';fixture=root/'rp-initiated-logout/target/revetsec-rp-initiated-logout-1.0.0-SNAPSHOT-tests.jar';carrier=root/'rp-initiated-logout-soklet/target/rp-initiated-logout-soklet-1.0.0-SNAPSHOT.jar';core=common.parent/'lib/revetsec-1.0.0-SNAPSHOT.jar';framework=carrier.parent/'lib/soklet-4.0.0.jar';classes=carrier.parent/'test-classes';java=args.java_home.resolve()/'bin/java';selected={'core':core,'common':common,'fixture':fixture,'carrier':carrier,'framework':framework}
+    root=args.examples_root.resolve();common=root/'rp-initiated-logout/target/revetsec-rp-initiated-logout-1.0.0.jar';fixture=root/'rp-initiated-logout/target/revetsec-rp-initiated-logout-1.0.0-tests.jar';carrier=root/'rp-initiated-logout-soklet/target/rp-initiated-logout-soklet-1.0.0.jar';core=common.parent/'lib/revetsec-1.0.0.jar';framework=carrier.parent/'lib/soklet-4.0.0.jar';classes=carrier.parent/'test-classes';java=args.java_home.resolve()/'bin/java';selected={'core':core,'common':common,'fixture':fixture,'carrier':carrier,'framework':framework}
     if not java.is_file()or not(classes/'example/logout/soklet/SokletLogoutSocketFixture.class').is_file():raise ValueError('Built selected input missing')
     for name,path in selected.items():
         if not path.is_file()or path.stat().st_size>16_777_216 or digest(path)!=getattr(args,name+'_sha256'):raise ValueError('Selected artifact digest mismatch')

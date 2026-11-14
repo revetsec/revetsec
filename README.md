@@ -4,7 +4,7 @@
 
 A zero-dependency Java library for OAuth 2.0 clients, resource servers and app-integrated token issuance, OpenID Connect relying parties, JOSE, SAML 2.0 service providers (SPs), SCIM 2.0 server primitives, WebAuthn passkeys, TOTP/recovery codes and password hashing.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA, EC and Ed25519 signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for version and compatibility information.
+**Revetsec 1.0.0 is the first compatibility release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA, EC and Ed25519 signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for version and compatibility information.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and returns an explicit outcome for expected success or rejection. TOTP storage and recovery-admission failures also have explicit outcomes; other infrastructure and configuration failures retain their documented exception boundaries. Your application keeps its own users, sessions, routes and storage.
 
@@ -13,8 +13,8 @@ Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are 
 The [runnable examples](examples/README.md) demonstrate OIDC sessions, protected
 MCP resources, OAuth issuance, passkeys, TOTP and durable storage. Each project
 documents its configuration and local HTTPS setup.
-Build the example projects with `mvn -f examples/pom.xml verify` after installing
-their dependencies, then launch the applications with `java -jar`; see the
+Build the example projects with `mvn -f examples/pom.xml verify`, then launch
+the applications with `java -jar`; see the
 [setup instructions](examples/README.md#build-with-maven). Python is only needed
 for optional verification fixtures.
 
@@ -57,7 +57,7 @@ Operations with several expected outcomes expose one immutable sealed result API
 | Direct service token or OAuth refresh | [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html)`.requestClientCredentialsResult` / `refreshResult` | [`OAuthTokenRequestResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthTokenRequestResult.Succeeded.html) or fixed endpoint `Rejected` |
 | Cached service token | [`ClientCredentialsTokenSource`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientCredentialsTokenSource.html)`.getAccessTokenResult` | [`AccessTokenAcquisitionResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenAcquisitionResult.Succeeded.html) or fixed endpoint `Rejected` |
 | Revocation | [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html)`.revokeResult` | [`OAuthRevocationResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthRevocationResult.Succeeded.html) or fixed endpoint `Rejected` |
-| OIDC refresh | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.refreshResult` | [`OidcRefreshOutcome.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcRefreshOutcome.Succeeded.html), local `Rejected`, or `RejectedEndpoint` |
+| OIDC refresh | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.refreshResult` | [`OidcRefreshResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcRefreshResult.Succeeded.html), local `Rejected`, or `RejectedEndpoint` |
 | UserInfo | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.fetchUserInfoResult` | [`OidcUserInfoResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcUserInfoResult.Succeeded.html), local `Rejected`, or `RejectedEndpoint` |
 | Restored session reference | [`OidcSessionReference`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcSessionReference.html)`.fromSerializedFormResult` / [`SamlSessionReference`](https://javadoc.revetsec.com/com/revetsec/saml/SamlSessionReference.html)`.fromSerializedFormResult`, or their sealed-form counterparts | A structural/session reference or a fixed rejection; no authenticated identity |
 
@@ -109,11 +109,7 @@ Attributions are kept in [`NOTICE`](NOTICE).
 
 Revetsec is a single JAR. JDK 17 or newer is required, with a minimum runtime of Java 17.0.3.
 
-**Nothing has been published yet, including snapshots.** The version is `1.0.0-SNAPSHOT` until the first release. To try the current source, install it into your local Maven repository:
-
-```shell
-$ mvn -B -ntp -Dmaven.javadoc.skip=true install
-```
+The release coordinate is `com.revetsec:revetsec:1.0.0`, distributed through Maven Central.
 
 #### Maven
 
@@ -121,21 +117,19 @@ $ mvn -B -ntp -Dmaven.javadoc.skip=true install
 <dependency>
   <groupId>com.revetsec</groupId>
   <artifactId>revetsec</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
 #### Gradle
 
-A Gradle build resolves a locally installed snapshot only when `mavenLocal()` is among its repositories.
-
 ```groovy
 repositories {
-  mavenLocal()
+  mavenCentral()
 }
 
 dependencies {
-  implementation 'com.revetsec:revetsec:1.0.0-SNAPSHOT'
+  implementation 'com.revetsec:revetsec:1.0.0'
 }
 ```
 
@@ -147,9 +141,9 @@ Each adapter lives in its own repository, and its README lists its coordinates. 
 - [revetsec-servlet-jakarta](https://github.com/revetsec/revetsec-servlet-jakarta) for the `jakarta.servlet` API
 - [revetsec-servlet-javax](https://github.com/revetsec/revetsec-servlet-javax) for the legacy `javax.servlet` API
 
-### Planned Scope
+### Scope
 
-Every area below ships together in a single 1.0.0 release:
+The 1.0.0 release includes:
 
 - OAuth 2.0 client
 - App-integrated OAuth token issuance, with application-owned users, auth decisions and durable storage
@@ -280,7 +274,7 @@ PS256, PS384, PS512, RS256, RS384 and RS512 are supported. The optional 32-byte 
 
 ### Status
 
-Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
+Version 1.0.0 establishes Revetsec's first public compatibility baseline; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
 The application supplies users, permissions, sessions, routes and durable storage. The Soklet, Jakarta Servlet and javax Servlet adapters provide transport helpers across OAuth, bearer admission, issuer endpoints, SAML, SCIM and WebAuthn as documented in each adapter. Applications choose validators and make permission decisions.
 

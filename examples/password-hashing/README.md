@@ -11,7 +11,7 @@ from the core repository root:
 
 ```sh
 mvn -B -ntp -f examples/password-hashing/pom.xml verify
-java -jar examples/password-hashing/target/password-hashing-1.0.0-SNAPSHOT.jar
+java -jar examples/password-hashing/target/password-hashing-1.0.0.jar
 ```
 
 Maven puts the core runtime dependency in `target/lib`. Keep that directory

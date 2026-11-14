@@ -44,7 +44,7 @@ public final class OperationBinding {
      *
      * @since 1.0.0
      */
-    public static final int MAXIMUM_CODE_UNITS = 1_024;
+    public static final @NonNull Integer MAXIMUM_CODE_UNITS = 1_024;
 
     private final @NonNull String value;
 

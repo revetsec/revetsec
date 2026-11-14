@@ -149,9 +149,9 @@ public final class ScimSchema {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimSchema schema && discovery == schema.discovery
+        return this == other || (other instanceof ScimSchema schema && discovery == schema.discovery
                 && AsciiCase.fold(id).equals(AsciiCase.fold(schema.id)) && name.equals(schema.name)
-                && Objects.equals(description, schema.description) && attributes.equals(schema.attributes);
+                && Objects.equals(description, schema.description) && attributes.equals(schema.attributes));
     }
 
     /**

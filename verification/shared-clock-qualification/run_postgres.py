@@ -25,7 +25,7 @@ HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[2]
 CURRENT=ROOT/'revetsec/examples/postgresql-pending-store'
 OLD=ROOT/'planning/records/security/shared-clock-scp01-2026-10-29'
-CORE=ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'
+CORE=ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0.jar'
 LEGACY_CORE_SHA256='b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38'
 IMAGE='sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
 LABEL='com.revetsec.scp11.native=true'

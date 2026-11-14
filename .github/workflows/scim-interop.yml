@@ -42,14 +42,6 @@ jobs:
           path: .scim-inputs/adapter
           persist-credentials: false
 
-      - name: Check out pinned Soklet framework
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: soklet/soklet
-          ref: 157fbe587e177e7332fcbaffe51e7a2138685bd2
-          path: .scim-inputs/framework
-          persist-credentials: false
-
       - name: Verify the qualified Soklet SCIM source
         run: |
           if ! sha256sum --check interop/scim/adapter-source.sha256; then
@@ -57,24 +49,20 @@ jobs:
             exit 1
           fi
 
-      - name: Download checksum-pinned Corretto 21.0.11 for Soklet
-        run: >-
-          bash .github/scripts/download-pinned-corretto21-linux-x64.sh
-          "$RUNNER_TEMP/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
-
-      - name: Set up Corretto 21.0.11
+      - name: Set up Corretto 21
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
-          distribution: jdkfile
-          java-version: '21.0.11'
-          jdk-file: ${{ runner.temp }}/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz
+          distribution: corretto
+          java-version: '21'
           cache: maven
 
-      - name: Build and verify pinned framework
-        working-directory: .scim-inputs/framework
+      - name: Resolve checksum-bound Soklet 4.0.0 from Maven Central
         run: |
-          mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
-          echo "2ebff62b5ec1fd6d86761d8a894276a07efdaa12859badc8e376a2c1ca87960d  target/soklet-4.0.0.jar" | sha256sum --check
+          artifact="$HOME/.m2/repository/com/soklet/soklet/4.0.0"
+          mvn -B -ntp dependency:get -Dartifact=com.soklet:soklet:4.0.0 -Dtransitive=false \
+            -DremoteRepositories=central::default::https://repo.maven.apache.org/maven2
+          echo "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce  $artifact/soklet-4.0.0.jar" | sha256sum --check --strict
+          echo "496cdb065ffc2db4b17a6c1ced6262d261a752883e689fdfc72c52143b99b8ba  $artifact/soklet-4.0.0.pom" | sha256sum --check --strict
 
       - name: Build current SCIM core and pinned adapter
         run: |

@@ -15,7 +15,7 @@ export SCIM_BEARER_TOKEN='<private ASCII credential, 32–256 characters>'
 export SCIM_BASE_URI='https://localhost:8445/scim/v2/'
 export SCIM_HTTP_HOST='127.0.0.1'
 export SCIM_HTTP_PORT='8082'
-java -cp "examples/playground/target/playground-1.0.0-SNAPSHOT.jar:examples/playground/target/lib/*" \
+java -cp "examples/playground/target/playground-1.0.0.jar:examples/playground/target/lib/*" \
   example.playground.ScimPlayground
 ```
 

@@ -270,13 +270,13 @@ public final class OidfDriver {
     private @NonNull LoginResult completeProfile(@NonNull OidcClient client, @NonNull OidcAuthentication auth,
             @NonNull String name, boolean form) throws Exception {
         if (name.contains("refresh-token")) {
-            OidcRefreshOutcome outcome = client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),
+            OidcRefreshResult outcome = client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),
                     parsedReference(OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())));
-            if (outcome instanceof OidcRefreshOutcome.Rejected rejected)
+            if (outcome instanceof OidcRefreshResult.Rejected rejected)
                 return new LoginRejected(rejected.getReason().name(), rejected.getJoseReason().map(Enum::name).orElse(""));
-            if (outcome instanceof OidcRefreshOutcome.RejectedEndpoint)
+            if (outcome instanceof OidcRefreshResult.RejectedEndpoint)
                 return new LoginRejected("OAUTH:ENDPOINT_ERROR", "");
-            OidcRefreshResult refresh = ((OidcRefreshOutcome.Succeeded) outcome).getRefreshResult();
+            OidcRefresh refresh = ((OidcRefreshResult.Succeeded) outcome).getRefresh();
             check(refresh.getIdToken().isPresent(), "Expected verified refresh ID token");
             return checkedUserInfo(auth, client.fetchUserInfoResult(auth, refresh));
         }

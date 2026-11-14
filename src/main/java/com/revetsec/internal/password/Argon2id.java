@@ -236,17 +236,17 @@ public final class Argon2id {
         int start_position;
         if (position.pass == 0) {
             if (position.slice == 0) {
-                reference_area_size = position.index - 1;
+                reference_area_size = position.index - 1L;
             } else if (same_lane) {
-                reference_area_size = position.slice * instance.segment_length + position.index - 1;
+                reference_area_size = (long) position.slice * instance.segment_length + position.index - 1;
             } else {
-                reference_area_size = position.slice * instance.segment_length
+                reference_area_size = (long) position.slice * instance.segment_length
                     + (position.index == 0 ? -1 : 0);
             }
         } else if (same_lane) {
-            reference_area_size = instance.lane_length - instance.segment_length + position.index - 1;
+            reference_area_size = (long) instance.lane_length - instance.segment_length + position.index - 1;
         } else {
-            reference_area_size = instance.lane_length - instance.segment_length
+            reference_area_size = (long) instance.lane_length - instance.segment_length
                 + (position.index == 0 ? -1 : 0);
         }
         relative_position = pseudo_rand;

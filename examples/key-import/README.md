@@ -6,7 +6,7 @@ Build from the core repository root after installing a matching core artifact:
 
 ```sh
 mvn -B -ntp -f examples/key-import/pom.xml verify
-java -jar examples/key-import/target/revetsec-key-import-1.0.0-SNAPSHOT.jar /path/to/private.pk8 /path/to/public.spki
+java -jar examples/key-import/target/revetsec-key-import-1.0.0.jar /path/to/private.pk8 /path/to/public.spki
 ```
 
 Keep the packaged JAR and its sibling `lib` directory together. Maven runs the example's disposable test-only four-family and file-limit checks. Annotation libraries and JUnit are absent from its runtime dependencies. The application does not generate or export a key; test fixtures generate disposable keys only for verification.

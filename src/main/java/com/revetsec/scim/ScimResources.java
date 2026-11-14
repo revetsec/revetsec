@@ -158,8 +158,8 @@ final class ScimResources {
                 boolean always=definition.getReturned() == ScimReturned.ALWAYS;
                 boolean explicitlyIncluded=explicit(path);
                 if (!work.spend((long)selection.getIncludedAttributes().size()+selection.getExcludedAttributes().size())) return null;
-                boolean requested=explicitlyIncluded || write && supplied(path,definition.getType() == ScimAttributeType.COMPLEX);
-                boolean eligible=always || !onlyAlways && selection.includes(path) && (definition.getReturned() != ScimReturned.REQUEST || requested);
+                boolean requested=explicitlyIncluded || (write && supplied(path,definition.getType() == ScimAttributeType.COMPLEX));
+                boolean eligible=always || (!onlyAlways && selection.includes(path) && (definition.getReturned() != ScimReturned.REQUEST || requested));
                 if (!eligible && definition.getType() != ScimAttributeType.COMPLEX) continue;
                 if (raw instanceof JsonObject complex && definition.getType() == ScimAttributeType.COMPLEX) {
                     JsonObject child=object(definition.getSubAttributes(),complex,prefix+name+".",!eligible);
@@ -187,7 +187,7 @@ final class ScimResources {
         private boolean explicit(@NonNull ScimAttributePath path) {
             for (ScimAttributePath included : selection.getIncludedAttributes()) {
                 if (!work.take(1)) return false;
-                if (included.equals(path) || sameParent(included,path) && included.getSubAttributeName().isEmpty()) return true;
+                if (included.equals(path) || (sameParent(included,path) && included.getSubAttributeName().isEmpty())) return true;
                 if (path.getSubAttributeName().isEmpty() && sameParent(included,path)) return true;
             }
             return false;

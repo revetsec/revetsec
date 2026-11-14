@@ -6,14 +6,14 @@ These Python coordinators are optional CI audits, not consumer build launchers:
 
 | Tool | Additional checks |
 | --- | --- |
-| [verify_packaged_examples.py](verify_packaged_examples.py) | Exact core/adapter source pins, framework checksum, complete adapter tests, unchanged pinned upstream tests, packaged runtime dependencies and attributed nullability |
+| [verify_packaged_examples.py](verify_packaged_examples.py) | Exact core/adapter source pins, published framework JAR/POM checksums, complete adapter tests, unchanged pinned upstream tests, packaged runtime dependencies and attributed nullability |
 | [verify_self_issued.py](verify_self_issued.py) | Frozen authored core/adapter inventories, private Maven repository, redacted capture and annotation-free standalone runtime |
 | [verify_rsa_oidc.py](verify_rsa_oidc.py) | Frozen authored core inventory, private TLS fixture, independent JCA provider capture and attributed nullability |
 
 Each tool accepts `--help`. Supply a new absolute `--work` directory and explicit
 Maven/JDK/source paths. The packaged verifier takes `--core-source`,
-`--adapter-source` and either `--framework-source` or the checksum-pinned
-`--framework-jar`; CI supplies the exact run commit using `--core-revision`.
+`--adapter-source` plus the checksum-bound Central `--framework-jar` and
+`--framework-pom`; CI supplies the exact run commit using `--core-revision`.
 Source-building the framework requires the exact compiler recorded in
 [examples/pins.json](../../examples/pins.json). The authored-source verifiers
 accept `--core-source` (and `--adapter-source`/`--framework-jar` for self-issued).

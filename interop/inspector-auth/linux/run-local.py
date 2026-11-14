@@ -35,8 +35,8 @@ def main():
         parser.error('Input paths must not contain mount separators')
     if paths['output'].exists():
         parser.error('Use a new private output directory')
-    expected_names = {'playground-1.0.0-SNAPSHOT.jar', 'revetsec-1.0.0-SNAPSHOT.jar',
-                      'revetsec-soklet-1.0.0-SNAPSHOT.jar', 'soklet-4.0.0.jar'}
+    expected_names = {'playground-1.0.0.jar', 'revetsec-1.0.0.jar',
+                      'revetsec-soklet-1.0.0.jar', 'soklet-4.0.0.jar'}
     rows = json.loads(paths['app-manifest'].read_text())
     if {row['name'] for row in rows} != expected_names or len(rows) != 4:
         raise RuntimeError('APP_MANIFEST_INVALID')

@@ -1,0 +1,282 @@
+{
+  "schema": "revetsec.release-record.v1",
+  "version": "1.0.0",
+  "disposition": "TEMPLATE",
+  "ownerAcceptance": {
+    "finalQ5": {
+      "accepted": false,
+      "evidence": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    "compatibility": {
+      "accepted": false,
+      "evidence": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    "externalQualification": {
+      "accepted": false,
+      "evidence": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    "securityClaims": {
+      "accepted": false,
+      "evidence": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    "release": {
+      "accepted": false,
+      "evidence": {
+        "path": "",
+        "sha256": ""
+      }
+    }
+  },
+  "repositories": [
+    {
+      "name": "revetsec",
+      "commit": "",
+      "tag": "v1.0.0",
+      "ciRun": "",
+      "githubReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    {
+      "name": "revetsec-soklet",
+      "commit": "",
+      "tag": "v1.0.0",
+      "ciRun": "",
+      "githubReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    {
+      "name": "revetsec-servlet-jakarta",
+      "commit": "",
+      "tag": "v1.0.0",
+      "ciRun": "",
+      "githubReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    {
+      "name": "revetsec-servlet-javax",
+      "commit": "",
+      "tag": "v1.0.0",
+      "ciRun": "",
+      "githubReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    }
+  ],
+  "signing": {
+    "fingerprint": "",
+    "publicKeyUrl": "",
+    "receipt": {
+      "path": "",
+      "sha256": ""
+    }
+  },
+  "externalDependencies": [
+    {
+      "coordinates": "com.soklet:soklet:4.0.0",
+      "repository": "https://repo.maven.apache.org/maven2",
+      "jarSha256": "",
+      "pomSha256": ""
+    }
+  ],
+  "components": [
+    {
+      "coordinates": "com.revetsec:revetsec:1.0.0",
+      "repository": "revetsec",
+      "localBundleSha256": "",
+      "secondBundleSha256": "",
+      "bundleEvidence": {
+        "first": {"path": "", "sha256": ""},
+        "second": {"path": "", "sha256": ""}
+      },
+      "reproducibilityReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "payloadSha256": {
+        "pom": "",
+        "jar": "",
+        "sources": "",
+        "javadoc": "",
+        "sbom": ""
+      },
+      "centralReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "hostedEvidence": {
+        "path": "",
+        "sha256": ""
+      },
+      "attestationReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "provenanceRun": "",
+      "provenanceAttestations": {
+        "provenance": "",
+        "sbom": ""
+      },
+      "consumerReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    {
+      "coordinates": "com.revetsec:revetsec-soklet:1.0.0",
+      "repository": "revetsec-soklet",
+      "localBundleSha256": "",
+      "secondBundleSha256": "",
+      "bundleEvidence": {
+        "first": {"path": "", "sha256": ""},
+        "second": {"path": "", "sha256": ""}
+      },
+      "reproducibilityReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "payloadSha256": {
+        "pom": "",
+        "jar": "",
+        "sources": "",
+        "javadoc": "",
+        "sbom": ""
+      },
+      "centralReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "hostedEvidence": {
+        "path": "",
+        "sha256": ""
+      },
+      "attestationReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "provenanceRun": "",
+      "provenanceAttestations": {
+        "provenance": "",
+        "sbom": ""
+      },
+      "consumerReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    {
+      "coordinates": "com.revetsec:revetsec-servlet-jakarta:1.0.0",
+      "repository": "revetsec-servlet-jakarta",
+      "localBundleSha256": "",
+      "secondBundleSha256": "",
+      "bundleEvidence": {
+        "first": {"path": "", "sha256": ""},
+        "second": {"path": "", "sha256": ""}
+      },
+      "reproducibilityReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "payloadSha256": {
+        "pom": "",
+        "jar": "",
+        "sources": "",
+        "javadoc": "",
+        "sbom": ""
+      },
+      "centralReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "hostedEvidence": {
+        "path": "",
+        "sha256": ""
+      },
+      "attestationReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "provenanceRun": "",
+      "provenanceAttestations": {
+        "provenance": "",
+        "sbom": ""
+      },
+      "consumerReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    },
+    {
+      "coordinates": "com.revetsec:revetsec-servlet-javax:1.0.0",
+      "repository": "revetsec-servlet-javax",
+      "localBundleSha256": "",
+      "secondBundleSha256": "",
+      "bundleEvidence": {
+        "first": {"path": "", "sha256": ""},
+        "second": {"path": "", "sha256": ""}
+      },
+      "reproducibilityReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "payloadSha256": {
+        "pom": "",
+        "jar": "",
+        "sources": "",
+        "javadoc": "",
+        "sbom": ""
+      },
+      "centralReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "hostedEvidence": {
+        "path": "",
+        "sha256": ""
+      },
+      "attestationReceipt": {
+        "path": "",
+        "sha256": ""
+      },
+      "provenanceRun": "",
+      "provenanceAttestations": {
+        "provenance": "",
+        "sbom": ""
+      },
+      "consumerReceipt": {
+        "path": "",
+        "sha256": ""
+      }
+    }
+  ],
+  "claimsAudit": {
+    "path": "release/SECURITY_CLAIMS_AUDIT.md",
+    "sha256": ""
+  },
+  "documentation": {
+    "receipt": {
+      "path": "",
+      "sha256": ""
+    }
+  },
+  "releasedAt": "",
+  "notes": []
+}

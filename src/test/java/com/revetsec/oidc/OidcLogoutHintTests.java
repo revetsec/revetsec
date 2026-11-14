@@ -82,10 +82,10 @@ final class OidcLogoutHintTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcLogoutFixtures.MutableClock clock = new OidcLogoutFixtures.MutableClock(); OidcClient client = OidcLogoutFixtures.builder(server, clock).build(), other = OidcLogoutFixtures.builder(server, clock).build();
 			OidcLogoutFixtures.Login login = OidcLogoutFixtures.login(server, client, clock); OidcSessionReference original = login.authentication().getSessionReference(); String serialized = original.toSerializedForm();
-			OidcLogoutFixtures.respond(server, null); OidcRefreshResult noId = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(login.authentication().getTokens().getRefreshToken().orElseThrow(), original)).getRefreshResult();
+			OidcLogoutFixtures.respond(server, null); OidcRefresh noId = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(login.authentication().getTokens().getRefreshToken().orElseThrow(), original)).getRefresh();
 			assertTrue(client.logoutHintFrom(noId).isEmpty()); assertSame(original, noId.getSessionReference()); assertReason(OidcLogoutException.Reason.HINT_MISMATCH, () -> other.logoutHintFrom(noId));
 			clock.set(OidcLogoutFixtures.NOW.plusSeconds(30)); String replacement = OidcLogoutFixtures.token(server, clock.instant(), null, "TEST-ONLY-new-sid", ""); OidcLogoutFixtures.respond(server, replacement);
-			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(noId.getRefreshToken(), original)).getRefreshResult(); OidcLogoutHint hint = client.logoutHintFrom(refreshed).orElseThrow();
+			OidcRefresh refreshed = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(noId.getRefreshToken(), original)).getRefresh(); OidcLogoutHint hint = client.logoutHintFrom(refreshed).orElseThrow();
 			assertSame(original, refreshed.getSessionReference()); assertEquals(serialized, original.toSerializedForm()); assertEquals("TEST-ONLY-original-sid", original.getSessionId().orElseThrow());
 			assertTrue(hint.toSerializedForm().contains(replacement)); assertTrue(hint.reference().matchesOriginalReference(original)); assertReason(OidcLogoutException.Reason.HINT_MISMATCH, () -> other.logoutHintFrom(refreshed));
 		}

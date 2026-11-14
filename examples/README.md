@@ -31,23 +31,15 @@ Use JDK 21 or newer for the full reactor and Soklet applications. Core-only
 password, RSA, key-import, common logout and provider-token recipes retain Java 17 compatibility. Select the JDK with
 `JAVA_HOME` and put its `bin` directory on `PATH` so Maven and Java agree.
 
-Revetsec core and the Soklet adapter currently use the unpublished
-`1.0.0-SNAPSHOT` version. Install matching source checkouts before building the
-examples. The Soklet source revision and version are recorded in
-[pins.json](pins.json); use that framework checkout with these sources.
-From the core repository root, with the adapter and framework paths adjusted:
+Revetsec core 1.0.0, the Revetsec Soklet adapter 1.0.0 and Soklet 4.0.0 are
+published Maven Central coordinates. Soklet's coordinates and artifact hashes
+are recorded in [pins.json](pins.json). From the core repository root:
 
 ```sh
-mvn -B -ntp -Dmaven.javadoc.skip=true -Dmaven.test.skip=true install
-mvn -B -ntp -f /absolute/soklet/pom.xml \
-  -Dmaven.javadoc.skip=true -Dmaven.test.skip=true -Dgpg.skip=true install
-mvn -B -ntp -f /absolute/revetsec-soklet/pom.xml \
-  -Dmaven.javadoc.skip=true -Dmaven.test.skip=true install
 mvn -B -ntp -f examples/pom.xml verify
 ```
 
-The first three commands install prerequisites; the last runs the example tests
-and packages the applications. To build one project instead, use, for example:
+This runs the example tests and packages the applications. To build one project instead, use, for example:
 
 ```sh
 mvn -B -ntp -f examples/pom.xml -pl passkeys-soklet -am verify
@@ -64,7 +56,7 @@ After supplying the selected project's environment configuration, launch it
 from the core repository root:
 
 ```sh
-java -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
+java -jar examples/playground/target/playground-1.0.0.jar
 ```
 
 Each project README describes its configuration. TOTP, RSA, logout and PostgreSQL are
@@ -79,9 +71,9 @@ without changing global trust. The PostgreSQL Python runners coordinate Docker,
 separate JVM races, outages, uncertain commits and restore tests. Those runners
 are test tools, separate from the normal Maven build.
 
-Additional source-pin, artifact, nullability and annotation-free runtime audits
+Additional source-pin, published-artifact, nullability and annotation-free runtime audits
 live under [verification/examples](../verification/examples/README.md).
-CI retains exact source and framework checksum checks, including the explicit
+CI retains the exact adapter source pin and checksum-bound Central framework artifacts, including the explicit
 [test-only adapter compatibility bridge](compatibility/soklet-shared-clock/README.md).
 Revetsec has not been independently audited.
 
@@ -116,7 +108,7 @@ Create a private JVM truststore for the local provider, using the selected JDK's
 ```sh
 java -Djavax.net.ssl.trustStore=/private/tls/java-trust.p12 \
   -Djavax.net.ssl.trustStorePassword=changeit \
-  -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
+  -jar examples/playground/target/playground-1.0.0.jar
 ```
 
 Interrupt the app and provider and remove their private work/profile directories after use. Examples store no browser credentials in localStorage/sessionStorage. The transient inspection form is an explicit CSRF-protected demonstration and never becomes MCP bearer transport. Only allowlisted application-redacted fields from checked results are displayed.

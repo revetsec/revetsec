@@ -48,7 +48,7 @@ public final class BrowserBinding {
      *
      * @since 1.0.0
      */
-    public static final int MAXIMUM_CODE_UNITS = 65_536;
+    public static final @NonNull Integer MAXIMUM_CODE_UNITS = 65_536;
 
     private final @NonNull String value;
 

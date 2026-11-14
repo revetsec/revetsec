@@ -263,9 +263,9 @@ public final class PasswordHasher {
      * @since 1.0.0 */
     @CheckReturnValue
     public @NonNull PasswordVerificationResult verifyLegacyPbkdf2Result(char @NonNull [] password,
-            @NonNull Pbkdf2Hmac hmac, int iterations, byte @NonNull [] salt,
+            @NonNull Pbkdf2Hmac hmac, @NonNull Integer iterations, byte @NonNull [] salt,
             byte @NonNull [] expectedTag) {
-        requireNonNull(password); requireNonNull(hmac); requireNonNull(salt); requireNonNull(expectedTag);
+        requireNonNull(password); requireNonNull(hmac); requireNonNull(iterations); requireNonNull(salt); requireNonNull(expectedTag);
         if (pbkdf2Preparation == null)
             return PasswordVerificationResult.rejected(PasswordRejectionReason.UNSUPPORTED_STORED_HASH);
         if (iterations < 1 || iterations > maximumPbkdf2Iterations || salt.length < 8
@@ -408,9 +408,10 @@ public final class PasswordHasher {
          * @param maximumLogRounds maximum accepted bcrypt log2 work cost, 4–16
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder legacyBcrypt(@NonNull LegacyPasswordPreparation preparation, int maximumLogRounds) {
+        public @NonNull Builder legacyBcrypt(@NonNull LegacyPasswordPreparation preparation,
+                @NonNull Integer maximumLogRounds) {
             this.bcryptPreparation = requireNonNull(preparation);
-            this.maximumBcryptLogRounds = maximumLogRounds;
+            this.maximumBcryptLogRounds = requireNonNull(maximumLogRounds);
             return this;
         }
 
@@ -420,9 +421,10 @@ public final class PasswordHasher {
          * @param maximumIterations maximum accepted iteration count, at most 2,000,000
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder legacyPbkdf2(@NonNull LegacyPasswordPreparation preparation, int maximumIterations) {
+        public @NonNull Builder legacyPbkdf2(@NonNull LegacyPasswordPreparation preparation,
+                @NonNull Integer maximumIterations) {
             this.pbkdf2Preparation = requireNonNull(preparation);
-            this.maximumPbkdf2Iterations = maximumIterations;
+            this.maximumPbkdf2Iterations = requireNonNull(maximumIterations);
             return this;
         }
 

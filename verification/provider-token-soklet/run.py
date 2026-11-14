@@ -22,11 +22,11 @@ def digest(path):
 
 def inputs(args):
     examples = args.examples_root.resolve()
-    common = examples / "provider-backend-tokens/target/revetsec-provider-backend-tokens-1.0.0-SNAPSHOT.jar"
-    carrier = examples / "provider-backend-tokens-soklet/target/provider-backend-tokens-soklet-1.0.0-SNAPSHOT.jar"
+    common = examples / "provider-backend-tokens/target/revetsec-provider-backend-tokens-1.0.0.jar"
+    carrier = examples / "provider-backend-tokens-soklet/target/provider-backend-tokens-soklet-1.0.0.jar"
     fixtures = examples / "provider-backend-tokens-soklet/target/test-classes"
     # These are the actual copies selected by the normal Maven JAR manifests.
-    core = common.parent / "lib/revetsec-1.0.0-SNAPSHOT.jar"
+    core = common.parent / "lib/revetsec-1.0.0.jar"
     framework = carrier.parent / "lib/soklet-4.0.0.jar"
     java = args.java_home.resolve() / "bin/java"
     for path in [common, carrier, core, framework, java]:

@@ -392,7 +392,7 @@ final class OidcUserInfoTests {
 			OidcSessionReference stored = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\",\"expires_in\":300}")));
-			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefreshResult();
+			OidcRefresh refreshed = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefresh();
 			respond(server, 200, "application/json", json()); assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth, refreshed)).getUserInfo().getSubject());
 			assertTrue(refreshed.getIdToken().isEmpty()); assertSame(stored, refreshed.getSessionReference());
 			assertEquals(Optional.of("Bearer TEST-ONLY-refreshed-userinfo"), server.getRequests("/userinfo").get(0).getHeader("Authorization"));
@@ -410,7 +410,7 @@ final class OidcUserInfoTests {
 			OidcAuthentication first = authenticate(server, client, ACCESS, 300), second = authenticate(server, client, ACCESS, 300);
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\"}")));
-			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(second.getTokens().getRefreshToken().orElseThrow(), second.getSessionReference())).getRefreshResult();
+			OidcRefresh refreshed = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(second.getTokens().getRefreshToken().orElseThrow(), second.getSessionReference())).getRefresh();
 			int before = server.getRequests().size();
 			OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, lazy(server).build().fetchUserInfoResult(first, refreshed));
 			assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, failure.getReason());
@@ -447,7 +447,7 @@ final class OidcUserInfoTests {
 				assertNotEquals(auth.getSessionReference().toSerializedForm(), stored.toSerializedForm());
 				server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 						"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\",\"expires_in\":300}")));
-				OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefreshResult();
+				OidcRefresh refreshed = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefresh();
 				respond(server, 200, "application/json", json());
 				assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth, refreshed)).getUserInfo().getSubject());
 				assertEquals(Optional.of("Bearer TEST-ONLY-refreshed-userinfo"), server.getRequests("/userinfo").get(0).getHeader("Authorization"));
@@ -477,7 +477,7 @@ final class OidcUserInfoTests {
 							else if (field.equals("iat") || field.equals("auth_time")) fields.put(field, JsonNumber.fromValue(NOW.plusSeconds(1).getEpochSecond()));
 							else if (!field.equals("nonce_digest") && !field.equals("client_id")) fields.put(field, JsonString.fromValue("other"));
 						});
-						OidcRefreshResult refreshed = new OidcRefreshResult(auth.getTokens(), null, auth.getTokens().getRefreshToken().orElseThrow(), changed);
+						OidcRefresh refreshed = new OidcRefresh(auth.getTokens(), null, auth.getTokens().getRefreshToken().orElseThrow(), changed);
 						int before = server.getRequests().size();
 						OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth, refreshed));
 						assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, failure.getReason());
@@ -502,7 +502,7 @@ final class OidcUserInfoTests {
 			OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\"}")));
-			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), auth.getSessionReference())).getRefreshResult();
+			OidcRefresh refreshed = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), auth.getSessionReference())).getRefresh();
 			respond(server, 200, "application/jwt", sign(claims(server), false)); assertTrue(assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth, refreshed)).getUserInfo().isSigned());
 			respond(server, 200, "application/json", json());
 			assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth, refreshed)).getReason());

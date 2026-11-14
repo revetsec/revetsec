@@ -313,7 +313,7 @@ public final class WebAuthnCeremonyFuzzTests {
 
     @javax.annotation.concurrent.NotThreadSafe
     private static final class ProofStore implements WebAuthnStore {
-        private final @NonNull WebAuthnStore backing = InMemoryWebAuthnStore.fromLimits(128, 2_000_000);
+        private final @NonNull WebAuthnStore backing = InMemoryWebAuthnStore.fromLimits(128, 2_000_000L);
         private int callbacks, mutations;
         private @org.jspecify.annotations.Nullable WebAuthnStoreCommitResult refusal;
         private @org.jspecify.annotations.Nullable Runnable after;
@@ -331,7 +331,7 @@ public final class WebAuthnCeremonyFuzzTests {
     }
 
     private static @NonNull WebAuthnRelyingParty relyingParty() {
-        return relyingParty(InMemoryWebAuthnStore.fromLimits(128, 2_000_000), GATE);
+        return relyingParty(InMemoryWebAuthnStore.fromLimits(128, 2_000_000L), GATE);
     }
 
     private static @NonNull WebAuthnRelyingParty relyingParty(@NonNull WebAuthnStore store, @NonNull WebAuthnRecoveryGate gate) {

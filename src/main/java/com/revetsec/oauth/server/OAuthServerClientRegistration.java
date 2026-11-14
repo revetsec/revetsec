@@ -158,7 +158,7 @@ public final class OAuthServerClientRegistration {
 		 * @since 1.0.0
 		 */
 		public @NonNull Builder redirectUris(@Nullable List<@NonNull URI> value) {
-			this.redirectUris = value == null || value.isEmpty() && !this.authorizationCodePermitted ? null : OAuthServerConfiguration.redirects(value);
+			this.redirectUris = value == null || (value.isEmpty() && !this.authorizationCodePermitted) ? null : OAuthServerConfiguration.redirects(value);
 			return this;
 		}
 		/**
@@ -178,7 +178,7 @@ public final class OAuthServerClientRegistration {
 		 * @since 1.0.0
 		 */
 		public @NonNull Builder allowedScopesByResource(@Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> value) {
-			this.allowedScopesByResource = value == null || value.isEmpty() && !this.authorizationCodePermitted ? null
+			this.allowedScopesByResource = value == null || (value.isEmpty() && !this.authorizationCodePermitted) ? null
 					: OAuthServerConfiguration.resources(value, OAuthServerConfiguration.MAXIMUM_RESOURCES);
 			return this;
 		}

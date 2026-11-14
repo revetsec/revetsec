@@ -55,7 +55,7 @@ public sealed interface ScimFilterValue permits ScimFilterValue.StringValue,
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof StringValue literal && this.value.equals(literal.value);
+            return this == other || (other instanceof StringValue literal && this.value.equals(literal.value));
         }
         /** Returns the value hash.
          * @return hash
@@ -98,8 +98,8 @@ public sealed interface ScimFilterValue permits ScimFilterValue.StringValue,
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof NumberValue literal
-                    && this.hashCode == literal.hashCode && this.value.compareTo(literal.value) == 0;
+            return this == other || (other instanceof NumberValue literal
+                    && this.hashCode == literal.hashCode && this.value.compareTo(literal.value) == 0);
         }
         /** Returns a hash consistent with numeric equality.
          * @return hash
@@ -133,7 +133,7 @@ public sealed interface ScimFilterValue permits ScimFilterValue.StringValue,
          * @since 1.0.0
          */
         @Override public boolean equals(@Nullable Object other) {
-            return this == other || other instanceof BooleanValue literal && this.value == literal.value;
+            return this == other || (other instanceof BooleanValue literal && this.value == literal.value);
         }
         /** Returns the value hash.
          * @return hash

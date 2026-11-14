@@ -69,8 +69,8 @@ public final class ScimSchemaExtension {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimSchemaExtension value
-                && required == value.required && schema.equals(value.schema);
+        return this == other || (other instanceof ScimSchemaExtension value
+                && required == value.required && schema.equals(value.schema));
     }
 
     /**

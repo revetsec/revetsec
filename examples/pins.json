@@ -8,11 +8,11 @@
     "revision": "40e52aa703c02b1ad49c04a256c9989212a94759"
   },
   "framework": {
-    "repository": "https://github.com/soklet/soklet",
-    "revision": "157fbe587e177e7332fcbaffe51e7a2138685bd2",
+    "repository": "https://repo.maven.apache.org/maven2",
+    "coordinates": "com.soklet:soklet:4.0.0",
     "version": "4.0.0",
-    "jar_sha256": "2ebff62b5ec1fd6d86761d8a894276a07efdaa12859badc8e376a2c1ca87960d",
-    "build_java_version": "21.0.11",
+    "jar_sha256": "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce",
+    "pom_sha256": "496cdb065ffc2db4b17a6c1ced6262d261a752883e689fdfc72c52143b99b8ba",
     "minimum_java": 21
   },
   "examplesUnpublished": true

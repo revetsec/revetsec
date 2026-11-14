@@ -128,16 +128,16 @@ final class OidcEndpointResultTests {
       RefreshToken refresh = authentication.getTokens().getRefreshToken().orElseThrow();
       server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(400,
           "{\"error\":\"invalid_grant\",\"access_token\":" + JsonText.string(ACCESS) + "}")));
-      OidcRefreshOutcome.RejectedEndpoint denied = assertInstanceOf(OidcRefreshOutcome.RejectedEndpoint.class,
+      OidcRefreshResult.RejectedEndpoint denied = assertInstanceOf(OidcRefreshResult.RejectedEndpoint.class,
           client.refreshResult(refresh, authentication.getSessionReference()));
       assertEquals(OAuthEndpointError.INVALID_GRANT, denied.getError());
       assertEquals(400, denied.getStatus());
       assertRedacted(denied.toString());
       server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
           "{\"access_token\":" + JsonText.string(ACCESS) + ",\"token_type\":\"Bearer\"}")));
-      OidcRefreshOutcome.Succeeded succeeded = assertInstanceOf(OidcRefreshOutcome.Succeeded.class,
+      OidcRefreshResult.Succeeded succeeded = assertInstanceOf(OidcRefreshResult.Succeeded.class,
           client.refreshResult(refresh, authentication.getSessionReference(), TokenRequestOptions.builder().build()));
-      OidcRefreshResult refreshed = succeeded.getRefreshResult();
+      OidcRefresh refreshed = succeeded.getRefresh();
       assertEquals(ACCESS, refreshed.getTokens().getAccessToken().getValue());
       assertEquals(REFRESH, refreshed.getRefreshToken().getValue());
       assertTrue(refreshed.getIdToken().isEmpty());
@@ -146,7 +146,7 @@ final class OidcEndpointResultTests {
       server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
           "{\"access_token\":" + JsonText.string(ACCESS) + ",\"token_type\":\"DPoP\"}")));
       assertEquals(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED,
-          assertInstanceOf(OidcRefreshOutcome.Rejected.class,
+          assertInstanceOf(OidcRefreshResult.Rejected.class,
               client.refreshResult(refresh, authentication.getSessionReference())).getReason());
       assertEquals(4, server.getHitCount("/token"));
     }

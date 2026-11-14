@@ -77,7 +77,7 @@ final class OAuthTokenResponse {
    finally { Arrays.fill(bytes, (byte) 0); }
    OAuthServerClientAdmission.remaining(deadline);
    JsonObject.Builder response = JsonObject.builder().put("access_token", compact).put("token_type", "Bearer")
-    .put("expires_in", java.time.Duration.between(issued, expires).getSeconds()).put("scope", scope);
+    .put("expires_in", java.time.Duration.between(issued, expires).toSeconds()).put("scope", scope);
    if (refresh != null) response.put("refresh_token", refresh);
    byte[] body = JsonCodec.toUtf8Bytes(response.build());
    try {

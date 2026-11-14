@@ -67,7 +67,7 @@ final class PendingAuthorizationCodec {
 			builder.put("nonce", nonce);
 		if (pending.kind().equals("oidc")) {
 			Duration maxAge = pending.maxAge();
-			if (maxAge != null) builder.put("max_age", maxAge.getSeconds());
+			if (maxAge != null) builder.put("max_age", maxAge.toSeconds());
 			builder.put("acr_values", JsonArray.fromElements(pending.acrValues().stream().sorted()
 					.map(JsonString::fromValue).toList()));
 			String prompt = pending.prompt();

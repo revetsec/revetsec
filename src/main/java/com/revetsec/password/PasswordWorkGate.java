@@ -22,6 +22,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static java.util.Objects.requireNonNull;
+
 /** Explicit in-memory, process-local admission for expensive password work. Share one instance
  * across every hasher in a process; each JVM needs its own gate to bound that JVM's CPU and memory.
  * Its temporary counters are discarded on restart and are never shared across nodes.
@@ -53,7 +55,10 @@ public final class PasswordWorkGate {
      * @return the gate
      * @throws IllegalArgumentException if either limit is outside its supported range
      * @since 1.0.0 */
-    public static @NonNull PasswordWorkGate fromInMemoryLimits(int maximumConcurrentCalls, int maximumMemoryKiB) {
+    public static @NonNull PasswordWorkGate fromInMemoryLimits(@NonNull Integer maximumConcurrentCalls,
+            @NonNull Integer maximumMemoryKiB) {
+        requireNonNull(maximumConcurrentCalls);
+        requireNonNull(maximumMemoryKiB);
         if (maximumConcurrentCalls < 1 || maximumConcurrentCalls > 256
                 || maximumMemoryKiB < 19_456 || maximumMemoryKiB > 4_194_304) {
             throw new IllegalArgumentException("Invalid password work limits");

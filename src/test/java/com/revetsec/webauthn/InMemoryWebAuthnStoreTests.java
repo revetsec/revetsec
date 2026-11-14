@@ -58,7 +58,7 @@ final class InMemoryWebAuthnStoreTests {
    "tenant", "login.example.com", new byte[32]);
 
  @Test void expiredCeremoniesRemainRetainedThroughQueriesBarriersAndCapacityRefusal() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100L);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(CEREMONY));
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
     write(empty, List.of(WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
@@ -74,7 +74,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void repeatedCeremonyReplacementRemainsWithinTheDeclaredRecordCapacity() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 1);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 1L);
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
     write(snapshot(store, Set.of(CEREMONY)), List.of(
       WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
@@ -87,9 +87,9 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void capacityRejectsWholeWriteAndNeverEvictsRecords() {
-  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(0, 10));
-  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(1, 0));
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 3);
+  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(0, 10L));
+  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(1, 0L));
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 3L);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST, SECOND));
   WebAuthnStoreWrite both = write(empty, List.of(
     WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1}),
@@ -116,7 +116,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void compareAllPredicatesAndRenewVersionsAcrossDeleteAndReinsert() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100L);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST, SECOND));
   WebAuthnStoreWrite insert = write(empty,
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {7})));
@@ -146,7 +146,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void concurrentWritersHaveExactlyOneWinnerAndBudgetOrInterruptNeverMutates() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100L);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST));
   WebAuthnStoreWrite insert = write(empty,
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1})));
@@ -195,7 +195,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void constructionAndNonpositiveOrInvalidCallsDoNotAcquireTimeOrRandomness() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(4, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(4, 100L);
   assertNull(field(store, "admission")); assertNull(field(store, "authorityAnchor")); assertNull(field(store, "entropy")); assertNull(field(store, "versionPrefix"));
   assertThrows(IllegalArgumentException.class, () -> store.read(Set.of(), BUDGET));
   assertInstanceOf(WebAuthnStoreReadResult.Unavailable.class, store.read(Set.of(FIRST), Duration.ZERO));
@@ -203,7 +203,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void scopedReadsHaveOneOwnedMonotoneProjectionAndRejectMixedScope() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(4, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(4, 100L);
   WebAuthnStoreKey other = WebAuthnStoreKey.forCredential("other", "other.example.com", new byte[] {3});
   assertThrows(IllegalArgumentException.class, () -> store.read(Set.of(FIRST, other), BUDGET));
   StoreTimeObservation.Healthy first = healthy(snapshot(store, Set.of(FIRST)));
@@ -214,7 +214,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void currentAuthorityRecoveryClockAndFixedErrorProfileAreComparedBeforeMutation() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100L);
   WebAuthnStoreSnapshot snapshot = snapshot(store, Set.of(FIRST)); StoreTimeObservation.Healthy time = healthy(snapshot);
   String foreign = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
   // The literal ID is legal synthetic external metadata, not a backend-issued capability.
@@ -231,7 +231,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void floorAndOriginalExpiryUseFreshTimeAfterTheActualStoreLockWait() throws Exception {
-  InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(1,100);WebAuthnStoreSnapshot before=snapshot(store,Set.of(FIRST));StoreTimeObservation.Healthy time=healthy(before);List<WebAuthnStoreWrite.Mutation> insertion=List.of(WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1}));StoreTemporalCondition future=StoreTimeAccess.get().fromObservation(time,time.getObservedAt().plusSeconds(3600),null);assertEquals(WebAuthnStoreCommitResult.TIME_BEFORE_FLOOR,store.compareAndCommit(WebAuthnStoreWrite.fromSnapshotAndMutations(before,insertion,future),BUDGET).getStatus());before=snapshot(store,Set.of(FIRST));time=healthy(before);Instant upper=time.getObservedAt().plusMillis(500);WebAuthnStoreWrite write=WebAuthnStoreWrite.fromSnapshotAndMutations(before,insertion,StoreTimeAccess.get().fromObservation(time,time.getObservedAt(),upper));Object entries=field(store,"entries"),sequence=field(store,"sequence"),bytes=field(store,"sealedBytes"),prefix=field(store,"versionPrefix");ReentrantLock lock=(ReentrantLock)Objects.requireNonNull(field(store,"lock"));ExecutorService executor=Executors.newSingleThreadExecutor();CountDownLatch entered=new CountDownLatch(1);List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();Future<WebAuthnStoreCommitReceipt> waiting;
+  InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(1,100L);WebAuthnStoreSnapshot before=snapshot(store,Set.of(FIRST));StoreTimeObservation.Healthy time=healthy(before);List<WebAuthnStoreWrite.Mutation> insertion=List.of(WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1}));StoreTemporalCondition future=StoreTimeAccess.get().fromObservation(time,time.getObservedAt().plusSeconds(3600),null);assertEquals(WebAuthnStoreCommitResult.TIME_BEFORE_FLOOR,store.compareAndCommit(WebAuthnStoreWrite.fromSnapshotAndMutations(before,insertion,future),BUDGET).getStatus());before=snapshot(store,Set.of(FIRST));time=healthy(before);Instant upper=time.getObservedAt().plusMillis(500);WebAuthnStoreWrite write=WebAuthnStoreWrite.fromSnapshotAndMutations(before,insertion,StoreTimeAccess.get().fromObservation(time,time.getObservedAt(),upper));Object entries=field(store,"entries"),sequence=field(store,"sequence"),bytes=field(store,"sealedBytes"),prefix=field(store,"versionPrefix");ReentrantLock lock=(ReentrantLock)Objects.requireNonNull(field(store,"lock"));ExecutorService executor=Executors.newSingleThreadExecutor();CountDownLatch entered=new CountDownLatch(1);List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();Future<WebAuthnStoreCommitReceipt> waiting;
   try{lock.lock();try{
    trace.add("snapshot-before-E");waiting=executor.submit(()->{trace.add("commit-call");entered.countDown();WebAuthnStoreCommitReceipt receipt=store.compareAndCommit(write,BUDGET);trace.add("callback-returned");return receipt;});assertTrue(entered.await(2,TimeUnit.SECONDS));long queued=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(!lock.hasQueuedThreads()&&System.nanoTime()<queued)Thread.yield();assertTrue(lock.hasQueuedThreads());assertFalse(waiting.isDone());trace.add("queued-under-lock");StoreTimeObservation.Healthy current=healthy(snapshot(store,Set.of(FIRST)));assertTrue(current.getObservedAt().isBefore(upper),"Queued call must begin before E");long limit=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(current.getObservedAt().isBefore(upper)){assertTrue(System.nanoTime()<limit);assertFalse(waiting.isDone());Thread.sleep(1);current=healthy(snapshot(store,Set.of(FIRST)));}trace.add("reached-E-under-lock");assertFalse(waiting.isDone());trace.add("releasing-lock");
   }finally{lock.unlock();}
@@ -240,7 +240,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void authorityContinuityLossPreservesRowsAndRefusesEvenAnEmptyTimedBarrier() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100L);
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(snapshot(store, Set.of(CEREMONY)),
     List.of(WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
   WebAuthnStoreSnapshot before = snapshot(store, Set.of(CEREMONY)); byte[] version = present(before, CEREMONY).getVersion();
@@ -253,7 +253,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void timedBarrierHasRequiredReceiptButTouchesNoDataCountersOrBackingMap() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100L);
   WebAuthnStoreKey root = WebAuthnStoreKey.forNamespaceClock("tenant", "login.example.com");
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(snapshot(store, Set.of(root)),
     List.of(WebAuthnStoreWrite.Mutation.insert(root, new byte[] {1}))), BUDGET).getStatus());
@@ -269,7 +269,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void knownRootLossCannotBecomeConfirmedAbsenceOrAutomaticReinitialization() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100L);
   WebAuthnStoreKey root = WebAuthnStoreKey.forNamespaceClock("tenant", "login.example.com");
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(root));
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(empty,
@@ -284,7 +284,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void preexistingOrphanedScopeCannotAcquireAnInventedStableMinimum() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100L);
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(snapshot(store, Set.of(FIRST)),
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1}))), BUDGET).getStatus());
   assertInstanceOf(WebAuthnStoreReadResult.Unavailable.class, store.read(Set.of(WebAuthnStoreKey.forNamespaceClock("tenant", "login.example.com")), BUDGET));
@@ -309,7 +309,7 @@ final class InMemoryWebAuthnStoreTests {
 
  @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi06BelowFloorWaitUsesValidationAfterTheActualLock(){
   List<org.junit.jupiter.api.DynamicTest> cases=new java.util.ArrayList<>();for(boolean mutate:List.of(false,true))cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-06/WEBAUTHN/below-N-to-valid/mutation="+mutate,()->{
-   InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(2,100);WebAuthnStoreSnapshot initial=snapshot(store,Set.of(FIRST));StoreTimeObservation.Healthy original=healthy(initial);Instant lower=original.getObservedAt().plusMillis(500),upper=lower.plusSeconds(10);WebAuthnStoreWrite write=WebAuthnStoreWrite.fromSnapshotAndMutations(initial,mutate?List.of(WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1})):List.of(),StoreTimeAccess.get().fromObservation(original,lower,upper));Object entries=field(store,"entries"),sequence=field(store,"sequence"),bytes=field(store,"sealedBytes");ReentrantLock lock=(ReentrantLock)Objects.requireNonNull(field(store,"lock"));List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();java.util.concurrent.atomic.AtomicReference<Thread> callback=new java.util.concurrent.atomic.AtomicReference<>();ExecutorService executor=Executors.newSingleThreadExecutor();CountDownLatch entered=new CountDownLatch(1);Future<WebAuthnStoreCommitReceipt> waiting;Instant heldSample;
+   InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(2,100L);WebAuthnStoreSnapshot initial=snapshot(store,Set.of(FIRST));StoreTimeObservation.Healthy original=healthy(initial);Instant lower=original.getObservedAt().plusMillis(500),upper=lower.plusSeconds(10);WebAuthnStoreWrite write=WebAuthnStoreWrite.fromSnapshotAndMutations(initial,mutate?List.of(WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1})):List.of(),StoreTimeAccess.get().fromObservation(original,lower,upper));Object entries=field(store,"entries"),sequence=field(store,"sequence"),bytes=field(store,"sealedBytes");ReentrantLock lock=(ReentrantLock)Objects.requireNonNull(field(store,"lock"));List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();java.util.concurrent.atomic.AtomicReference<Thread> callback=new java.util.concurrent.atomic.AtomicReference<>();ExecutorService executor=Executors.newSingleThreadExecutor();CountDownLatch entered=new CountDownLatch(1);Future<WebAuthnStoreCommitReceipt> waiting;Instant heldSample;
    try{lock.lock();try{
     trace.add("snapshot-below-N");assertTrue(original.getObservedAt().isBefore(lower));waiting=executor.submit(()->{callback.set(Thread.currentThread());trace.add("commit-call");entered.countDown();WebAuthnStoreCommitReceipt receipt=store.compareAndCommit(write,BUDGET);trace.add("callback-returned");return receipt;});assertTrue(entered.await(2,TimeUnit.SECONDS));long queuedDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(!lock.hasQueuedThreads()&&System.nanoTime()<queuedDeadline)Thread.yield();assertTrue(lock.hasQueuedThread(Objects.requireNonNull(callback.get())));assertFalse(waiting.isDone());trace.add("queued-under-lock");StoreTimeObservation.Healthy current=healthy(snapshot(store,Set.of(FIRST)));assertTrue(current.getObservedAt().isBefore(lower),"Queued call must begin before N");long floorDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(current.getObservedAt().isBefore(lower)){assertTrue(System.nanoTime()<floorDeadline,"Authority did not reach N");assertFalse(waiting.isDone());Thread.sleep(1);current=healthy(snapshot(store,Set.of(FIRST)));}heldSample=current.getObservedAt();trace.add("reached-N-under-lock");assertFalse(waiting.isDone());trace.add("releasing-lock");
    }finally{lock.unlock();}
@@ -320,7 +320,7 @@ final class InMemoryWebAuthnStoreTests {
 
  @SuppressWarnings("try") // Early close releases waiting writers before joining the executor; repeated close is idempotent.
  @Test void scApi07PostValidationCopyKeepsActualLockUntilVersionsAndAccountingPublish()throws Exception{
-  InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(5,100);WebAuthnStoreKey root=WebAuthnStoreKey.forNamespaceClock("tenant","login.example.com");WebAuthnStoreSnapshot empty=snapshot(store,Set.of(root,FIRST));assertEquals(WebAuthnStoreCommitResult.COMMITTED,store.compareAndCommit(write(empty,List.of(WebAuthnStoreWrite.Mutation.insert(root,new byte[]{9}),WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1}))),BUDGET).getStatus());WebAuthnStoreSnapshot before=snapshot(store,Set.of(root,FIRST,SECOND));StoreTimeObservation.Healthy observed=healthy(before);WebAuthnStoreWrite primary=write(before,List.of(WebAuthnStoreWrite.Mutation.replace(FIRST,new byte[]{2}),WebAuthnStoreWrite.Mutation.insert(SECOND,new byte[]{3}))),competitor=write(before,List.of(WebAuthnStoreWrite.Mutation.replace(FIRST,new byte[]{4}),WebAuthnStoreWrite.Mutation.insert(SECOND,new byte[]{5})));Object sequence=field(store,"sequence"),bytes=field(store,"sealedBytes"),prefix=field(store,"versionPrefix");ReentrantLock lock=(ReentrantLock)Objects.requireNonNull(field(store,"lock"));List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();ExecutorService executor=Executors.newFixedThreadPool(2);java.util.concurrent.atomic.AtomicReference<Thread> rival=new java.util.concurrent.atomic.AtomicReference<>();CountDownLatch called=new CountDownLatch(1);
+  InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(5,100L);WebAuthnStoreKey root=WebAuthnStoreKey.forNamespaceClock("tenant","login.example.com");WebAuthnStoreSnapshot empty=snapshot(store,Set.of(root,FIRST));assertEquals(WebAuthnStoreCommitResult.COMMITTED,store.compareAndCommit(write(empty,List.of(WebAuthnStoreWrite.Mutation.insert(root,new byte[]{9}),WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1}))),BUDGET).getStatus());WebAuthnStoreSnapshot before=snapshot(store,Set.of(root,FIRST,SECOND));StoreTimeObservation.Healthy observed=healthy(before);WebAuthnStoreWrite primary=write(before,List.of(WebAuthnStoreWrite.Mutation.replace(FIRST,new byte[]{2}),WebAuthnStoreWrite.Mutation.insert(SECOND,new byte[]{3}))),competitor=write(before,List.of(WebAuthnStoreWrite.Mutation.replace(FIRST,new byte[]{4}),WebAuthnStoreWrite.Mutation.insert(SECOND,new byte[]{5})));Object sequence=field(store,"sequence"),bytes=field(store,"sealedBytes"),prefix=field(store,"versionPrefix");ReentrantLock lock=(ReentrantLock)Objects.requireNonNull(field(store,"lock"));List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();ExecutorService executor=Executors.newFixedThreadPool(2);java.util.concurrent.atomic.AtomicReference<Thread> rival=new java.util.concurrent.atomic.AtomicReference<>();CountDownLatch called=new CountDownLatch(1);
   try(var pause=com.revetsec.testing.StoreCommitPause.install(store,"entries",trace,lock::isHeldByCurrentThread)){
    try{
     Future<WebAuthnStoreCommitReceipt> one=executor.submit(()->{trace.add("primary-call");pause.selectCurrentWriter();var result=store.compareAndCommit(primary,Duration.ofSeconds(10));trace.add("primary-returned");return result;});assertTrue(pause.awaitEntered());assertTrue(pause.wasProtected(),"Post-validation state apply lost its real lock");assertEquals(InMemoryWebAuthnStore.class.getName(),pause.getCallSite().getClassName());assertEquals("compareAndCommit",pause.getCallSite().getMethodName());assertSame(pause.installedMap(),field(store,"entries"));assertEquals(sequence,field(store,"sequence"));assertEquals(bytes,field(store,"sealedBytes"));assertSame(prefix,field(store,"versionPrefix"));
@@ -333,7 +333,7 @@ final class InMemoryWebAuthnStoreTests {
  @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi09HealthyReadThenAuthorityLossRefusesMutationAndBarrierWithoutClockFallback(){
   List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();
   for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-09/WEBAUTHN/authority-loss-before-validation/mutation="+mutate,()->{
-   InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(4,100);
+   InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(4,100L);
    WebAuthnStoreKey root=WebAuthnStoreKey.forNamespaceClock("tenant","login.example.com");
    assertEquals(WebAuthnStoreCommitResult.COMMITTED,store.compareAndCommit(write(snapshot(store,Set.of(root,FIRST)),List.of(WebAuthnStoreWrite.Mutation.insert(root,new byte[]{9}),WebAuthnStoreWrite.Mutation.insert(FIRST,new byte[]{1}))),BUDGET).getStatus());
    WebAuthnStoreSnapshot before=snapshot(store,Set.of(root,FIRST,SECOND));StoreTimeObservation.Healthy original=healthy(before);Instant upper=original.getObservedAt().plusSeconds(30);
@@ -352,7 +352,7 @@ final class InMemoryWebAuthnStoreTests {
  @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi04EveryWebAuthnKindAndAbsenceDefeatsBothWholeMutationAndBarrier() {
   List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();
   for(WebAuthnStoreKey.Kind kind:WebAuthnStoreKey.Kind.values())for(boolean exists:List.of(false,true))for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-04+10/WA/"+kind+"/present="+exists+"/mutation="+mutate,()->{
-   InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(10,100);WebAuthnStoreKey root=WebAuthnStoreKey.forNamespaceClock("tenant","login.example.com"),target=scApi04WebAuthnKey(kind);
+   InMemoryWebAuthnStore store=InMemoryWebAuthnStore.fromLimits(10,100L);WebAuthnStoreKey root=WebAuthnStoreKey.forNamespaceClock("tenant","login.example.com"),target=scApi04WebAuthnKey(kind);
    Set<WebAuthnStoreKey> keys=Set.of(root,FIRST,SECOND).contains(target)?Set.of(root,FIRST,SECOND):Set.of(root,FIRST,SECOND,target);
    List<WebAuthnStoreWrite.Mutation> seed=new java.util.ArrayList<>();if(kind!=WebAuthnStoreKey.Kind.NAMESPACE_CLOCK || exists)seed.add(WebAuthnStoreWrite.Mutation.insert(root,new byte[]{9}));if(exists&&!target.equals(root))seed.add(WebAuthnStoreWrite.Mutation.insert(target,new byte[]{1}));
    if(!seed.isEmpty())assertEquals(WebAuthnStoreCommitResult.COMMITTED,store.compareAndCommit(write(snapshot(store,keys),seed),BUDGET).getStatus());

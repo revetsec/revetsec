@@ -251,7 +251,7 @@ public final class OAuthClient {
 		query.resources(requestedResources);
 		if (kind.equals("oidc")) {
 			query.add("nonce", nonce);
-			if (maxAge != null) query.add("max_age", Long.toString(maxAge.getSeconds()));
+			if (maxAge != null) query.add("max_age", Long.toString(maxAge.toSeconds()));
 			if (!acrPreferences.isEmpty()) query.add("acr_values", String.join(" ", acrPreferences));
 		}
 		if (options.getResponseMode() == AuthorizationRequestOptions.ResponseMode.FORM_POST)

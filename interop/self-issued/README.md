@@ -12,7 +12,7 @@ Each invocation uses a fresh issuer namespace and isolated container. No hosted 
 
 ## Prepared inputs
 
-Use linux/arm64. Build the example with [`verification/examples/verify_self_issued.py`](../../verification/examples/verify_self_issued.py) against exact core/helper sources and the approved Soklet 4.0.0 JAR. Copy the four resulting JARs to a private `app` directory. Supply a JSON array of four `{ "name": "filename.jar", "sha256": "..." }` rows, using the hashes in the build's `RESULT.json`. The filenames are `self-issued-1.0.0-SNAPSHOT.jar`, `revetsec-1.0.0-SNAPSHOT.jar`, `revetsec-soklet-1.0.0-SNAPSHOT.jar`, and `soklet-4.0.0.jar`. Keep build source inventories with the receipts.
+Use linux/arm64. Build the example with [`verification/examples/verify_self_issued.py`](../../verification/examples/verify_self_issued.py) against exact core/helper sources and the approved Soklet 4.0.0 JAR. Copy the four resulting JARs to a private `app` directory. Supply a JSON array of four `{ "name": "filename.jar", "sha256": "..." }` rows, using the hashes in the build's `RESULT.json`. The filenames are `self-issued-1.0.0.jar`, `revetsec-1.0.0.jar`, `revetsec-soklet-1.0.0.jar`, and `soklet-4.0.0.jar`. Keep build source inventories with the receipts.
 
 Prepare the browser image using the existing [pinned Dockerfile and context preparation](../inspector-auth/linux/README.md). The pinned npm lock/integrity, Playwright image, Chromium and NSS package are reused. Pass an already present immutable image ID via `--image`; the default is the locally qualified image ID. A rebuilt image produces its own evidence identity. Runs never pull images or contact external services.
 

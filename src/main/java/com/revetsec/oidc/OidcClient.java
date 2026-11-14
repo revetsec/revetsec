@@ -314,7 +314,7 @@ public final class OidcClient {
 	 */
 	@CheckReturnValue
 	public @NonNull OidcUserInfoResult fetchUserInfoResult(@NonNull OidcAuthentication authentication,
-			@NonNull OidcRefreshResult refreshed) {
+			@NonNull OidcRefresh refreshed) {
 		try {
 			return OidcUserInfoResult.fromUserInfo(fetchUserInfoChecked(authentication, refreshed));
 		} catch (OidcValidationException failure) {
@@ -336,7 +336,7 @@ public final class OidcClient {
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue
-	public @NonNull OidcRefreshOutcome refreshResult(@NonNull RefreshToken refreshToken,
+	public @NonNull OidcRefreshResult refreshResult(@NonNull RefreshToken refreshToken,
 			@NonNull OidcSessionReference original) {
 		return refreshResult(refreshToken, original, TokenRequestOptions.builder().build());
 	}
@@ -353,16 +353,16 @@ public final class OidcClient {
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue
-	public @NonNull OidcRefreshOutcome refreshResult(@NonNull RefreshToken refreshToken,
+	public @NonNull OidcRefreshResult refreshResult(@NonNull RefreshToken refreshToken,
 			@NonNull OidcSessionReference original, @NonNull TokenRequestOptions options) {
 		try {
-			return OidcRefreshOutcome.fromRefreshResult(refreshChecked(refreshToken, original, options));
+			return OidcRefreshResult.fromRefresh(refreshChecked(refreshToken, original, options));
 		} catch (OidcValidationException failure) {
 			if (failure.getReason() == OidcValidationException.Reason.HMAC_SECRET_INVALID) throw failure;
-			return OidcRefreshOutcome.fromRejection(failure);
+			return OidcRefreshResult.fromRejection(failure);
 		} catch (OAuthErrorResponseException failure) {
 			if (!isEndpointRejection(failure)) throw failure;
-			return OidcRefreshOutcome.fromEndpoint(failure);
+			return OidcRefreshResult.fromEndpoint(failure);
 		}
 	}
 
@@ -413,7 +413,7 @@ public final class OidcClient {
 	 * @return checked UserInfo
 	 * @since 1.0.0
 	 */
-	private @NonNull OidcUserInfo fetchUserInfoChecked(@NonNull OidcAuthentication authentication, @NonNull OidcRefreshResult refreshed) {
+	private @NonNull OidcUserInfo fetchUserInfoChecked(@NonNull OidcAuthentication authentication, @NonNull OidcRefresh refreshed) {
 		requireNonNull(authentication); requireNonNull(refreshed);
 		if (!authentication.getSessionReference().matchesOriginalReference(refreshed.getSessionReference())) {
 			OidcValidationException failure = OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH);
@@ -433,7 +433,7 @@ public final class OidcClient {
 	 * @return tokens, retained/replacement refresh credential and optional verified ID token
 	 * @since 1.0.0
 	 */
-	private @NonNull OidcRefreshResult refreshChecked(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original,
+	private @NonNull OidcRefresh refreshChecked(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original,
 			@NonNull TokenRequestOptions options) {
 		requireNonNull(refreshToken); requireNonNull(original); requireNonNull(options);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
@@ -452,7 +452,7 @@ public final class OidcClient {
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectRefresh(failure)); throw failure;
 		}
 		TokenResponse tokens = completion.releaseTokens();
-		OidcRefreshResult result = new OidcRefreshResult(tokens, verified, refreshToken, original, this.proofOwner);
+		OidcRefresh result = new OidcRefresh(tokens, verified, refreshToken, original, this.proofOwner);
 		ObserverDispatch.dispatch(this.observer, observer -> observer.didRefreshTokens(result.getIdToken().isPresent(), tokens.getRefreshToken().isPresent()));
 		return result;
 	}
@@ -484,7 +484,7 @@ public final class OidcClient {
 	 * @throws OidcLogoutException if ownership, profile, current issuer policy, interruption or the budget fails
 	 * @since 1.0.0
 	 */
-	public @NonNull Optional<@NonNull OidcLogoutHint> logoutHintFrom(@NonNull OidcRefreshResult refreshed) {
+	public @NonNull Optional<@NonNull OidcLogoutHint> logoutHintFrom(@NonNull OidcRefresh refreshed) {
 		requireNonNull(refreshed); Deadline deadline = Deadline.fromNow(this.totalDeadline); OidcLogoutSupport.active(deadline);
 		if (!refreshed.belongsTo(this.proofOwner)) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.HINT_MISMATCH);
 		checkLogoutReference(refreshed.getSessionReference(), deadline);

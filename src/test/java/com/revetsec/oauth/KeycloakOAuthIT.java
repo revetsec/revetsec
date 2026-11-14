@@ -20,7 +20,7 @@ import com.revetsec.oidc.OidcUserInfoResult;
 
 import com.revetsec.oidc.OidcSessionReferenceParseResult;
 
-import com.revetsec.oidc.OidcRefreshOutcome;
+import com.revetsec.oidc.OidcRefreshResult;
 
 import com.revetsec.oidc.OidcAuthenticationResult;
 
@@ -39,7 +39,7 @@ import com.revetsec.oidc.OidcAuthenticationOptions;
 import com.revetsec.oidc.OidcClient;
 import com.revetsec.oidc.OidcCompatibilityMode;
 import com.revetsec.oidc.OidcObserver;
-import com.revetsec.oidc.OidcRefreshResult;
+import com.revetsec.oidc.OidcRefresh;
 import com.revetsec.oidc.OidcSessionReference;
 import com.revetsec.oidc.OidcUserInfo;
 import com.revetsec.oidc.OidcValidationException;
@@ -298,7 +298,7 @@ final class KeycloakOAuthIT {
 		StateSealer sealer = TestSealers.fromFixedKey();
 		OidcSessionReference original = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
 		OidcSessionReference stored = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSealedFormResult(original.toSealedForm(sealer, "keycloak-session", Duration.ofMinutes(5)), sealer, "keycloak-session")).getReference();
-		OidcRefreshResult result = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefreshResult();
+		OidcRefresh result = assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefresh();
 		assertTrue(result.getIdToken().isPresent()); assertFalse(result.getTokens().getAccessToken().getValue().isEmpty());
 		assertSame(stored, result.getSessionReference()); assertTrue(result.getTokens().getParameter("id_token").isEmpty());
 		assertEquals(auth.getSubject(), result.getIdToken().orElseThrow().getClaims().getSubject().orElseThrow());

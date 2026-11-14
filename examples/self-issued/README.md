@@ -43,7 +43,7 @@ its runtime dependencies in `target/lib`. After setting the trusted startup
 configuration below, launch it with:
 
 ```sh
-java -jar examples/self-issued/target/self-issued-1.0.0-SNAPSHOT.jar
+java -jar examples/self-issued/target/self-issued-1.0.0.jar
 ```
 
 Keep the JAR beside its `lib` directory. Provided annotations and JUnit are not
@@ -55,7 +55,7 @@ Build the demo-key utility with `mvn -f examples/tools/pom.xml package` if you s
 
 ```sh
 mkdir -m 700 /absolute/private/issuer-keys
-java -jar examples/tools/target/example-tools-1.0.0-SNAPSHOT.jar \
+java -jar examples/tools/target/example-tools-1.0.0.jar \
   /absolute/private/issuer-keys/login \
   /absolute/private/issuer-keys/client \
   /absolute/private/issuer-keys/resource
@@ -66,7 +66,7 @@ Set `REVETSEC_ISSUER_LOGIN_KEY_FILE`, `REVETSEC_ISSUER_CLIENT_KEY_FILE` and `REV
 HTTPS requires a trusted TLS edge. Configure `REVETSEC_ISSUER_ORIGIN` (default `https://localhost:8443`) and `REVETSEC_ISSUER_RESOURCE` (default origin plus `/mcp`) to exact public locations. Route `/mcp` to the MCP listener and other routes to the HTTP listener. The default launcher binds IPv4 loopback; the two-node fixture can bind its second node on IPv6 loopback. The pinned Soklet artifact requires the public MCP port to equal the MCP listener port, even for explicitly allowed hostnames. Set `REVETSEC_ISSUER_MCP_PORT` to the configured resource port. Run the TLS edge on a separate address or in another network namespace so it can use the same public port without a bind conflict, and preserve the public Host header. The local browser fixture uses an IPv6 loopback edge and IPv4 loopback application. Never derive issuer/resource identity from forwarded headers. Set `REVETSEC_ISSUER_REDIRECT` to your client's registered URI; `https://client.example/callback` is only an illustrative default. HTTPS returns match the exact registered URI. Native numeric-loopback returns may vary only the port; the checked actual URI is retained for consent, redirect and token redemption. Set `REVETSEC_ISSUER_BROWSER_ORIGIN` to the explicitly trusted client browser origin when it differs from the registration origin (for example, a native callback's actual port). It defaults to the registration origin and accepts only an HTTPS origin or numeric IPv4 loopback HTTP origin. It does not add callback registrations or relax app login/consent Origin checks.
 
 ```sh
-java -jar examples/self-issued/target/self-issued-1.0.0-SNAPSHOT.jar
+java -jar examples/self-issued/target/self-issued-1.0.0.jar
 ```
 
 Configure a client using `/.well-known/oauth-authorization-server`. Authorization requires S256 PKCE and the exact resource. The browser displays the checked client/redirect/scopes and accepts the login file's key. Login rotates its cookie and CSRF value while retaining an independent server-side browser binding. After consent the application supplies the fixed subject and freshly checked requested scopes. Every login/consent form also carries an independent action nonce bound to its exact interaction; old tabs cannot approve replacement clients. Form pages use `Referrer-Policy: same-origin` so normal browser form POSTs retain the exact Origin check; missing or opaque `null` origins still fail. Consent’s CSP permits only the app and library-checked interaction callback origin, including the browser’s redirect check. Credential-bearing redirects retain `Referrer-Policy: no-referrer`. Browser controls cannot supply another subject/resource/return target. Logout ends the browser session; revoke grants separately.

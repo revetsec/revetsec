@@ -144,7 +144,7 @@ public final class PasskeyApp {
         WebAuthnRelyingParty.Builder relyingPartyBuilder = WebAuthnRelyingParty.withRelyingPartyId(relyingPartyId)
                 .relyingPartyName("Revetsec Passkey Demo").allowedOrigins(Set.of(origin))
                 .credentialNamespace(namespace)
-                .store(InMemoryWebAuthnStore.fromLimits(1024, 8_388_608))
+                .store(InMemoryWebAuthnStore.fromLimits(1024, 8_388_608L))
                 .stateSealer(sealer).recoveryGate(freshProcessOnly);
         var diagnostics = relyingPartyBuilder.configurationDiagnostics();
         if (!diagnostics.isEmpty()) throw new IllegalStateException("Passkey builder configuration: " + diagnostics);

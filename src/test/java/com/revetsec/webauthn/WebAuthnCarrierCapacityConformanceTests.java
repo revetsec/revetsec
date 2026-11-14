@@ -43,7 +43,7 @@ final class WebAuthnCarrierCapacityConformanceTests {
  private static final String RP = "login.example.com";
 
  @Test void exactEightMutationsRemainSupportedAndNineRefuseBeforeCommit() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(8, 8);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(8, 8L);
   Set<WebAuthnStoreKey> keys = new LinkedHashSet<>();
   for (int index = 0; index < 8; index++) keys.add(credential(index));
   WebAuthnStoreSnapshot empty = snapshot(store, keys);
@@ -76,7 +76,7 @@ final class WebAuthnCarrierCapacityConformanceTests {
  }
 
  @Test void sequenceExhaustionAtLongMaxRefusesWithoutAnyPartialStorageMutation() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 16);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 16L);
   WebAuthnStoreKey key = credential(90);
   WebAuthnStoreSnapshot before = snapshot(store, Set.of(key));
   WebAuthnStoreWrite insert = write(before,

@@ -293,11 +293,11 @@ final class OidcIssuerPolicyTests {
 			AtomicInteger calls=new AtomicInteger();OidcIssuerPolicy policy=OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant->{calls.incrementAndGet();return true;});
 			OidcClient client=client(server,policy).build();OidcAuthentication auth=login(server,client,TENANT);
 			OidcSessionReference restored=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
-			respond(server,"/token","application/json",response(null));OidcRefreshResult refreshed=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored)).getRefreshResult();
+			respond(server,"/token","application/json",response(null));OidcRefresh refreshed=assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored)).getRefresh();
 			assertTrue(refreshed.getIdToken().isEmpty());assertSame(restored,refreshed.getSessionReference());assertEquals(1,calls.get());
 			respond(server,"/userinfo","application/json","{\"sub\":\"subject\"}");assertEquals(ACTUAL,assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth,refreshed)).getUserInfo().getIssuer());assertEquals(2,calls.get());
 			OidcSessionReference invalid=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm().replace(ACTUAL,"https://login.microsoftonline.com/v2.0"))).getReference();
-			int posts=server.getHitCount("/token");assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),invalid));assertEquals(posts,server.getHitCount("/token"));assertEquals(2,calls.get());
+			int posts=server.getHitCount("/token");assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),invalid));assertEquals(posts,server.getHitCount("/token"));assertEquals(2,calls.get());
 		}
 	}
 
@@ -309,8 +309,8 @@ final class OidcIssuerPolicyTests {
 				OidcClient client=client(server,policy).build();OidcAuthentication auth=login(server,client,TENANT);Map<String,String> claims=claims(TENANT,NONCE);claims.remove("nonce");
 				switch(mode){case "aud-array"->claims.put("aud","[\"client\"]");case "other-tenant"->{claims.put("iss",JsonText.string(issuer(OTHER)));claims.put("tid",JsonText.string(OTHER));}case "sub"->claims.put("sub","\"other\"");case "azp"->claims.put("azp","\"client\"");case "older-iat"->claims.put("iat",Long.toString(NOW.minusSeconds(1).getEpochSecond()));case "nonce"->claims.put("nonce","\"other\"");case "auth-time"->claims.put("auth_time",Long.toString(NOW.getEpochSecond()));case "c-hash"->claims.put("c_hash","\"bad\"");default->{} }
 				respond(server,"/token","application/json",response(sign(claims,Algorithm.RS256,false)));OidcSessionReference restored=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
-				if(mode.equals("valid")||mode.equals("aud-array")){OidcRefreshResult refreshed=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored)).getRefreshResult();assertEquals(ACTUAL,refreshed.getIdToken().orElseThrow().getClaims().getIssuer().orElseThrow());assertSame(restored,refreshed.getSessionReference());assertEquals(2,calls.get());}
-				else {assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored));assertEquals(1,calls.get());}
+				if(mode.equals("valid")||mode.equals("aud-array")){OidcRefresh refreshed=assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored)).getRefresh();assertEquals(ACTUAL,refreshed.getIdToken().orElseThrow().getClaims().getIssuer().orElseThrow());assertSame(restored,refreshed.getSessionReference());assertEquals(2,calls.get());}
+				else {assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored));assertEquals(1,calls.get());}
 				assertEquals(2,server.getHitCount("/token"));for(TestHttpsServer.RecordedRequest request:server.getRequests("/token"))assertEquals(server.uri("/token").getRawPath(),request.getUri().getRawPath());
 			}
 		}));

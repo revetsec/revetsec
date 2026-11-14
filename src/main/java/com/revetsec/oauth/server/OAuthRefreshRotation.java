@@ -81,7 +81,7 @@ final class OAuthRefreshRotation {
    OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, refresh.text("grantId"));
    OAuthAuthorizationRecord grant = credentialRead.grant();
    if (!refresh.sameLineage(grant) || !grant.refresh()
-     || !grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
+     || (!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED"))
      || !refresh.horizon().equals(grant.horizon()) || refresh.expires().isAfter(grant.expires())) throw new OAuthStoreFailure(CORRUPT_STATE);
    // No destructive reuse action precedes fresh authentication and exact owner/security/resource binding.
    if (!grant.text("clientId").equals(client.getClientId()) || !OAuthAuthorizationRecord.equalDigest(grant.text("clientHash"), fingerprint)
@@ -142,7 +142,7 @@ final class OAuthRefreshRotation {
   OAuthStoreCoordinator.Session session = observed.session();
   OAuthAuthorizationRecord refresh = observed.credential(), grant = observed.grant();
   if (!refresh.sameLineage(grant) || !grant.refresh()
-    || !grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
+    || (!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED"))
     || !refresh.horizon().equals(grant.horizon()) || refresh.expires().isAfter(grant.expires())) throw new OAuthStoreFailure(CORRUPT_STATE);
   if (!grant.text("resource").equals(request.required("resource")) || !refresh.matchesIssuer(session.issuer())
     || !grant.matchesSubject(session.subject(grant.text("subject")))) throw invalid();

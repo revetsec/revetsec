@@ -100,6 +100,17 @@ final class WebAuthnCeremonyRecordCodecTests {
         }
     }
 
+    @Test void assignsStableWireCodesWithoutDependingOnEnumOrder() throws Exception {
+        WebAuthnRecordCodec envelopes = recordCodec();
+        WebAuthnCeremonyRecordCodec codec = new WebAuthnCeremonyRecordCodec(NAMESPACE, RP, envelopes);
+        assertWireKind(codec, envelopes, WebAuthnCeremonyState.registration(
+                ID, CHALLENGE, BINDING, ORIGINS, HANDLE, NOW, EXPIRY), 1);
+        assertWireKind(codec, envelopes, WebAuthnCeremonyState.discoverableAuthentication(
+                ID, CHALLENGE, BINDING, ORIGINS, NOW, EXPIRY), 2);
+        assertWireKind(codec, envelopes, WebAuthnCeremonyState.accountReauthentication(
+                ID, CHALLENGE, BINDING, ORIGINS, HANDLE, "transfer 123", NOW, EXPIRY), 3);
+    }
+
     @Test void rejectsWrongAddressNamespaceOriginAndExpiry() throws Exception {
         var codec = ceremonyCodec();
         var pending = WebAuthnCeremonyState.registration(ID, CHALLENGE, BINDING, ORIGINS, HANDLE, NOW, EXPIRY);
@@ -124,6 +135,7 @@ final class WebAuthnCeremonyRecordCodecTests {
                 change(valid, 0, 2), // version
                 change(valid, 1, 2), // status
                 change(valid, 2, 0), // kind
+                change(valid, 2, 4), // unknown future kind under version one
                 change(valid, 2, 2), // discoverable may not carry an account handle
                 change(valid, 2, 3), // reauth requires a purpose
                 change(valid, 107, 127), // issued nanoseconds out of range
@@ -223,6 +235,20 @@ final class WebAuthnCeremonyRecordCodecTests {
         byte[] result = new byte[32];
         for (int index = 0; index < result.length; index++) result[index] = (byte) (first + index);
         return result;
+    }
+
+    private static void assertWireKind(@NonNull WebAuthnCeremonyRecordCodec codec,
+            @NonNull WebAuthnRecordCodec envelopes, @NonNull WebAuthnCeremonyState state,
+            int expectedKind) throws Exception {
+        WebAuthnCeremonyRecordCodec.Encoded encoded = codec.encode(state, NOW);
+        byte[] payload = envelopes.openAdmitted(encoded.key(), encoded.sealedBytes(), CLOCK);
+        try {
+            assertEquals(1, payload[0] & 0xff);
+            assertEquals(0, payload[1] & 0xff);
+            assertEquals(expectedKind, payload[2] & 0xff);
+        } finally {
+            Arrays.fill(payload, (byte) 0);
+        }
     }
 
     private static byte @NonNull [] change(byte @NonNull [] bytes, int offset, int replacement) {

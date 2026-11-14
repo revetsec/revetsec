@@ -149,7 +149,7 @@ def main():
     source_list.write_text("\n".join(str(p) for p in [*sorted((example / "src").rglob("*.java")), checker]) + "\n")
     run("explicit-nullability", [args.java_home / "bin/java", "-cp", audit_cp.read_text(), checker, source_list, audit_cp, example / "target/nullability-audit.json"], example)
     runtime = [Path(x) for x in (example / "target/runtime-classpath.txt").read_text().strip().split(os.pathsep)]
-    if len(runtime) != 1 or runtime[0].name != "revetsec-1.0.0-SNAPSHOT.jar":
+    if len(runtime) != 1 or runtime[0].name != "revetsec-1.0.0.jar":
         raise RuntimeError("Example runtime must contain exactly the core dependency JAR")
     cp = os.pathsep.join([str(example / "target/test-classes"), str(example / "target/classes"), test_cp.read_text().strip()])
     run("redacted-capture", [args.java_home / "bin/java", "-Dexample.tlsStore=" + str(store), "-cp", cp,

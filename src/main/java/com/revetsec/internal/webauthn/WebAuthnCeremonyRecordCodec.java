@@ -40,6 +40,9 @@ import static java.util.Objects.requireNonNull;
 @Immutable
 final class WebAuthnCeremonyRecordCodec {
     private static final int VERSION = 1;
+    private static final int REGISTRATION_KIND_CODE = 1;
+    private static final int DISCOVERABLE_AUTHENTICATION_KIND_CODE = 2;
+    private static final int ACCOUNT_REAUTHENTICATION_KIND_CODE = 3;
     private static final int FIXED_BYTES = 3 + 32 + 32 + 32 + 8 + 4 + 8 + 4 + 1 + 1 + 1;
     private static final int MAXIMUM_PAYLOAD_BYTES = 2_400;
 
@@ -73,7 +76,7 @@ final class WebAuthnCeremonyRecordCodec {
         try {
             ByteBuffer writer = ByteBuffer.wrap(payload);
             writer.put((byte) VERSION).put((byte) (state.isConsumed() ? 1 : 0))
-                    .put((byte) (state.kind().ordinal() + 1));
+                    .put((byte) kindCode(state.kind()));
             writer.put(id).put(challenge).put(binding);
             putInstant(writer, state.issuedAt());
             putInstant(writer, state.expiresAt());
@@ -111,8 +114,9 @@ final class WebAuthnCeremonyRecordCodec {
             int version = reader.get() & 0xff;
             int status = reader.get() & 0xff;
             int kind = reader.get() & 0xff;
-            if (version != VERSION || status > 1 || kind < 1 || kind > 3)
+            if (version != VERSION || status > 1)
                 throw new WebAuthnRecordException();
+            WebAuthnCeremonyState.Kind ceremonyKind = kindFromCode(kind);
             byte[] id = new byte[32];
             byte[] challenge = new byte[32];
             byte[] binding = new byte[32];
@@ -158,7 +162,7 @@ final class WebAuthnCeremonyRecordCodec {
                 String actionPurpose = purposeLength == 0 ? null : new String(purpose, StandardCharsets.US_ASCII);
                 for (byte value : purpose)
                     if (value < 0x20 || value > 0x7e) throw new WebAuthnRecordException();
-                return WebAuthnCeremonyState.restored(WebAuthnCeremonyState.Kind.values()[kind - 1],
+                return WebAuthnCeremonyState.restored(ceremonyKind,
                         id, challenge, binding, originSet, handleLength == 0 ? null : handle,
                         actionPurpose, issuedAt, expiresAt, status == 1);
             } finally {
@@ -177,6 +181,26 @@ final class WebAuthnCeremonyRecordCodec {
 
     private void validateOrigins(@NonNull Set<@NonNull String> origins) {
         new WebAuthnClientData(this.relyingPartyId, origins, WebAuthnClientData.DEFAULT_MAXIMUM_BYTES);
+    }
+
+    private static int kindCode(WebAuthnCeremonyState.@NonNull Kind kind) {
+        return switch (kind) {
+            case REGISTRATION -> REGISTRATION_KIND_CODE;
+            case DISCOVERABLE_AUTHENTICATION -> DISCOVERABLE_AUTHENTICATION_KIND_CODE;
+            case ACCOUNT_REAUTHENTICATION -> ACCOUNT_REAUTHENTICATION_KIND_CODE;
+        };
+    }
+
+    private static WebAuthnCeremonyState.@NonNull Kind kindFromCode(int code)
+            throws WebAuthnRecordException {
+        return switch (code) {
+            case REGISTRATION_KIND_CODE -> WebAuthnCeremonyState.Kind.REGISTRATION;
+            case DISCOVERABLE_AUTHENTICATION_KIND_CODE ->
+                    WebAuthnCeremonyState.Kind.DISCOVERABLE_AUTHENTICATION;
+            case ACCOUNT_REAUTHENTICATION_KIND_CODE ->
+                    WebAuthnCeremonyState.Kind.ACCOUNT_REAUTHENTICATION;
+            default -> throw new WebAuthnRecordException();
+        };
     }
 
     private static void putInstant(@NonNull ByteBuffer writer, @NonNull Instant instant) {

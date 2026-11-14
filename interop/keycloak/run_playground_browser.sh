@@ -21,8 +21,8 @@ umask 077
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SOKLET_JAR=${SOKLET_JAR:?Set SOKLET_JAR to the pinned Soklet 4.0.0 JAR}
 BROWSER_SECCOMP=${BROWSER_SECCOMP:?Set BROWSER_SECCOMP to the derived browser seccomp profile}
-CORE_JAR=${CORE_JAR:-$ROOT/target/revetsec-1.0.0-SNAPSHOT.jar}
-ADAPTER_JAR=${ADAPTER_JAR:-$ROOT/../revetsec-soklet/target/revetsec-soklet-1.0.0-SNAPSHOT.jar}
+CORE_JAR=${CORE_JAR:-$ROOT/target/revetsec-1.0.0.jar}
+ADAPTER_JAR=${ADAPTER_JAR:-$ROOT/../revetsec-soklet/target/revetsec-soklet-1.0.0.jar}
 PLAYGROUND_CLASSES=${PLAYGROUND_CLASSES:-$ROOT/examples/playground/target/classes}
 for path in "$SOKLET_JAR" "$BROWSER_SECCOMP" "$CORE_JAR" "$ADAPTER_JAR"; do
   if [ ! -f "$path" ]; then echo 'A required local artifact is missing.' >&2; exit 1; fi

@@ -694,7 +694,7 @@ final class OAuthIssuerSharedClockTests {
   else{assertInstanceOf(OAuthTokenResult.Rejected.class,result);if(replacement.get()!=null){var retained=requireNonNull(f.store.rows.get(requireNonNull(replacement.get()).getKey()));assertEquals(requireNonNull(replacement.get()).getVersion(),retained.getVersion());assertEquals(requireNonNull(replacement.get()).toSealedForm(),retained.toSealedForm());}}
   assertTrue(requireNonNull(held.get()).compareTo(Duration.ofMillis(120))>=0);assertFalse(OAuthIssuerClockHealthTestProvider.hasUnconsumedHook());
   assertEquals(fault.equals("CHURN")?2:1,OAuthIssuerClockHealthTestProvider.signOperations());assertEquals(policies+(fault.equals("CHURN")?2:1),f.policies);
-  int extra=success||fault.equals("ISSUER")||fault.equals("SUBJECT")||refreshing&&fault.equals("GRANT")?1:0;assertEquals(commits+extra,f.store.commits);
+	  int extra=success||fault.equals("ISSUER")||fault.equals("SUBJECT")||(refreshing&&fault.equals("GRANT"))?1:0;assertEquals(commits+extra,f.store.commits);
   if(!success)assertEquals(fault.equals("CODE")?"CANCELLED":refreshing?"ACTIVE":"UNUSED",f.record(requireNonNull(f.store.rows.get(credentialKey))).text("status"));
   System.err.println("ENG04 holdNanos="+requireNonNull(held.get()).toNanos()+" scenario="+parts[1]+"/"+fault+" rowKind="+(fault.equals("GRANT")?"GRANT":fault.equals("ISSUER")?"ISSUER_STATE":fault.equals("SUBJECT")?"SUBJECT_STATE":credentialKey.getKind().name())+" signs="+OAuthIssuerClockHealthTestProvider.signOperations()+" result="+(success?"SUCCEEDED":"REJECTED"));
  }

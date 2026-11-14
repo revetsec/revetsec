@@ -159,8 +159,8 @@ final class WebAuthnCloseoutContractTests {
 
     @Test void storeLimitsAndInterruptedCallsLeaveAuthoritativeStateUntouched() {
         for (int[] limits : new int[][] {{0,1},{65537,1},{1,0},{1,268435457}})
-            assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(limits[0],limits[1]));
-        var store = InMemoryWebAuthnStore.fromLimits(1,1); var key = WebAuthnStoreKey.forCredential("tenant",RP,new byte[] {1});
+            assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(limits[0],(long) limits[1]));
+        var store = InMemoryWebAuthnStore.fromLimits(1,1L); var key = WebAuthnStoreKey.forCredential("tenant",RP,new byte[] {1});
         var absent=assertInstanceOf(WebAuthnStoreReadResult.Available.class,store.read(Set.of(key),Duration.ofSeconds(1))).getSnapshot();
         var insertion=ScriptedWebAuthnStore.write(absent,List.of(WebAuthnStoreWrite.Mutation.insert(key,new byte[] {1})));
         assertEquals(WebAuthnStoreCommitResult.UNAVAILABLE,store.compareAndCommit(insertion,Duration.ofNanos(-1)).getStatus());

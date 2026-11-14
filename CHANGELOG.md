@@ -4,11 +4,11 @@ All notable changes to Revetsec are recorded in this file.
 
 Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, Security and Migration Notes sections as needed. A released security fix names its GHSA or CVE ID when assigned; pre-release hardening without an advisory names its review. Changes that reject previously accepted insecure input, or that remove an algorithm from a default, are listed under Security (see the security-tightening policy in [COMPATIBILITY.md](COMPATIBILITY.md)).
 
-## Unreleased
-
-Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0.
+## 1.0.0 (2026-11-13)
 
 ### Changed
+- OIDC refresh naming now follows the library's value/result convention: `OidcRefresh` is the checked success value, while sealed `OidcRefreshResult` carries `Succeeded`, local `Rejected` and `RejectedEndpoint` outcomes. `Succeeded.getRefresh()` releases the value. The former `OidcRefreshOutcome` name and `getRefreshResult()` accessor are removed before 1.0.
+- Public numeric limits, parameters and returns use non-null boxed types consistently; the public-API contract now rejects primitive fields, parameters and value returns other than `equals`/`hashCode`. This is an intentional pre-1.0 source/binary signature change.
 - `WebAuthnRelyingParty.completeReauthenticationResult` now returns a restricted five-outcome `WebAuthnReauthenticationResult` rather than the general authentication result. Only success releases an account/RP/credential/action/ceremony-bound proof; applications match the ceremony to their original pending action and still authorize and consume that one-use action. The general authentication completion API is unchanged. This is an intentional pre-1.0 source and binary signature change.
 - The complete Soklet Playground now selects a restrictive SCIM service-client directory with explicit alpha/beta tenant roles, field/query policies, exact write versions and bounded Argon2id work. Canonical tenant paths retain an alpha alias; custom SCIM base settings refuse explicitly. The earlier administrative interoperability fixture remains separate. See the [service-client profile](docs/scim-restrictive-service-clients.md).
 - `RevetsecException.isTemporaryCondition()` replaces `isTransient()` without an alias. Fixed classifications and serialized fields remain unchanged; neither flag value grants replay permission or establishes whether earlier work had effects. See the [operation effect matrix](docs/failure-effects.md).

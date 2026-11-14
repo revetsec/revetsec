@@ -65,7 +65,7 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	}
 
 	@SuppressWarnings("unchecked")
-	InMemoryPendingAuthorizationStore(@NonNull Builder builder, @NonNull Map<@NonNull ?, @NonNull ?> entries) {
+	InMemoryPendingAuthorizationStore(@NonNull Builder builder, @NonNull Map<?, ?> entries) {
 		if (builder.maximumOpaqueRecordBytes > builder.maximumChargedBytes)
 			throw new IllegalArgumentException("One record limit must not exceed the total store byte limit.");
 		if (!entries.isEmpty()) throw new IllegalArgumentException("Initial pending-authorization storage must be empty.");

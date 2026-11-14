@@ -79,7 +79,7 @@ final class OidcHmacTests {
 						String compact=sign(algorithm,claims,secret);respond(server,compact);OidcAuthentication auth=assertInstanceOf(OidcAuthenticationResult.Succeeded.class, complete(client,redirect)).getAuthentication();
 						assertEquals(SUBJECT,auth.getSubject());assertEquals(compact,auth.getIdToken().toCompactSerialization());assertTrue(auth.getTokens().getParameter("id_token").isEmpty());
 						assertFalse(auth.toString().contains(secret));assertFalse(auth.getSessionReference().toSerializedForm().contains(secret));
-						claims.remove("nonce");claims.remove("c_hash");respond(server,sign(algorithm,claims,secret));OidcRefreshResult result=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),auth.getSessionReference())).getRefreshResult();
+						claims.remove("nonce");claims.remove("c_hash");respond(server,sign(algorithm,claims,secret));OidcRefresh result=assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),auth.getSessionReference())).getRefresh();
 						assertTrue(result.getIdToken().isPresent());assertSame(auth.getSessionReference(),result.getSessionReference());assertEquals(2,server.getHitCount("/token"));assertEquals(0,server.getHitCount("/jwks"));
 						QueryParameters form=QueryParameters.parse(server.getRequests("/token").get(0).getBodyAsString());
 						if(method.equals("post")) assertEquals(List.of(secret),form.getValues("client_secret"));else assertTrue(form.getValues("client_secret").isEmpty());
@@ -99,7 +99,7 @@ final class OidcHmacTests {
 					}).build();
 			assertEquals(1,calls.get());AuthorizationRedirect redirect=client.beginAuthentication();Map<String,String> claims=claims(server);claims.put("nonce",JsonText.string(nonce(redirect)));respond(server,sign(JwsAlgorithm.HS256,claims,SECRET));
 			OidcAuthentication auth=assertInstanceOf(OidcAuthenticationResult.Succeeded.class, complete(client,redirect)).getAuthentication();assertEquals(2,calls.get());
-			claims.remove("nonce");respond(server,sign(JwsAlgorithm.HS256,claims,SECRET+"rotated"));OidcRefreshResult result=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),auth.getSessionReference())).getRefreshResult();assertEquals(3,calls.get());assertTrue(result.getIdToken().isPresent());
+			claims.remove("nonce");respond(server,sign(JwsAlgorithm.HS256,claims,SECRET+"rotated"));OidcRefresh result=assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),auth.getSessionReference())).getRefresh();assertEquals(3,calls.get());assertTrue(result.getIdToken().isPresent());
 			assertEquals(List.of("build:HMAC_ID_TOKENS","use:HMAC_ID_TOKENS","use:HMAC_ID_TOKENS"),events);assertEquals(0,server.getHitCount("/jwks"));
 			current.set("short");int requests=server.getRequests().size();IllegalArgumentException failure=assertThrows(IllegalArgumentException.class,()->client.refreshResult(result.getRefreshToken(),result.getSessionReference()));assertNull(failure.getCause());assertFalse(failure.toString().contains(SECRET));assertEquals(requests,server.getRequests().size());assertEquals(4,calls.get());
 		}
@@ -139,12 +139,12 @@ final class OidcHmacTests {
 	void hmacRefreshRetainsOriginalNonceAndRejectsSubjectDriftBeforeTokenRelease() throws Exception {
 		try(TestHttpsServer server=TestHttpsServer.start()) {
 			OidcClient client=builder(server,JwsAlgorithm.HS384).build();AuthorizationRedirect redirect=client.beginAuthentication();Map<String,String> claims=claims(server);claims.put("nonce",JsonText.string(nonce(redirect)));respond(server,sign(JwsAlgorithm.HS384,claims,SECRET));OidcAuthentication auth=assertInstanceOf(OidcAuthenticationResult.Succeeded.class, complete(client,redirect)).getAuthentication();
-			claims.put("aud","[\"client\"]");respond(server,sign(JwsAlgorithm.HS384,claims,SECRET));OidcRefreshResult result=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),auth.getSessionReference())).getRefreshResult();assertTrue(result.getIdToken().isPresent());
+			claims.put("aud","[\"client\"]");respond(server,sign(JwsAlgorithm.HS384,claims,SECRET));OidcRefresh result=assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),auth.getSessionReference())).getRefresh();assertTrue(result.getIdToken().isPresent());
 			for(String name:List.of("sub","nonce","auth_time")) {
 				Map<String,String> changed=new LinkedHashMap<>(claims);changed.put(name,name.equals("auth_time")?Long.toString(NOW.minusSeconds(1).getEpochSecond()):"\"other\"");String compact=sign(JwsAlgorithm.HS384,changed,SECRET);respond(server,compact);
-				OidcRefreshOutcome.Rejected failure=assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(result.getRefreshToken(),result.getSessionReference()));assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,failure.getReason());assertSafe(failure,compact);
+				OidcRefreshResult.Rejected failure=assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(result.getRefreshToken(),result.getSessionReference()));assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH,failure.getReason());assertSafe(failure,compact);
 			}
-			respond(server,null);assertTrue(assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(result.getRefreshToken(),result.getSessionReference())).getRefreshResult().getIdToken().isEmpty());assertEquals(0,server.getHitCount("/jwks"));
+			respond(server,null);assertTrue(assertInstanceOf(OidcRefreshResult.Succeeded.class, client.refreshResult(result.getRefreshToken(),result.getSessionReference())).getRefresh().getIdToken().isEmpty());assertEquals(0,server.getHitCount("/jwks"));
 		}
 	}
 

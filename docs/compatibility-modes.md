@@ -1,6 +1,6 @@
 # Compatibility Modes
 
-**Status: pre-release.** The registry below describes implemented JOSE, OAuth, OIDC, SAML and SCIM switches. Release qualification remains open.
+**Status: 1.0.0 registry.** The registry below describes the JOSE, OAuth, OIDC, SAML and SCIM switches in the first compatibility release.
 
 A compatibility mode is a named, explicit relaxation that lets Revetsec work with a provider or a deployment that departs from a specification or from Revetsec's defaults. The rules for every mode:
 
@@ -23,7 +23,7 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Risk:** a token the same issuer issued for another application is accepted. Use it only when the issuer serves this application alone.
 - **Safeguards:** it cannot be combined with `expectedAudiences`: setting both makes `build()` throw [`IllegalArgumentException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/IllegalArgumentException.html). Without it, `build()` throws [`IllegalStateException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/IllegalStateException.html) unless expected audiences are set. It is reported to [`JoseObserver`](https://javadoc.revetsec.com/com/revetsec/jose/JoseObserver.html)`.didAcceptAnyAudience(issuer)` when the validator is built and on every `validateResult()` call, whatever the outcome.
 - **Tests:** `jose.JwtValidatorBuilderTests` (`missingRequiredSettingsAreIllegalState`, `audienceSettingsThatConflictOrAreEmptyAreIllegalArguments` and `acceptingAnyAudienceIsObservedAtBuild`), `jose.JoseObserverTests.acceptingAnyAudienceIsObservedOnEveryValidation`, and, for the disabled state, `jose.JwtValidatorClaimsTests.theAudienceMustNameAnExpectedAudience`.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### `acknowledgeUnpatchedRuntime(true)`
 
@@ -53,7 +53,7 @@ All five public entry points and their current behavior:
 - [OidcAuthenticationFlowTests](../src/test/java/com/revetsec/oidc/OidcAuthenticationFlowTests.java): `nullableFlagsRestoreStrictDefaults` exercises true-to-null reset on the test JVM. OIDC's runtime-floor/observer forwarding is established by the linked source and underlying OAuth/source checks; there is no direct OIDC version-injection build seam.
 - [OAuthAuthorizationServerTests](../src/test/java/com/revetsec/oauth/server/OAuthAuthorizationServerTests.java): `enabledClientMetadataConstructionRequiresAcknowledgmentOnUnpatchedRuntime` covers CIMD-off construction, CIMD-on refusal, explicit opt-in and at-floor construction.
 
-The old-version checks inject `Runtime.Version` values on the test JVM; they do not qualify execution on an actual vulnerable runtime. This registry documents current per-role behavior and does not add an issuer observer hook or broaden release qualification. **Added in:** 1.0.0 (unreleased).
+The old-version checks inject `Runtime.Version` values on the test JVM; they do not qualify execution on an actual vulnerable runtime. This registry documents current per-role behavior and does not add an issuer observer hook or broaden release qualification. **Added in:** 1.0.0.
 
 ### [`ClientSecretBasicEncoding`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientSecretBasicEncoding.html)`.UNENCODED`
 
@@ -62,7 +62,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Risk:** some credentials become ambiguous to a provider parser, especially a client ID containing `:`. Use `FORM_URLENCODED`, the default, unless provider evidence requires the alternative.
 - **Safeguards:** the mode is selected per [`ClientAuthentication`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAuthentication.html) instance. [`OAuthObserver`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthObserver.html)`.didUseUnencodedBasic()` is called when its client is built and on every token or revocation request that uses it, with no credential value.
 - **Tests:** `oauth.ClientAuthenticationTests.explicitUnencodedCompatibilityChangesBytes`, `unencodedBasicIsObservedAtBuildAndUse`, and `basicFormEncodesBothFieldsBeforeJoining` (default mode).
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`OidcCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcCompatibilityMode.html)`.HMAC_ID_TOKENS`
 
@@ -73,7 +73,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Safeguards:** each validation uses the secret actually sent in that request's client authentication, even if the supplier rotates before the response is verified. HMAC verification does no key lookup and HMAC-only warm-up does not fetch JWKS. Tokens with more than one audience entry are rejected, including trusted additional audiences and duplicate entries. Every normal signature, claim, nonce/hash and refresh-continuity check remains required. Raw secrets/ID tokens stay inside the call until validation succeeds, and are absent from result string forms and observer events.
 - **Observation:** [`OidcObserver`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcObserver.html)`.didEnableCompatibilityMode(mode)` reports enabled modes after successful build. `didUseCompatibilityMode(mode)` reports an actual allowlisted, structurally valid HMAC verification attempt, including a signature or later profile failure. An asymmetric token does not produce a HMAC-use event. Observer failures use the existing containment rules.
 - **Tests:** `oidc.OidcHmacTests`: `optInRequiresConfidentialAuthenticationAndUtf8HashLength`, `eachHmacAlgorithmUsesExactUtf8SecretWithBasicOrPostAndNoKeys`, `supplierSnapshotSurvivesRotationAndIsReadOnceAtBuildAndOncePerPost`, `hmacStillChecksClaimsHashesSignatureAndExactAudience`, `hmacRefreshRetainsOriginalNonceAndRejectsSubjectDriftBeforeTokenRelease`, `rsaDerPemAndJwkBytesAreNeverHmacKeys`, `mixedAllowlistUsesPublicKeysOnlyForRsaAndModeDoesNotChangeDefaults`, and `lazyDiscoveryIntersectsHmacAndWarmUpFetchesNoJwks`.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### `acknowledgeGlobalSecureValidationDisabled(true)`
 
@@ -82,7 +82,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Risk:** other XML-signature consumers in the same JVM may inherit the disabled global setting. Audit them separately.
 - **Safeguards:** false or null clears the acknowledgment. [`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html)`.didAcknowledgeGlobalSecureValidationDisabled()` reports its use after a successful build without carrying the property value or message data.
 - **Tests:** `saml.SamlConfigurationBoundaryTests.disabledGlobalSignatureValidationRequiresAnObservedAcknowledgment` and `internal.xml.EnvelopedSignatureVerifierTests.explicitVerificationContextWorksWithGlobalSecureValidationDisabled`.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.SHA1_SIGNATURES`
 
@@ -90,7 +90,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Effect:** accepts RSA-SHA1 XML and Redirect signatures from that connection. The default rejects them. It does not enable HMAC, unsigned responses or RSA1_5 key transport.
 - **Risk:** SHA-1 collision resistance is broken. Use this mode only for a partner that cannot be upgraded yet, with a dedicated connection and short migration plan.
 - **Tests:** `saml.SamlIndependentFixtureTests`, `saml.SamlScriptedMintedFixtureTests` and `saml.SamlXswMutationTests` exercise the default and selected path.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.AES_CBC_ENCRYPTION`
 
@@ -98,7 +98,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Effect:** permits AES-CBC assertion decryption only after a trusted IdP signature covers the whole Response. It never accepts CBC solely under an Assertion signature. SP metadata advertises GCM, not CBC.
 - **Risk:** CBC encryption does not authenticate the ciphertext. Prefer changing the IdP to GCM or to sign the whole Response before enabling this mode.
 - **Tests:** `saml.SamlScriptedMintedFixtureTests` covers AES-128/192/256-CBC, the default rejection, and an unsigned-Response negative. `saml.SimpleSamlCapturedResponseTests` replays real SimpleSAMLphp 2.5.0 signed and assertion-only CBC Responses.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.UNSOLICITED_RESPONSES`
 
@@ -106,7 +106,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Effect:** allows IdP-initiated POST SSO without a pending AuthnRequest. RelayState is rejected and the response age is capped at two minutes before clock skew. Signature, issuer, destination, audience, bearer, replay and subject checks still apply.
 - **Risk:** there is no initiating browser request to bind. The application must apply its own session and account-linking policy.
 - **Tests:** `saml.SamlIndependentFixtureTests` and `saml.SamlScriptedMintedFixtureTests` replay fixed-clock unsolicited assertions; `saml.SamlServiceProviderTests` exercises the disabled path.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`AccessTokenCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenCompatibilityMode.html)`.UNTYPED_ACCESS_TOKENS`
 
@@ -114,7 +114,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Effect:** permits a JWT access token with absent or ordinary `JWT` type only when additional required claims are configured. Strict validation expects an access-token type.
 - **Risk and safeguards:** a provider's identity token must not be admitted as an API access token. Keep exact audience, issuer, signature and application authorization checks; this mode rejects identity-token-only claims and is reported to [`AccessTokenObserver`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenObserver.html).
 - **Tests:** `oauth.JwtAccessTokenValidatorTests` and the pinned Keycloak resource-server integration profile.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`ClientAssertionAudience`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionAudience.html)`.TOKEN_ENDPOINT`
 
@@ -122,7 +122,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Effect:** uses the actual POST endpoint as the assertion audience with `JWT` type instead of the exact issuer with `client-authentication+jwt` type. The client keeps its fixed configured endpoint and does not fall back after a rejection.
 - **Risk and safeguards:** select this only for an approved provider registration that requires endpoint audience. It changes which signed assertion a provider accepts; it does not change destination admission.
 - **Tests:** `oauth.ClientAssertionTests`, `oauth.NodeClientAssertionIT` and `oauth.KeycloakClientAssertionIT`.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`OidcIssuerPolicy`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcIssuerPolicy.html)`.fromMicrosoftEntraMultiTenant`
 
@@ -130,7 +130,7 @@ The old-version checks inject `Runtime.Version` values on the test JVM; they do 
 - **Effect:** accepts the advertised `{tenantid}` issuer template only with a signature-verified tenant GUID and a trusted application predicate. The exact issuer policy remains the default.
 - **Risk and safeguards:** an overly broad tenant predicate admits identities from unwanted tenants. The same policy instance must be shared with a shared key source; ID-token, UserInfo and refresh tenant checks remain bound.
 - **Tests:** `oidc.OidcIssuerPolicyTests`; hosted Entra acceptance remains unproven.
-- **Added in:** 1.0.0 (unreleased).
+- **Added in:** 1.0.0.
 
 ### [`ScimCompatibilityFeature`](https://javadoc.revetsec.com/com/revetsec/scim/ScimCompatibilityFeature.html) and presets
 
@@ -152,7 +152,7 @@ The [`ScimCompatibility`](https://javadoc.revetsec.com/com/revetsec/scim/ScimCom
 | `PATCH_GROUP_MEMBER_DISPLAY_IGNORED` | Ignore only supplied read-only display in standard Group member object merges; preserve stored display, provenance and all other protected-field checks. Direct child writes and custom lookalikes remain refused. |
 | `PATCH_EXTENSION_SCHEMA_ROOT` | Accept an exact registered extension URI as a whole-extension PATCH target; absent from both provider presets. |
 
-**Tests:** `scim.ScimM10ConfigurationTests`, `scim.ScimM11PatchParsingTests`, `scim.ScimM11PatchApplicationTests`, `scim.ScimM12ExtensionPatchTests`, `scim.ScimApiFreezeSelectionTests` and `scim.ScimRc3SecurityTests` cover selection and affected paths. **Added in:** 1.0.0 (unreleased).
+**Tests:** `scim.ScimM10ConfigurationTests`, `scim.ScimM11PatchParsingTests`, `scim.ScimM11PatchApplicationTests`, `scim.ScimM12ExtensionPatchTests`, `scim.ScimApiFreezeSelectionTests` and `scim.ScimRc3SecurityTests` cover selection and affected paths. **Added in:** 1.0.0.
 
 ### Settings that are not compatibility modes
 
@@ -225,4 +225,4 @@ This checklist uses the [Kantara saml2int v2.0 deployment profile](https://kanta
 
 In particular, the missing metadata extensions and `NameID`-required success path prevent an unqualified saml2int conformance claim. The supported product claim is SAML 2.0 browser SSO aligned with the profile **with these deviations**. Local fuzz and the bounded Burp and ZAP passes are recorded. The hosted differential and Shibboleth checks passed on pushed source `eccaa18743bc2efc0287c171a7e027139e0e9eef` ([CI run](https://github.com/revetsec/revetsec/actions/runs/38456477929), [capture run](https://github.com/revetsec/revetsec/actions/runs/38456503172)). The [2026-10-13 full local PIT run](saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt) met the no unjustified survivors criterion for the intermediate bearer replay repair, with 158 uncovered limits; it does not qualify the stricter current checkout. The maintainer reviewed and confirmed the stricter cross-context replay fence on 2026-10-14. A [2026-10-14 full current-source PIT run](saml-mutation-triage-2026-10-11.md#2026-10-14-full-stricter-source-samlxml-pit-receipt) meets the local survivor criterion with 160 uncovered limits. RC-2 subsequently closed after [same-revision green CI](https://github.com/revetsec/revetsec/actions/runs/38581827855) and [Shibboleth capture](https://github.com/revetsec/revetsec/actions/runs/38582202155) on `b91ff91f9ee1daf5c9065257111cb8521ba1f3e4`; see the [closure receipt](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14).
 
-The member-display profile is covered by `scim.ScimSecurityResidualTests` (strict/Entra/Okta/explicit use, one actual-use observation per operation, custom/direct/immutable/type controls), introduced in unreleased 1.0.0. It is a source compatibility policy; hosted Okta interoperability remains separately qualified. Nested extension child names containing a colon always reject and are not enabled by the dotted/qualified top-level path profile.
+The member-display profile is covered by `scim.ScimSecurityResidualTests` (strict/Entra/Okta/explicit use, one actual-use observation per operation, custom/direct/immutable/type controls), introduced in 1.0.0. It is a source compatibility policy; hosted Okta interoperability remains separately qualified. Nested extension child names containing a colon always reject and are not enabled by the dotted/qualified top-level path profile.

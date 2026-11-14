@@ -36,5 +36,6 @@ public final class ScimResourceWorkLimitException extends RevetsecException {
      * @return fixed description
      * @since 1.0.0
      */
+    @SuppressWarnings("OverrideThrowableToString") // Keep Throwable diagnostics fixed and free of resource data.
     @Override public @NonNull String toString() { return "ScimResourceWorkLimitException{budget exceeded}"; }
 }

@@ -178,7 +178,7 @@ final class OAuthGrantRevocation {
  }
  private void checkRefresh(@NonNull OAuthAuthorizationRecord refresh, @NonNull OAuthAuthorizationRecord grant, @NonNull String id) {
   String state = grant.text("status");
-  if (!refresh.sameLineage(grant) || !grant.refresh() || !state.equals("ACTIVE") && !state.equals("REVOKED")
+  if (!refresh.sameLineage(grant) || !grant.refresh() || (!state.equals("ACTIVE") && !state.equals("REVOKED"))
     || !refresh.horizon().equals(grant.horizon()) || refresh.expires().isAfter(grant.expires())
     || refresh.text("status").equals("USED") == grant.text("refreshId").equals(id)) throw new OAuthStoreFailure(CORRUPT_STATE);
  }

@@ -76,8 +76,9 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
      * @since 1.0.0
      */
     public static @NonNull InMemoryPendingSamlAuthenticationStore fromLimit(@NonNull Clock clock,
-            int maximumEntries) {
+            @NonNull Integer maximumEntries) {
         Objects.requireNonNull(clock);
+        Objects.requireNonNull(maximumEntries);
         if (maximumEntries < 1 || maximumEntries > 1_000_000)
             throw new IllegalArgumentException("Invalid SAML pending capacity");
         return new InMemoryPendingSamlAuthenticationStore(clock, maximumEntries);

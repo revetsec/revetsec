@@ -48,7 +48,8 @@ final class ScimResourceValidation {
     private final boolean create;
     private final @NonNull Set<@NonNull ScimCompatibilityFeature> usedFeatures;
     private final @NonNull Set<@NonNull ScimAttributePath> supplied = new LinkedHashSet<>();
-    private final @NonNull Map<@NonNull JsonObject,@NonNull Map<@NonNull String,@NonNull Set<@NonNull String>>> explicitNulls=new IdentityHashMap<>();
+    private final @NonNull IdentityHashMap<@NonNull JsonObject,
+            @NonNull Map<@NonNull String,@NonNull Set<@NonNull String>>> explicitNulls=new IdentityHashMap<>();
     private @Nullable ScimError error;
     private boolean preservePatchNulls;
     ScimResourceValidation(@NonNull ScimResourceType type, @Nullable JsonDocument parsed,
@@ -266,8 +267,8 @@ final class ScimResourceValidation {
             BigDecimal numeric = number.getValue();
             normalized = JsonNumber.fromValue(numeric.signum() == 0 ? BigDecimal.ZERO : new BigDecimal(numeric.toBigInteger()));
         }
-        if ((path.equals("id") || path.equals("members.value") && type.hasStandardGroupSchema()
-                || path.equals("groups.value") && type.hasStandardUserSchema()
+        if ((path.equals("id") || (path.equals("members.value") && type.hasStandardGroupSchema())
+                || (path.equals("groups.value") && type.hasStandardUserSchema())
                 || type.isStandardEnterpriseManagerValuePath(path)) && normalized instanceof JsonString string && !validResourceId(string.getValue())) {
             error = ScimError.invalidValueInstance(); return null;
         }
@@ -295,8 +296,8 @@ final class ScimResourceValidation {
         }
         BigDecimal value = number.getValue();
         long integerDigits = (long)value.precision() - value.scale();
-        return value.signum() == 0 || value.stripTrailingZeros().scale() <= 0
-                && integerDigits <= com.revetsec.internal.json.JsonLimits.MODEL_MAXIMUM_NUMBER_DIGITS;
+        return value.signum() == 0 || (value.stripTrailingZeros().scale() <= 0
+                && integerDigits <= com.revetsec.internal.json.JsonLimits.MODEL_MAXIMUM_NUMBER_DIGITS);
     }
     private boolean required(@NonNull List<@NonNull ScimAttributeDefinition> definitions, @NonNull JsonObject object) {
         for (ScimAttributeDefinition definition : definitions) {
@@ -342,7 +343,7 @@ final class ScimResourceValidation {
         if (value.length() - index < 2 || value.charAt(index++) != '"' || value.charAt(value.length()-1) != '"') return false;
         for (; index < value.length()-1; index++) {
             char ch = value.charAt(index);
-            if (!(ch == 0x21 || ch >= 0x23 && ch <= 0x7e || ch >= 0x80 && ch <= 0xff)) return false;
+            if (!(ch == 0x21 || (ch >= 0x23 && ch <= 0x7e) || (ch >= 0x80 && ch <= 0xff))) return false;
         }
         return true;
     }
@@ -366,7 +367,7 @@ final class ScimResourceValidation {
         String absolute = value;
         int firstColon = value.indexOf(':'), firstSlash = value.indexOf('/');
         if (value.startsWith("//")) absolute = "https:" + value;
-        else if (firstColon < 0 || firstSlash >= 0 && firstSlash < firstColon || value.startsWith("?") || value.startsWith("#"))
+        else if (firstColon < 0 || (firstSlash >= 0 && firstSlash < firstColon) || value.startsWith("?") || value.startsWith("#"))
             absolute = "https://example.invalid/" + value;
         return ScimAttributePath.isAbsoluteUriSyntax(absolute);
     }
@@ -376,17 +377,17 @@ final class ScimResourceValidation {
         if (value.isEmpty()) return true;
         int padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
         int content = value.length() - padding;
-        if (content == 0 || content % 4 == 1 || padding > 0 && value.length() % 4 != 0) return false;
+        if (content == 0 || content % 4 == 1 || (padding > 0 && value.length() % 4 != 0)) return false;
         for (int index = 0; index < content; index++) {
             char ch = value.charAt(index);
-            if (!(ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '+' || ch == '/')) return false;
+            if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '+' || ch == '/')) return false;
         }
         char last = value.charAt(content - 1);
         int bits = last >= 'A' && last <= 'Z' ? last - 'A' : last >= 'a' && last <= 'z' ? last - 'a' + 26
                 : last >= '0' && last <= '9' ? last - '0' + 52 : last == '+' ? 62 : 63;
         int remainder = content % 4;
-        return remainder == 0 && padding == 0 || remainder == 2 && (padding == 0 || padding == 2) && (bits & 15) == 0
-                || remainder == 3 && (padding == 0 || padding == 1) && (bits & 3) == 0;
+        return (remainder == 0 && padding == 0) || (remainder == 2 && (padding == 0 || padding == 2) && (bits & 15) == 0)
+                || (remainder == 3 && (padding == 0 || padding == 1) && (bits & 3) == 0);
     }
     static boolean dateTime(@NonNull String value) { return dateParts(value) != null; }
     private static @Nullable DateParts dateParts(@NonNull String value) {
@@ -399,7 +400,7 @@ final class ScimResourceValidation {
             yearMagnitude = Math.min(1_000_000_000L,yearMagnitude*10 + digit);
         }
         int count = yearEnd - yearStart;
-        if (count < 4 || !nonzero || count > 4 && value.charAt(yearStart) == '0' || value.length()-yearEnd < 15) return null;
+        if (count < 4 || !nonzero || (count > 4 && value.charAt(yearStart) == '0') || value.length()-yearEnd < 15) return null;
         int month = digits(value,yearEnd+1,yearEnd+3), day = digits(value,yearEnd+4,yearEnd+6);
         int hour = digits(value,yearEnd+7,yearEnd+9), minute = digits(value,yearEnd+10,yearEnd+12), second = digits(value,yearEnd+13,yearEnd+15);
         if (value.charAt(yearEnd) != '-' || value.charAt(yearEnd+3) != '-' || value.charAt(yearEnd+6) != 'T'
@@ -407,7 +408,7 @@ final class ScimResourceValidation {
                 || hour < 0 || hour > 24 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
         int calendarMod = yearStart == 0 ? yearMod : (401-yearMod)%400;
         int maximum = switch (month) { case 2 -> calendarMod % 4 == 0 && (calendarMod % 100 != 0 || calendarMod == 0) ? 29 : 28; case 4,6,9,11 -> 30; default -> 31; };
-        if (day < 1 || day > maximum || hour == 24 && (minute != 0 || second != 0)) return null;
+        if (day < 1 || day > maximum || (hour == 24 && (minute != 0 || second != 0))) return null;
         int index = yearEnd+15, nanos = 0; boolean fractionNonzero = false;
         if (index < value.length() && value.charAt(index) == '.') {
             int start = ++index;
@@ -416,16 +417,16 @@ final class ScimResourceValidation {
                 if (index - start < 9) nanos = nanos*10+digit;
                 index++;
             }
-            if (index == start || hour == 24 && fractionNonzero) return null;
+            if (index == start || (hour == 24 && fractionNonzero)) return null;
             for (int scale = Math.min(9,index-start); scale < 9; scale++) nanos *= 10;
         }
         boolean hasOffset = index < value.length(); int offsetSeconds = 0;
         if (hasOffset) {
             if (value.charAt(index) == 'Z') { if (index+1 != value.length()) return null; }
             else {
-                if (value.length()-index != 6 || value.charAt(index) != '+' && value.charAt(index) != '-' || value.charAt(index+3) != ':') return null;
+                if (value.length()-index != 6 || (value.charAt(index) != '+' && value.charAt(index) != '-') || value.charAt(index+3) != ':') return null;
                 int hours = digits(value,index+1,index+3), minutes = digits(value,index+4,index+6);
-                if (hours < 0 || hours > 14 || minutes < 0 || minutes > 59 || hours == 14 && minutes != 0) return null;
+                if (hours < 0 || hours > 14 || minutes < 0 || minutes > 59 || (hours == 14 && minutes != 0)) return null;
                 offsetSeconds = (hours*60+minutes)*60*(value.charAt(index) == '-' ? -1 : 1);
             }
         }

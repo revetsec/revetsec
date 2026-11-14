@@ -599,7 +599,7 @@ public final class WebAuthnRelyingParty {
                 || !(relyingPartyId.equals(host) || host.endsWith("." + relyingPartyId))
                 || uri.getRawUserInfo() != null || uri.getRawQuery() != null
                 || uri.getRawFragment() != null || port == 0 || port == 443 || port > 65_535
-                || uri.getRawPath() != null && !uri.getRawPath().isEmpty()
+                || (uri.getRawPath() != null && !uri.getRawPath().isEmpty())
                 || !value.equals(expected))
             throw new IllegalArgumentException("Invalid WebAuthn origin");
     }

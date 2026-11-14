@@ -21,8 +21,8 @@ def main():
  parser.add_argument('--examples-root',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True)
  for name in ['core','adapter','framework','application']:parser.add_argument('--'+name+'-sha256',required=True)
  parser.add_argument('--repository',type=Path,default=Path.home()/'.m2/repository');parser.add_argument('--binding',choices=['post','redirect'],default='post');parser.add_argument('--output',type=Path,required=True)
- args=parser.parse_args();fixture=Path(__file__).resolve().parent;module=args.examples_root/'playground';jar=module/'target/playground-1.0.0-SNAPSHOT.jar';libs=module/'target/lib'
- inputs={'APPLICATION':jar,'CORE':libs/'revetsec-1.0.0-SNAPSHOT.jar','ADAPTER':libs/'revetsec-soklet-1.0.0-SNAPSHOT.jar','FRAMEWORK':libs/'soklet-4.0.0.jar'}
+ args=parser.parse_args();fixture=Path(__file__).resolve().parent;module=args.examples_root/'playground';jar=module/'target/playground-1.0.0.jar';libs=module/'target/lib'
+ inputs={'APPLICATION':jar,'CORE':libs/'revetsec-1.0.0.jar','ADAPTER':libs/'revetsec-soklet-1.0.0.jar','FRAMEWORK':libs/'soklet-4.0.0.jar'}
  annotations=[args.repository/'org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar',args.repository/'com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar']
  sources=[fixture/'PlaygroundPostSloFixture.java',Path(__file__),*sorted((module/'src').rglob('*.java')),*sorted((module/'src/test/resources/saml').glob('*.pem')),module/'pom.xml',args.examples_root/'pom.xml']
  for name,path in inputs.items():

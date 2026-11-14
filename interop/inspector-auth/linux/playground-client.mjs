@@ -103,7 +103,7 @@ try {
     TEST_RESOURCE_MODE:'playground',TEST_PLAYGROUND_RESOURCE:'https://localhost:8443/mcp',
     TEST_PLAYGROUND_TOKEN_FORMAT:input.tokenFormat,TEST_CLIENT_REDIRECT_URIS:'https://localhost:8443/oidc/callback,https://localhost:8445/callback'}});
   await waitFor(async()=>await tlsGet(issuer+'/.well-known/openid-configuration')===200,'CLIENT_PROVIDER_READY');
-  const classpath=['playground-1.0.0-SNAPSHOT.jar','revetsec-1.0.0-SNAPSHOT.jar','revetsec-soklet-1.0.0-SNAPSHOT.jar','soklet-4.0.0.jar'].map(name=>'/app/'+name).join(':');
+  const classpath=['playground-1.0.0.jar','revetsec-1.0.0.jar','revetsec-soklet-1.0.0.jar','soklet-4.0.0.jar'].map(name=>'/app/'+name).join(':');
   managed('application','/runtime/java/bin/java',['-Djavax.net.ssl.trustStore='+root+'/trust.p12',
     '-Djavax.net.ssl.trustStorePassword=test-only-temporary-value','-cp',classpath,'example.playground.Playground'],
     {env:{...shared,PLAYGROUND_ISSUER:issuer,PLAYGROUND_CLIENT_ID:'revetsec-test-client',

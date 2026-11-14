@@ -21,8 +21,8 @@ BROWSER_IMAGE = 'sha256:6ab3458a9171e175d9066297fb5e46db7d3d35b199966655c7670ef0
 SECCOMP_SHA = '4196af2ea4c1921e0c1ab2891da6cb829308cfc2e9fe5f5fdf6fc4bead8665b7'
 CADDY_SHA = 'e1f904038fc11ca897ac5a12fdacfb2a7add02a8720c426d562a37f6fdad2afe'
 JAVA_TREE_SHA = 'd09a334ac692ed5f0736801f9dd43baced395fcd011fe05e32adab7fa2bb9493'
-NAMES = {'self-issued-1.0.0-SNAPSHOT.jar', 'revetsec-1.0.0-SNAPSHOT.jar',
-         'revetsec-soklet-1.0.0-SNAPSHOT.jar', 'soklet-4.0.0.jar'}
+NAMES = {'self-issued-1.0.0.jar', 'revetsec-1.0.0.jar',
+         'revetsec-soklet-1.0.0.jar', 'soklet-4.0.0.jar'}
 
 
 def sha(path):

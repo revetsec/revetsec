@@ -247,7 +247,7 @@ final class PinnedTlsChainTests {
   private boolean rejectAll;
   @Override public void checkServerTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType,@NonNull SSLEngine engine) throws CertificateException {
    assertEquals("RSA",authType);assertEquals("HTTPS",engine.getSSLParameters().getEndpointIdentificationAlgorithm());chains.add(chain.clone());
-   if(rejectAll || chain.length>1 && chain[1].equals(rejectIssuer))throw new CertificateException("private TLS diagnostic");
+	   if(rejectAll || (chain.length>1 && chain[1].equals(rejectIssuer)))throw new CertificateException("private TLS diagnostic");
   }
   @Override public @NonNull X509Certificate @NonNull [] getAcceptedIssuers(){return new X509Certificate[0];}
   @Override public void checkClientTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType){fail("client trust used");}

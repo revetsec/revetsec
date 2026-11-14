@@ -149,7 +149,7 @@ public final class ExampleChecksTests {
 				} else {
 					fixture.tenant = LocalProvider.OTHER;
 					OidcSessionReference stored = ((com.revetsec.oidc.OidcSessionReferenceParseResult.Succeeded) OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
-					OidcRefreshOutcome.Rejected failure = assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored));
+					OidcRefreshResult.Rejected failure = assertInstanceOf(OidcRefreshResult.Rejected.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored));
 					assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH, failure.getReason());
 					assertEquals(1, tenantCalls.get());
 				}

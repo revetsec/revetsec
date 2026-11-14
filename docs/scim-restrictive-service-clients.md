@@ -9,7 +9,7 @@ configuration on its own. Build with the [example Maven setup](../examples/READM
     export SCIM_ALPHA_READER_TOKEN='<different private random alpha reader credential>'
     export SCIM_HTTP_HOST='127.0.0.1'
     export SCIM_HTTP_PORT='8082'
-    java -cp "examples/playground/target/playground-1.0.0-SNAPSHOT.jar:examples/playground/target/lib/*" \
+    java -cp "examples/playground/target/playground-1.0.0.jar:examples/playground/target/lib/*" \
       example.playground.ScimDirectoryPlayground
 
 Supply credentials through the host's secret configuration. The values above are

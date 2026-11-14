@@ -39,7 +39,7 @@ final class SamlMetadataStrictFreshnessTests {
             byte[] xml = fixture(scope, location == 1 ? END.toString() : null,
                     location == 2 ? END.toString() : null, location == 3 ? END.toString() : null);
             var result = SamlIdentityProviderMetadata.fromXmlRequiringValidUntilResult(xml, ENTITY, FIXED, keys());
-            if (location == 1 || location == 2 || location == 3 && scope == 1) {
+            if (location == 1 || location == 2 || (location == 3 && scope == 1)) {
                 var metadata = assertInstanceOf(SamlIdentityProviderMetadataResult.Parsed.class, result).getMetadata();
                 assertEquals(END, metadata.getValidUntil().orElseThrow());
             } else assertInstanceOf(SamlIdentityProviderMetadataResult.Rejected.class, result);

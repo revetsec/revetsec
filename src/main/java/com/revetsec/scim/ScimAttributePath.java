@@ -110,10 +110,10 @@ public final class ScimAttributePath {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimAttributePath path
+        return this == other || (other instanceof ScimAttributePath path
                 && Objects.equals(foldedSchemaId, path.foldedSchemaId)
                 && foldedAttributeName.equals(path.foldedAttributeName)
-                && Objects.equals(foldedSubAttributeName, path.foldedSubAttributeName);
+                && Objects.equals(foldedSubAttributeName, path.foldedSubAttributeName));
     }
 
     /**
@@ -314,13 +314,13 @@ public final class ScimAttributePath {
     }
 
     private static boolean alpha(char character) {
-        return character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z';
+        return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
     }
 
     private static boolean digit(char character) { return character >= '0' && character <= '9'; }
 
     private static boolean hex(char character) {
-        return digit(character) || character >= 'A' && character <= 'F' || character >= 'a' && character <= 'f';
+        return digit(character) || (character >= 'A' && character <= 'F') || (character >= 'a' && character <= 'f');
     }
 
     private static boolean unreserved(char character) {

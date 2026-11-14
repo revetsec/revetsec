@@ -1,6 +1,6 @@
 # Identity Mapping
 
-**Status: pre-release.** Revetsec validates OIDC and SAML identities, but the application owns account linking, local users and sessions.
+**Status: 1.0.0.** Revetsec validates OIDC and SAML identities, but the application owns account linking, local users and sessions.
 
 Choosing which value identifies an account is the application's job, and the wrong choice leads to account takeover. These principles will shape the full guide:
 

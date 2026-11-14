@@ -58,7 +58,7 @@ public final class ScimListPage {
         nextCursor = b.nextCursor;
         previousCursor = b.previousCursor;
         moreResultsAvailable = b.moreResultsAvailable != null && b.moreResultsAvailable;
-        if (resources.size() > query.getCount() || totalResults != null && totalResults < 0)
+        if (resources.size() > query.getCount() || (totalResults != null && totalResults < 0))
             throw new IllegalArgumentException("Inconsistent SCIM page counts.");
         if (query.getPaginationMethod() == ScimPaginationMethod.INDEX) {
             if (totalResults == null
@@ -72,7 +72,7 @@ public final class ScimListPage {
                 throw new IllegalArgumentException("Page exceeds total results.");
         } else {
             if (moreResultsAvailable != (nextCursor != null)
-                    || query.isFirstCursorPage() && previousCursor != null)
+                    || (query.isFirstCursorPage() && previousCursor != null))
                 throw new IllegalArgumentException("Invalid cursor page framing.");
         }
         if (query.getCount() == 0
@@ -85,9 +85,9 @@ public final class ScimListPage {
         for (ScimResource r : resources)
             if (r.getResourceType() != query.getResourceType())
                 throw new IllegalArgumentException("Foreign SCIM page resource type.");
-        if (nextCursor != null && !cursor(nextCursor, query.maximumCursorCharacters())
-                || previousCursor != null
-                        && !cursor(previousCursor, query.maximumCursorCharacters()))
+        if ((nextCursor != null && !cursor(nextCursor, query.maximumCursorCharacters()))
+                || (previousCursor != null
+                        && !cursor(previousCursor, query.maximumCursorCharacters())))
             throw new IllegalArgumentException("Invalid SCIM cursor.");
     }
 
@@ -149,9 +149,9 @@ public final class ScimListPage {
         if (value.isEmpty() || value.length() > maximum) return false;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            if (!(c >= 'A' && c <= 'Z'
-                    || c >= 'a' && c <= 'z'
-                    || c >= '0' && c <= '9'
+            if (!((c >= 'A' && c <= 'Z')
+                    || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9')
                     || c == '-'
                     || c == '_'
                     || c == '.'

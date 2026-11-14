@@ -370,7 +370,7 @@ final class ScimPatchParsing {
         }
         return null;
     }
-    private boolean noPathField(@NonNull LinkedHashMap<@NonNull String,@NonNull JsonValue> output,
+    private boolean noPathField(@NonNull Map<@NonNull String,@NonNull JsonValue> output,
             @NonNull Set<@NonNull ScimAttributePath> targets,@NonNull String expression,@NonNull JsonValue raw,boolean compatibilityKey) {
         if (!(ScimAttributePath.fromExpressionResult(expression) instanceof ScimAttributePathParseResult.Succeeded)) { error=ScimError.invalidPathInstance(); return false; }
         ScimAttributePath path=canonical(expression);
@@ -405,8 +405,8 @@ final class ScimPatchParsing {
     private static boolean sameParent(@NonNull ScimAttributePath left,@NonNull ScimAttributePath right) {
         return left.getSchemaId().equals(right.getSchemaId()) && left.getAttributeName().equals(right.getAttributeName());
     }
-    private static void put(@NonNull LinkedHashMap<@NonNull String,@NonNull JsonValue> output,@NonNull ScimAttributePath path,@NonNull JsonValue value) {
-        LinkedHashMap<String,JsonValue> container=output;
+    private static void put(@NonNull Map<@NonNull String,@NonNull JsonValue> output,@NonNull ScimAttributePath path,@NonNull JsonValue value) {
+        Map<String,JsonValue> container=output;
         String schema=path.getSchemaId().orElse(null);
         if (schema!=null) {
             JsonValue existing=output.get(schema);

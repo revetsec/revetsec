@@ -22,7 +22,7 @@ def prepare(selected_path,profile,work,java_home):
                     if not target.exists():shutil.copyfile(names[Path(rel).name],target)
                     elif digest(target)!=digest(names[Path(rel).name]):raise ValueError('Manifest dependency differs')
     # Core is loaded through the common artifact's manifest first; select that actual path explicitly.
-    core=root/'lib/revetsec-1.0.0-SNAPSHOT.jar'
+    core=root/'lib/revetsec-1.0.0.jar'
     if not core.exists():raise ValueError('Selected core manifest copy missing')
     copied['core']=core;identities['core']['path']=str(core)
     framework=root/'lib/soklet-4.0.0.jar'

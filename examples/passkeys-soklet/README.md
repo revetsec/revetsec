@@ -50,7 +50,7 @@ This optional Python test helper requires an OpenSSL binary with `verify -verify
 
 ~~~sh
 node examples/passkeys-soklet/browser_check.mjs \
-  --jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0-SNAPSHOT.jar \
+  --jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0.jar \
   --tls-dir /absolute/new/private-passkey-tls \
   --java /absolute/jdk21-or-newer/bin/java \
   --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -69,7 +69,7 @@ Use `--physical-key` with a connected key that supports discoverable credentials
 
 ~~~sh
 node examples/passkeys-soklet/browser_check.mjs \
-  --jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0-SNAPSHOT.jar \
+  --jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0.jar \
   --tls-dir /absolute/new/private-passkey-tls \
   --java /absolute/jdk21-or-newer/bin/java \
   --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
@@ -91,7 +91,7 @@ The PostgreSQL fixture can run the same Chrome flow against `DurablePasskeyPlayg
 Build the demo-key utility with `mvn -f examples/tools/pom.xml package` if you selected a single example rather than the full reactor. Create a private POSIX access-key file containing one fresh 43-character base64url value (optionally followed by a newline), mode 0600. This key is an application enrollment approval for the fixed demo account. It is never a WebAuthn credential or a Revetsec secret:
 
 ~~~sh
-java -jar examples/tools/target/example-tools-1.0.0-SNAPSHOT.jar /absolute/private/access-key
+java -jar examples/tools/target/example-tools-1.0.0.jar /absolute/private/access-key
 ~~~
 
 Start the application with the exact same RP ID and origin as the TLS edge:
@@ -101,7 +101,7 @@ REVETSEC_PASSKEY_RP_ID=passkeys.example.test \
 REVETSEC_PASSKEY_ORIGIN=https://passkeys.example.test:9443 \
 REVETSEC_PASSKEY_HTTP_PORT=8093 \
 REVETSEC_PASSKEY_ACCESS_KEY_FILE=/absolute/private/access-key \
-  java -jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0-SNAPSHOT.jar
+  java -jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0.jar
 ~~~
 
 Open https://passkeys.example.test:9443/ in the trusted browser. Approve enrollment with the private demo key. Enter that key again in the management approval field before registering or removing a passkey; the page clears the field as it sends each request. Sign out, sign in with the passkey, reauthenticate for the one-use sensitive action, list the credential and remove it after a fresh management approval. A removed credential may remain in the browser or security key, but the server will reject it on a later sign-in. The browser uses parseCreationOptionsFromJSON, parseRequestOptionsFromJSON and PublicKeyCredential.toJSON(); cancellation is only a browser UI outcome.

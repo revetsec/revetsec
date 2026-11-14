@@ -54,11 +54,11 @@ final class ScimSchemas {
 
     static @NonNull String requireText(@NonNull String value, boolean nonempty) {
         Objects.requireNonNull(value);
-        if (value.length() > Limits.SCIM_IDENTIFIER_LENGTH.getCap() || nonempty && value.isBlank())
+        if (value.length() > Limits.SCIM_IDENTIFIER_LENGTH.getCap() || (nonempty && value.isBlank()))
             throw new IllegalArgumentException("Invalid bounded SCIM configured text.");
         for (int index = 0; index < value.length(); index++) {
             char unit = value.charAt(index);
-            if (unit < 0x20 && unit != '\t' && unit != '\n' && unit != '\r' || unit == 0x7f)
+            if ((unit < 0x20 && unit != '\t' && unit != '\n' && unit != '\r') || unit == 0x7f)
                 throw new IllegalArgumentException("Invalid SCIM configured text control character.");
             if (Character.isHighSurrogate(unit)) {
                 if (++index >= value.length() || !Character.isLowSurrogate(value.charAt(index)))

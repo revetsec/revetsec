@@ -196,13 +196,13 @@ public final class ScimAttributeDefinition {
      * @since 1.0.0
      */
     @Override public boolean equals(@Nullable Object other) {
-        return this == other || other instanceof ScimAttributeDefinition value
+        return this == other || (other instanceof ScimAttributeDefinition value
                 && AsciiCase.fold(name).equals(AsciiCase.fold(value.name)) && type == value.type
                 && Objects.equals(description, value.description) && multiValued == value.multiValued
                 && required == value.required && caseExact == value.caseExact && mutability == value.mutability
                 && returned == value.returned && uniqueness == value.uniqueness
                 && canonicalValues.equals(value.canonicalValues) && referenceTypes.equals(value.referenceTypes)
-                && subAttributes.equals(value.subAttributes);
+                && subAttributes.equals(value.subAttributes));
     }
 
     /**
