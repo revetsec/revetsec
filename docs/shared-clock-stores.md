@@ -58,7 +58,7 @@ Issuer finite reseal can maintain credential-expired retained replay state stric
 
 ## WebAuthn tentative enrollment and permanent account state
 
-Browser and provider claims also follow the [selected extension policy and dated target matrix](webauthn-browser-compatibility.md).
+Browser and provider claims also follow the [selected browser and extension policy](webauthn-browser-compatibility.md).
 Current source accepts explicitly configured canonical HTTPS origins on the RP host or its
 dot-delimited subdomains, with exact origin/port membership and the original RP-ID hash. Update
 all readers before enabling child-origin pending records; the WAR2 format is unchanged, while

@@ -37,4 +37,4 @@ and deliberately use context-local TLS verification bypass; they claim no WebAut
 interop and patched WebKit is not installed Safari. Conditional mediation availability is only a
 feature probe. Physical/platform/synced providers and installed Safari remain unproven; the
 passing native-profile status is not full browser qualification.
-See the [current policy and target matrix](../../docs/webauthn-browser-compatibility.md).
+See the [current browser and extension policy](../../docs/webauthn-browser-compatibility.md).
