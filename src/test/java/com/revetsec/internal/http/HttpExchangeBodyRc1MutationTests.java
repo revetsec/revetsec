@@ -152,6 +152,6 @@ final class HttpExchangeBodyRc1MutationTests {
  }
  private static final class ThrowingCompleteFuture extends CompletableFuture<@NonNull Void> {
   private int attempts;
-  @Override public boolean complete(@Nullable Void value){attempts++;if(attempts==1)throw new IllegalStateException("fixture private future completion");return super.complete(value);}
+  @Override public boolean complete(@Nullable Void value){attempts++;if(attempts==1)throw new IllegalStateException("fixture private future completion");return super.complete(null);}
  }
 }

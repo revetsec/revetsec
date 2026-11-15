@@ -102,6 +102,7 @@ import java.util.stream.Stream;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@SuppressWarnings("InvalidLink") // Historical vector documentation names an intentionally nonpublic parser entry point.
 final class WycheproofJoseTests {
 	/**
 	 * The manifest, relative to the module root.

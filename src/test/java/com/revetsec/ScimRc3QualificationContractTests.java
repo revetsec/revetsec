@@ -81,11 +81,11 @@ class ScimRc3QualificationContractTests {
                                 String name=select instanceof IdentifierTree id ? id.getName().toString()
                                         : select instanceof MemberSelectTree member ? member.getIdentifier().toString() : "";
                                 if (name.startsWith("assert")) found[0]=true;
-                                return super.visitMethodInvocation(call,value);
+                                return super.visitMethodInvocation(call,null);
                             }
                         }.scan(node.getBody(),null);
                     }
-                    return super.visitMethod(node,ignored);
+                    return super.visitMethod(node,null);
                 }
             }.scan(unit,null);
         }

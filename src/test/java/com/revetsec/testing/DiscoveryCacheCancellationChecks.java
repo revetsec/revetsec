@@ -166,7 +166,7 @@ public abstract class DiscoveryCacheCancellationChecks {
             OAuthErrorResponseException second = assertThrows(OAuthErrorResponseException.class, () -> cache.get(deadline()));
             assertNotSame(leader, first); assertNotSame(first, second);
             assertEquals(503, second.getStatus());
-            assertEquals(Duration.ofSeconds(120), second.getRetryAfter().orElseThrow());
+            assertEquals(Duration.ofMinutes(2), second.getRetryAfter().orElseThrow());
             assertTrue(second.isTemporaryCondition()); assertTrue(second.getErrorCode().isEmpty());
             assertEquals(0, second.getSuppressed().length); assertNull(second.getCause());
             assertTrue(second.getStackTrace().length > 0);

@@ -44,6 +44,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** MIG-02 A: literal genuine frozen-old WAR1 records and independently fixed expected WAR2 plaintext. */
+@SuppressWarnings({"EnumOrdinal", "JavaInstantGetSecondsGetNano"}) // Golden wire construction intentionally uses exact legacy codes and nanos.
 final class WebAuthnMigrationGoldenConformanceTests {
     private static final @NonNull String RESOURCE="/fixtures/webauthn/mig-02.properties";
     private static final @NonNull Properties VECTORS=load();
@@ -139,26 +140,28 @@ final class WebAuthnMigrationGoldenConformanceTests {
 
     private static void assertTypedState(@NonNull Vector vector,@NonNull StateSealer sealer,byte @NonNull [] sealed)throws Exception{
         var records=new WebAuthnRecordCodec(sealer);Clock clock=clock(vector.time("floor"));
-        switch(vector.kind()){
-            case "NAMESPACE_CLOCK":break;
-            case "CREDENTIAL":{
-                var codec=new WebAuthnCredentialRecordCodec(value("namespace"),value("rp"),records);var owner=codec.decodeRecord(vector.key(),sealed,clock);
+        switch (vector.kind()) {
+  case "NAMESPACE_CLOCK" -> {}
+  case "CREDENTIAL" -> {
+var codec=new WebAuthnCredentialRecordCodec(value("namespace"),value("rp"),records);var owner=codec.decodeRecord(vector.key(),sealed,clock);
                 assertArrayEquals(vector.bytes("id"),owner.credentialId());assertArrayEquals(vector.bytes("handle"),owner.userHandle());
                 assertEquals(vector.field("form").equals("revoked"),owner.isRevoked());
                 if(owner.isRevoked()){assertNull(owner.activeState());assertThrows(WebAuthnRecordException.class,()->codec.decode(vector.key(),sealed,clock));}
                 else{var state=Objects.requireNonNull(owner.activeState());assertEquals(-8,state.algorithm());assertEquals(Long.parseLong(vector.field("counter")),state.counter());assertEquals((vector.integer("flags")&1)!=0,state.backupEligible());assertEquals((vector.integer("flags")&2)!=0,state.backedUp());assertArrayEquals(vector.bytes("cose"),state.keyCbor());}
-                break;
-            }
-            case "ACCOUNT_CREDENTIAL_INDEX":{
-                var state=new WebAuthnCredentialIndex(value("namespace"),value("rp"),records).decode(vector.key(),sealed,clock);assertArrayEquals(vector.bytes("handle"),state.userHandle());
+}
+  case "ACCOUNT_CREDENTIAL_INDEX" -> {
+var state=new WebAuthnCredentialIndex(value("namespace"),value("rp"),records).decode(vector.key(),sealed,clock);assertArrayEquals(vector.bytes("handle"),state.userHandle());
                 List<byte[]> expected=new ArrayList<>();if(!vector.field("ids").isEmpty())for(String id:vector.field("ids").split(",",-1))expected.add(HexFormat.of().parseHex(id));
                 assertEquals(vector.integer("count"),state.size());assertEquals(expected.size(),state.credentialIds().size());for(int i=0;i<expected.size();i++){assertArrayEquals(expected.get(i),state.credentialIds().get(i));assertTrue(state.contains(expected.get(i)));}
-                break;
-            }
-            case "ACCOUNT_FENCE":{var state=new WebAuthnAccountFence(value("namespace"),value("rp"),records).decode(vector.key(),sealed,clock);assertEquals(vector.integer("active")==1,state.isActive());assertArrayEquals(vector.bytes("handle"),state.userHandle());break;}
-            case "CEREMONY":assertCeremony(vector,new WebAuthnCeremonyRecordCodec(value("namespace"),value("rp"),records).decode(vector.key(),sealed,clock));break;
-            default:fail("Unknown fixture kind");
-        }
+}
+  case "ACCOUNT_FENCE" -> {
+var state=new WebAuthnAccountFence(value("namespace"),value("rp"),records).decode(vector.key(),sealed,clock);assertEquals(vector.integer("active")==1,state.isActive());assertArrayEquals(vector.bytes("handle"),state.userHandle());
+}
+  case "CEREMONY" ->
+assertCeremony(vector,new WebAuthnCeremonyRecordCodec(value("namespace"),value("rp"),records).decode(vector.key(),sealed,clock));
+  default ->
+fail("Unknown fixture kind");
+}
     }
     private static void assertCeremony(@NonNull Vector vector,@NonNull WebAuthnCeremonyState state){
         assertEquals(WebAuthnCeremonyState.Kind.values()[vector.integer("ceremonyKind")-1],state.kind());assertArrayEquals(vector.bytes("id"),state.ceremonyId());assertArrayEquals(vector.bytes("challenge"),state.challenge());assertArrayEquals(vector.bytes("binding"),state.browserBinding());

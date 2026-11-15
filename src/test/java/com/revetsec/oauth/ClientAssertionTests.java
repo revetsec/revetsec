@@ -84,7 +84,7 @@ final class ClientAssertionTests {
 		assertEquals(defaults.assertionAudience(), reset.assertionAudience()); assertEquals(Duration.ofSeconds(60), reset.assertionLifetime());
 		for (Duration value : List.of(Duration.ZERO, Duration.ofSeconds(301), Duration.ofSeconds(-1), Duration.ofMillis(1500)))
 			assertThrows(IllegalArgumentException.class, () -> ClientAuthentication.withPrivateKeyJwt(provider).assertionLifetime(value));
-		assertEquals(Duration.ofSeconds(300), ClientAuthentication.withPrivateKeyJwt(provider).assertionLifetime(Duration.ofSeconds(300)).build().assertionLifetime());
+		assertEquals(Duration.ofMinutes(5), ClientAuthentication.withPrivateKeyJwt(provider).assertionLifetime(Duration.ofMinutes(5)).build().assertionLifetime());
 		assertSame(first, ClientAssertionKeyProvider.fromKey(first).getSigningKey(Duration.ofSeconds(1)));
 		assertEquals(0, reads.get());
 		for (Object value : List.of(first, builder, defaults, ClientAuthentication.withPrivateKeyJwt(provider))) assertFalse(value.toString().contains("é"));

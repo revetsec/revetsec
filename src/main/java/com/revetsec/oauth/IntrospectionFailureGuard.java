@@ -25,7 +25,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Endpoint health only: 401/429 or transport failure opens backoff immediately; three 5xx responses
+ * Endpoint health only: 401/429 opens backoff immediately; any three transport/5xx failures
  * within one cooldown window open it without retaining a credential verdict. RFC7662 section2.2.
  */
 @ThreadSafe
@@ -40,10 +40,10 @@ final class IntrospectionFailureGuard {
 	private final LongSupplier nanoTime;
 
 	private boolean unhealthy;
-	private static final int SERVER_FAILURE_THRESHOLD = 3;
-	private int serverFailures;
-	private long serverWindowStartedNanos;
-	private long serverRetryAfterNanos;
+	private static final int HEALTH_FAILURE_THRESHOLD = 3;
+	private int healthFailures;
+	private long healthWindowStartedNanos;
+	private long healthRetryAfterNanos;
 
 	@Nullable
 	private Attempt probe;
@@ -110,8 +110,8 @@ final class IntrospectionFailureGuard {
 		this.lock.lock();
 		try {
 			if (attempt.generation == this.generation) {
-				this.serverFailures = 0;
-				this.serverRetryAfterNanos = 0;
+				this.healthFailures = 0;
+				this.healthRetryAfterNanos = 0;
 				this.failures = 0;
 				if (this.unhealthy) {
 					this.unhealthy = false;
@@ -132,10 +132,12 @@ final class IntrospectionFailureGuard {
 		}
 		boolean serverError = failure instanceof OAuthErrorResponseException response
 				&& response.getStatus() >= 500 && response.getStatus() <= 599;
-		boolean endpointSignal = failure instanceof OAuthErrorResponseException response
-				? response.getStatus() == 401 || response.getStatus() == 429
-				: failure instanceof OAuthTransportException && failure.getReason() == OAuthException.Reason.NETWORK_FAILURE;
-		if (!endpointSignal && !serverError) {
+		boolean immediateSignal = failure instanceof OAuthErrorResponseException response
+				&& (response.getStatus() == 401 || response.getStatus() == 429);
+		boolean transportFailure = failure instanceof OAuthTransportException
+				&& failure.getReason() == OAuthException.Reason.NETWORK_FAILURE;
+		boolean countedFailure = serverError || transportFailure;
+		if (!immediateSignal && !countedFailure) {
 			finishWithoutHealth(attempt, true);
 			return;
 		}
@@ -144,29 +146,29 @@ final class IntrospectionFailureGuard {
 			boolean opened = false;
 			if (attempt.generation == this.generation) {
 				long now = this.nanoTime.getAsLong();
-				if (this.serverFailures != 0 && now - this.serverWindowStartedNanos >= this.cooldown.toNanos()) {
-					this.serverFailures = 0;
-					this.serverRetryAfterNanos = 0;
+				if (this.healthFailures != 0 && now - this.healthWindowStartedNanos >= this.cooldown.toNanos()) {
+					this.healthFailures = 0;
+					this.healthRetryAfterNanos = 0;
 				}
-				if (serverError) {
-					if (this.serverFailures == 0 || now - this.serverWindowStartedNanos >= this.cooldown.toNanos()) {
-						this.serverWindowStartedNanos = now;
-						this.serverFailures = 0;
-						this.serverRetryAfterNanos = 0;
+				if (countedFailure) {
+					if (this.healthFailures == 0 || now - this.healthWindowStartedNanos >= this.cooldown.toNanos()) {
+						this.healthWindowStartedNanos = now;
+						this.healthFailures = 0;
+						this.healthRetryAfterNanos = 0;
 					}
-					this.serverFailures++;
-					this.serverRetryAfterNanos = Math.max(this.serverRetryAfterNanos, retryAfterNanos(failure));
+					this.healthFailures++;
+					this.healthRetryAfterNanos = Math.max(this.healthRetryAfterNanos, retryAfterNanos(failure));
 				}
-				if (endpointSignal || this.serverFailures >= SERVER_FAILURE_THRESHOLD) {
+				if (immediateSignal || this.healthFailures >= HEALTH_FAILURE_THRESHOLD) {
 					this.unhealthy = true;
 					this.failedAtNanos = now;
 					this.generation++;
 					this.failures = Math.min(5, this.failures + 1);
 					this.backoffNanos = Math.min(this.cooldown.toNanos() << (this.failures - 1),
 							Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
-					this.backoffNanos = Math.max(this.backoffNanos, Math.max(this.serverRetryAfterNanos, retryAfterNanos(failure)));
-					this.serverFailures = 0;
-					this.serverRetryAfterNanos = 0;
+					this.backoffNanos = Math.max(this.backoffNanos, Math.max(this.healthRetryAfterNanos, retryAfterNanos(failure)));
+					this.healthFailures = 0;
+					this.healthRetryAfterNanos = 0;
 					opened = true;
 				}
 			}

@@ -40,6 +40,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Exact boundary probes for the authenticated issuer-store grammar. */
+@SuppressWarnings("JavaInstantGetSecondsGetNano") // Wire-boundary fixture intentionally writes the nanosecond adjustment.
 final class OAuthStoreGrammarBoundaryTests {
 	private static final @NonNull Instant NOW = Instant.parse("2026-10-04T00:00:00Z");
 	private static final @NonNull String NONCE = "A".repeat(43);

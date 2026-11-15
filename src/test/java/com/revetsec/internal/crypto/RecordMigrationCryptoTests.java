@@ -102,7 +102,7 @@ final class RecordMigrationCryptoTests {
 		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
 				SealedStateType.APP, sealed, CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
-				SealedStateType.TOTP_RECORD, sealed, CONTEXT, intent(ClosedMigrationIntent.Format.TOTP_TTR3)));
+				SealedStateType.TOTP_RECORD, sealed, CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 		assertInvalid(() -> SealedStateAccess.get().openForMigration(sealer, SealedStateType.AS_RECORD, sealed,
 				CONTEXT + "x", intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 		byte[] wire = Base64Url.decode(sealed); wire[wire.length - 1] ^= 1;

@@ -47,6 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Independent authority/worker and factual-effect regressions over genuine engine writes. */
+@SuppressWarnings("RethrowReflectiveOperationExceptionAsLinkageError") // Reflection failures mean the test no longer matches the implementation shape.
 final class TotpSharedClockEngineTests {
 	private static final @NonNull Instant BASE=Instant.ofEpochSecond(1700000010);
 	private static final @NonNull Duration BUDGET=Duration.ofSeconds(2);
@@ -109,15 +110,10 @@ final class TotpSharedClockEngineTests {
 		assertEquals(before.getVersion(),f.record(f.key()).getVersion());assertArrayEquals(before.getSealedBytes(),f.record(f.key()).getSealedBytes());
 	}
 	@Test void validFutureAccountFloorClosesUntilAuthorityCatchupWithoutClamping() throws Exception {
-		F f=new F(false);TotpRecords.Account account=new TotpRecords.Account(ACCOUNT,f.codec.freshId(),BASE.plusSeconds(10));
+		F f=new F(false);TotpRecordState.Account account=new TotpRecordState.Account(ACCOUNT,f.codec.freshId(),BASE.plusSeconds(10));
 		try {f.source.seedClosedMigration(List.of(f.codec.sealNamespace(f.root(),new TotpRecordsV3.Namespace(f.source.admission().getAuthorityId(),BASE)),f.codec.sealAccount(f.key(),account)));}finally{account.erase();}
 		assertEquals(TotpUnavailableReason.TIME_AUTHORITY_UNAVAILABLE,assertInstanceOf(TotpStatusResult.Unavailable.class,f.totp.getStatusResult(ACCOUNT)).getReason());assertEquals(0,f.store.commits.get());
 		f.advance(Duration.ofSeconds(10));assertInstanceOf(TotpStatusResult.Present.class,f.totp.getStatusResult(ACCOUNT));assertEquals(0,f.store.commits.get());
-	}
-	@Test void normalTrafficRejectsAuthenticatedLegacyInsteadOfPromotingIt() {
-		F f=new F(false);TotpRecords old=new TotpRecords(f.sealer);
-		f.source.seedClosedMigration(List.of(old.seal(f.root(),new TotpRecords.Namespace(BASE),null)));
-		assertEquals(TotpUnavailableReason.INVALID_STORED_STATE,assertInstanceOf(TotpStatusResult.Unavailable.class,f.totp.getStatusResult(ACCOUNT)).getReason());assertEquals(0,f.store.commits.get());
 	}
 	@org.junit.jupiter.api.TestFactory
 	@NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scEng09StatusStateAndRawClockMatrixIsPure() {
@@ -155,11 +151,11 @@ final class TotpSharedClockEngineTests {
 		return cases;
 	}
 	@Test void scEng09ExpiredPendingAndChargesAreFilteredWithoutPersistedCleanup() throws Exception {
-		F f=new F(false);TotpRecords.Account account=new TotpRecords.Account(ACCOUNT,f.codec.freshId(),BASE);
+		F f=new F(false);TotpRecordState.Account account=new TotpRecordState.Account(ACCOUNT,f.codec.freshId(),BASE);
 		try {
-			account.pending=new TotpRecords.Pending(f.codec.freshId(),f.codec.freshId(),new byte[20],new byte[32],BASE.plusSeconds(300),null);
-			String charge=f.codec.freshId();account.charges.add(new TotpRecords.Charge(charge,BASE));
-			account.totpCharges.add(new TotpRecords.Charge(charge,BASE));
+			account.pending=new TotpRecordState.Pending(f.codec.freshId(),f.codec.freshId(),new byte[20],new byte[32],BASE.plusSeconds(300),null);
+			String charge=f.codec.freshId();account.charges.add(new TotpRecordState.Charge(charge,BASE));
+			account.totpCharges.add(new TotpRecordState.Charge(charge,BASE));
 			f.source.seedClosedMigration(List.of(
 				f.codec.sealNamespace(f.root(),new TotpRecordsV3.Namespace(f.source.admission().getAuthorityId(),BASE)),
 				f.codec.sealAccount(f.key(),account)));
@@ -170,7 +166,7 @@ final class TotpSharedClockEngineTests {
 		assertTrue(status.getPendingEnrollment().isEmpty());assertEquals(0,f.store.commits.get());assertTrue(f.store.writes.isEmpty());
 		assertStatusRowsSame(before,statusRows(f.source,f.root(),f.key()));
 		try(TotpRecordsV3.Decoded decoded=f.account()){
-			TotpRecords.Account retained=Objects.requireNonNull(decoded.account);assertNotNull(retained.pending);
+			TotpRecordState.Account retained=Objects.requireNonNull(decoded.account);assertNotNull(retained.pending);
 			assertEquals(1,retained.charges.size());assertEquals(1,retained.totpCharges.size());
 		}
 	}
@@ -271,7 +267,7 @@ final class TotpSharedClockEngineTests {
 			Instant minimum=BASE.plusSeconds(shape==0?10:1),floor=BASE.plusSeconds(shape==1?10:shape==2?20:1);
 			Instant bound=minimum.isAfter(floor)?minimum:floor,now=bound.plusNanos(edge);int position=edge;
 			cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("MIG11/TOTP/"+shape+"/"+edge,()->{
-				F f=new F(false);TotpRecords.Account account=new TotpRecords.Account(ACCOUNT,f.codec.freshId(),floor);
+				F f=new F(false);TotpRecordState.Account account=new TotpRecordState.Account(ACCOUNT,f.codec.freshId(),floor);
 				try{f.source.seedClosedMigration(List.of(f.codec.sealNamespace(f.root(),new TotpRecordsV3.Namespace(f.source.admission().getAuthorityId(),minimum)),f.codec.sealAccount(f.key(),account)));}finally{account.erase();}
 				f.source.setTime(now);f.worker.set(now);TotpStoreRecord root=f.record(f.root()),entity=f.record(f.key());f.reset();
 				var result=f.totp.getStatusResult(ACCOUNT);
@@ -468,7 +464,7 @@ final class TotpSharedClockEngineTests {
   List<org.junit.jupiter.api.DynamicTest> cases=new ArrayList<>();
   for(String loss:List.of("ESTABLISHED_EMPTY","ESTABLISHED_RETAINED","ORPHAN"))cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("MIG-15/TOTP/root-loss/"+loss,()->{
    F f=new F(!loss.equals("ORPHAN"));
-   if(loss.equals("ORPHAN")){var account=new TotpRecords.Account(ACCOUNT,f.codec.freshId(),BASE);try{f.source.seedClosedMigration(List.of(f.codec.sealAccount(f.key(),account)));}finally{account.erase();}}
+   if(loss.equals("ORPHAN")){var account=new TotpRecordState.Account(ACCOUNT,f.codec.freshId(),BASE);try{f.source.seedClosedMigration(List.of(f.codec.sealAccount(f.key(),account)));}finally{account.erase();}}
    else {if(loss.equals("ESTABLISHED_RETAINED"))f.enroll();var rows=mig15FixtureRows(f.source,"records");rows.remove(f.root());if(loss.equals("ESTABLISHED_EMPTY"))rows.clear();}
    f.reset();var before=new HashMap<>(mig15FixtureRows(f.source,"records"));assertInstanceOf(TotpStoreReadResult.Unavailable.class,f.source.read(Set.of(f.root()),BUDGET));assertInstanceOf(TotpStoreReadResult.Unavailable.class,f.source.read(Set.of(f.key()),BUDGET));
    assertInstanceOf(TotpNamespaceInitializationResult.Unavailable.class,f.totp.initializeNamespaceResult());assertInstanceOf(TotpEnrollmentRequestResult.Unavailable.class,f.begin());assertEquals(before,mig15FixtureRows(f.source,"records"));assertEquals(0,f.store.commits.get());

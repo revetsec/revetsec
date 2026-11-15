@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+@SuppressWarnings("StringConcatToTextBlock") // Explicit CRLF bytes are part of the wire fixture.
 final class PinnedHttpResponseReaderTests {
  private static final Duration BUDGET = Duration.ofSeconds(10);
  private static final String JSON = "Content-Type: application/json\r\n";
@@ -118,8 +119,8 @@ final class PinnedHttpResponseReaderTests {
 
  @Test
  void admitsOnlyFinal200DocumentAndPreservesRepeatedCacheFields() throws Exception {
-  String headers = "Content-Length: 2\r\nContent-Encoding: IDENTITY\r\nCache-Control: max-age=60\r\n"
-    + "cache-control: no-cache\r\nAge: 5\r\nage: 7\r\nSet-Cookie: ignored=COOKIE_SENTINEL\r\n";
+		String headers = "Content-Length: 2\r\nContent-Encoding: IDENTITY\r\nCache-Control: max-age=60\r\n"
+				+ "cache-control: no-cache\r\nAge: 5\r\nage: 7\r\nSet-Cookie: ignored=COOKIE_SENTINEL\r\n";
   RawResponse result = read(wire(headers, "{}"));
   Assertions.assertEquals(List.of("max-age=60", "no-cache"), result.headers().allValues("cache-control"));
   Assertions.assertEquals(List.of("5", "7"), result.headers().allValues("age"));

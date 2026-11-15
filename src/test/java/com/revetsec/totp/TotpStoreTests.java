@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("ThreadPriorityCheck") // Scheduler yielding only coordinates bounded contention in this test.
 final class TotpStoreTests {
  private static final Duration BUDGET = Duration.ofSeconds(3);
  private static final TotpStoreKey ROOT = TotpStoreKey.forNamespace("accounts", "epoch-one");
@@ -436,6 +437,39 @@ final class TotpStoreTests {
   assertEquals(TotpStoreCommitResult.COMMITTED, store.provisionRecoveryEpoch("epoch-two", BUDGET));
   TotpStoreKey nextRoot = TotpStoreKey.forNamespace("accounts", "epoch-two");
   assertInstanceOf(StoreTimeObservation.Unavailable.class, snapshot(store, Set.of(nextRoot)).getTimeObservation());
+ }
+
+ @Test void hostClockDiscontinuitiesRotateGenerationWithoutLosingRecordsOrMovingBackward() throws Exception {
+  InMemoryTotpStore store = initializedStore(5, 100);
+  TotpStoreSnapshot empty = snapshot(store, Set.of(ROOT, ACCOUNT));
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store,
+    write(empty, List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2)))), BUDGET));
+  TotpStoreSnapshot beforeForward = snapshot(store, Set.of(ROOT, ACCOUNT));
+  TotpStoreRecord retained = present(beforeForward, ACCOUNT);
+  Field anchor = InMemoryTotpStore.class.getDeclaredField("authorityAnchor"); anchor.setAccessible(true);
+  anchor.set(store, ((Instant) java.util.Objects.requireNonNull(anchor.get(store))).minusSeconds(10));
+  TotpStoreSnapshot afterForward = snapshot(store, Set.of(ROOT, ACCOUNT));
+  StoreTimeObservation.Healthy forward = assertInstanceOf(StoreTimeObservation.Healthy.class, afterForward.getTimeObservation());
+  assertNotEquals(((StoreTimeObservation.Healthy) beforeForward.getTimeObservation()).getClockGeneration(),
+    forward.getClockGeneration());
+  assertEquals(retained.getVersion(), present(afterForward, ACCOUNT).getVersion());
+  assertEquals(TotpStoreCommitResult.FENCED, commit(store,
+    write(beforeForward, List.of(TotpStoreWrite.Mutation.replace(record(ACCOUNT, 3, 3)))), BUDGET));
+
+  TotpStoreSnapshot beforeBackward = snapshot(store, Set.of(ROOT, ACCOUNT));
+  Field highWater = InMemoryTotpStore.class.getDeclaredField("authorityHighWater"); highWater.setAccessible(true);
+  anchor.set(store, ((Instant) java.util.Objects.requireNonNull(anchor.get(store))).plusSeconds(10));
+  highWater.set(store, Instant.now().plusSeconds(10));
+  TotpStoreSnapshot waiting = snapshot(store, Set.of(ROOT, ACCOUNT));
+  assertInstanceOf(StoreTimeObservation.Unavailable.class, waiting.getTimeObservation());
+  assertEquals(retained.getVersion(), present(waiting, ACCOUNT).getVersion());
+  highWater.set(store, Instant.now().minusSeconds(1));
+  TotpStoreSnapshot recovered = snapshot(store, Set.of(ROOT, ACCOUNT));
+  StoreTimeObservation.Healthy healthy = assertInstanceOf(StoreTimeObservation.Healthy.class, recovered.getTimeObservation());
+  assertNotEquals(((StoreTimeObservation.Healthy) beforeBackward.getTimeObservation()).getClockGeneration(),
+    healthy.getClockGeneration());
+  assertFalse(healthy.getObservedAt().isBefore((Instant) highWater.get(store)));
+  assertEquals(retained.getVersion(), present(recovered, ACCOUNT).getVersion());
  }
 
  @Test void recoveryAdmissionChangesWithoutResettingAuthorityProjectionOrClockGeneration() {

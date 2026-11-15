@@ -44,15 +44,15 @@ final class IntrospectionFailureGuardTests {
     private static final Duration REQUEST=Duration.ofSeconds(1);
     private static @NonNull Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(10));}
     private static @NonNull OAuthException failure(){return OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE,null);}
+    private static @NonNull OAuthException open(@NonNull IntrospectionFailureGuard guard){OAuthException last=failure();for(int index=0;index<3;index++){last=failure();guard.failed(guard.acquire(deadline(),REQUEST),last);}return last;}
     @Test void oldSuccessCannotClearNewFailureAndHealthyCallsAreNotThrottled() {
         AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);
-        var first=guard.acquire(deadline(),REQUEST);var second=guard.acquire(deadline(),REQUEST);var third=guard.acquire(deadline(),REQUEST);
-        guard.healthy(first);OAuthException failed=failure();guard.failed(second,failed);guard.healthy(third);assertIndependentFailure(failed,assertThrows(OAuthException.class,()->guard.acquire(deadline(),REQUEST)));
-        time.set(Duration.ofSeconds(1).toNanos());var recovery=guard.acquire(deadline(),REQUEST);guard.healthy(recovery);guard.failed(third,failure());
+        var old=guard.acquire(deadline(),REQUEST);OAuthException failed=open(guard);guard.healthy(old);assertIndependentFailure(failed,assertThrows(OAuthException.class,()->guard.acquire(deadline(),REQUEST)));
+        time.set(Duration.ofSeconds(1).toNanos());var recovery=guard.acquire(deadline(),REQUEST);guard.healthy(recovery);guard.failed(old,failure());
         for(int i=0;i<10;i++)guard.healthy(guard.acquire(deadline(),REQUEST));
     }
     @Test void oneRecoveryProbeWakesWaitersWithoutSharingACredentialResult() throws Exception {
-        AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);guard.failed(guard.acquire(deadline(),REQUEST),failure());time.set(Duration.ofSeconds(1).toNanos());var probe=guard.acquire(deadline(),REQUEST);
+        AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);open(guard);time.set(Duration.ofSeconds(1).toNanos());var probe=guard.acquire(deadline(),REQUEST);
         ExecutorService pool=Executors.newFixedThreadPool(2);
         try {
             Future<IntrospectionFailureGuard.Attempt> waiter=pool.submit(()->guard.acquire(deadline(),REQUEST));assertTrue(guard.awaitWaitersForTests(1,Duration.ofSeconds(5)));
@@ -61,19 +61,19 @@ final class IntrospectionFailureGuardTests {
         } finally{pool.shutdownNow();assertTrue(pool.awaitTermination(5,TimeUnit.SECONDS));}
     }
     @Test void failedRecoveryWakesWaitersWithInfrastructureFailure() throws Exception {
-        AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);guard.failed(guard.acquire(deadline(),REQUEST),failure());time.set(Duration.ofSeconds(1).toNanos());var probe=guard.acquire(deadline(),REQUEST);
+        AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);open(guard);time.set(Duration.ofSeconds(1).toNanos());var probe=guard.acquire(deadline(),REQUEST);
         ExecutorService pool=Executors.newSingleThreadExecutor();try {
             Future<IntrospectionFailureGuard.Attempt> waiter=pool.submit(()->guard.acquire(deadline(),REQUEST));assertTrue(guard.awaitWaitersForTests(1,Duration.ofSeconds(5)));OAuthException failed=failure();guard.failed(probe,failed);
             assertIndependentFailure(failed,assertInstanceOf(OAuthException.class,assertThrows(ExecutionException.class,()->waiter.get(5,TimeUnit.SECONDS)).getCause()));
         }finally{pool.shutdownNow();assertTrue(pool.awaitTermination(5,TimeUnit.SECONDS));}
     }
     @Test void overdueOrAbandonedRecoveryCannotPublishOldHealth() {
-        AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);guard.failed(guard.acquire(deadline(),REQUEST),failure());time.set(Duration.ofSeconds(1).toNanos());var old=guard.acquire(deadline(),REQUEST);time.addAndGet(Duration.ofSeconds(3).toNanos());var replacement=guard.acquire(deadline(),REQUEST);guard.healthy(old);guard.failed(old,failure());
-        OAuthException newer=failure();guard.failed(replacement,newer);assertIndependentFailure(newer,assertThrows(OAuthException.class,()->guard.acquire(deadline(),REQUEST)));time.addAndGet(Duration.ofSeconds(2).toNanos());var abandoned=guard.acquire(deadline(),REQUEST);guard.abandon(abandoned);guard.healthy(guard.acquire(deadline(),REQUEST));
+        AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);open(guard);time.set(Duration.ofSeconds(1).toNanos());var old=guard.acquire(deadline(),REQUEST);time.addAndGet(Duration.ofSeconds(3).toNanos());var replacement=guard.acquire(deadline(),REQUEST);guard.healthy(old);guard.failed(old,failure());
+        guard.failed(replacement,failure());guard.failed(guard.acquire(deadline(),REQUEST),failure());OAuthException newer=failure();guard.failed(guard.acquire(deadline(),REQUEST),newer);assertIndependentFailure(newer,assertThrows(OAuthException.class,()->guard.acquire(deadline(),REQUEST)));time.addAndGet(Duration.ofSeconds(2).toNanos());var abandoned=guard.acquire(deadline(),REQUEST);guard.abandon(abandoned);guard.healthy(guard.acquire(deadline(),REQUEST));
     }
     @Test void exponentialBackoffCappedRetryAfterAndInterruption() {
         AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);
-        for(int seconds:new int[]{1,2,4,8,10,10}){OAuthException failed=failure();guard.failed(guard.acquire(deadline(),REQUEST),failed);time.addAndGet(Duration.ofSeconds(seconds).toNanos()-1);assertIndependentFailure(failed,assertThrows(OAuthException.class,()->guard.acquire(deadline(),REQUEST)));time.incrementAndGet();}
+        for(int seconds:new int[]{1,2,4,8,10,10}){OAuthException failed=open(guard);time.addAndGet(Duration.ofSeconds(seconds).toNanos()-1);assertIndependentFailure(failed,assertThrows(OAuthException.class,()->guard.acquire(deadline(),REQUEST)));time.incrementAndGet();}
         guard.healthy(guard.acquire(deadline(),REQUEST));var attempt=guard.acquire(deadline(),REQUEST);OAuthException longDelay=OAuthErrorResponseException.fromResponse(429,"",Optional.of(Duration.ofDays(1000)));guard.failed(attempt,longDelay);time.addAndGet(Duration.ofMinutes(10).toNanos()-1);assertEquals(OAuthException.Reason.NETWORK_FAILURE,assertThrows(OAuthTransportException.class,()->guard.acquire(deadline(),REQUEST)).getReason());time.incrementAndGet();guard.healthy(guard.acquire(deadline(),REQUEST));
         guard.failed(guard.acquire(deadline(),REQUEST),OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED,null));guard.healthy(guard.acquire(deadline(),REQUEST));
         assertThrows(OAuthTransportException.class,()->guard.acquire(Deadline.fromNow(Duration.ZERO),REQUEST));Thread.currentThread().interrupt();try{assertThrows(OAuthTransportException.class,()->guard.acquire(deadline(),REQUEST));assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}

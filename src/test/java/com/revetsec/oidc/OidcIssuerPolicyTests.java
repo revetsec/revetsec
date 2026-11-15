@@ -208,7 +208,7 @@ final class OidcIssuerPolicyTests {
 			Deadline deadline = Deadline.fromNow(mode.equals("already-expired") ? Duration.ZERO : Duration.ofMillis(mode.equals("deadline") ? 1000 : 10000));
 			OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> {
 				calls.incrementAndGet();
-				if (mode.equals("expiry")) clock.advance(Duration.ofSeconds(300));
+				if (mode.equals("expiry")) clock.advance(Duration.ofMinutes(5));
 				if (mode.equals("rollback")) clock.set(NOW.minusSeconds(1));
 				if (mode.equals("deadline")) { while (deadline.remainingNanos() > 0) Thread.onSpinWait(); }
 				return true;

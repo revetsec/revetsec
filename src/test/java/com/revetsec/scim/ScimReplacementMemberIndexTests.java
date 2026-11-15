@@ -35,7 +35,7 @@ final class ScimReplacementMemberIndexTests {
 
     @Test void successfulLookupChargesMaterializationAndAtLeastOneFullKeyComparison() {
         var rows = rows(64); var query = (JsonObject) rows.get(rows.size() - 1);
-        long characters = ((JsonString) query.find("$ref").orElseThrow()).getValue().length()
+        long characters = (long) ((JsonString) query.find("$ref").orElseThrow()).getValue().length()
                 + ((JsonString) query.find("type").orElseThrow()).getValue().length();
         long emptyQuery = minimum(List.of(), query), populatedQuery = minimum(rows, query) - minimum(rows, null);
         assertTrue(populatedQuery >= 2 * characters, "fresh tuple construction and an exact populated-tree hit must both charge key characters");

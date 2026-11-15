@@ -30,6 +30,7 @@ import java.util.*;
 
 /** Deterministic provider aliases make intermediate HKDF cleanup externally observable. */
 @ResourceLock("java.security.Security")
+@SuppressWarnings("serial") // Test-only provider is never serialized.
 final class HkdfRc1MutationTests {
  private static final String PROVIDER="Rc1HkdfProvider";
  private static final ThreadLocal<@Nullable State> STATE=new ThreadLocal<>();

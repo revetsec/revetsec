@@ -206,7 +206,7 @@ final class ConcurrentLruMapRc1MutationTests {
   try { await(key.reached); map.put(key, "new"); }
   finally { key.release.countDown(); join(worker); }
   assertNull(failure.get());
-  assertEquals(Boolean.FALSE, removed.get());
+  assertEquals(false, removed.get());
   assertEquals("new", map.get(key));
  }
 

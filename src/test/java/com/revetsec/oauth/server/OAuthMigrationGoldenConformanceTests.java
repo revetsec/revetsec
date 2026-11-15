@@ -98,15 +98,19 @@ final class OAuthMigrationGoldenConformanceTests {
             assertEquals(Boolean.parseBoolean(vector.field("issuerMatch")),record.matchesIssuer(issuer));
             if(vector.kind()!=OAuthStoreKey.Kind.INTERACTION){assertEquals(Boolean.parseBoolean(vector.field("subjectMatch")),record.matchesSubject(OAuthStoreFence.decode(subject,OAuthStoreKey.Kind.SUBJECT_STATE)));assertTrue(before.sameLineage(record));}
             assertEquals(vector.field("status"),record.text("status"));assertEquals(vector.field("id"),record.text("id"));assertEquals(vector.entry().getRetainUntil(),record.retention());assertEquals(before.toPayload(),record.toPayload());
-            switch(vector.kind()){
-                case INTERACTION:if(record.text("status").equals("COMPLETED"))assertThrows(IllegalArgumentException.class,record::completed);break;
-                case CODE:if(!record.text("status").equals("UNUSED"))assertThrows(IllegalArgumentException.class,()->record.consumed(record.retention(),LIMITS,1024));break;
-                case GRANT:
-                    if(!record.text("status").equals("PENDING"))assertThrows(IllegalArgumentException.class,()->record.activated(record.expires(),record.retention(),Duration.ofSeconds(30),Set.of("read"),null,LIMITS,1024));
+            switch (vector.kind()) {
+  case INTERACTION -> {
+if(record.text("status").equals("COMPLETED"))assertThrows(IllegalArgumentException.class,record::completed);
+}
+  case CODE -> {
+if(!record.text("status").equals("UNUSED"))assertThrows(IllegalArgumentException.class,()->record.consumed(record.retention(),LIMITS,1024));
+}
+  case GRANT -> {
+if(!record.text("status").equals("PENDING"))assertThrows(IllegalArgumentException.class,()->record.activated(record.expires(),record.retention(),Duration.ofSeconds(30),Set.of("read"),null,LIMITS,1024));
                     if(record.text("status").equals("REVOKED"))assertThrows(IllegalArgumentException.class,()->record.rotated(value("migrationId"),LIMITS,1024));
-                    break;
-                default:break;
-            }
+}
+  default -> {}
+}
         }));return tests;
     }
 

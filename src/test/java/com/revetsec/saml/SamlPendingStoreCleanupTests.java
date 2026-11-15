@@ -40,6 +40,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Deterministic maintenance-work checks, not elapsed-time performance benchmarks. */
+@SuppressWarnings("serial") // Test-only map and callback fixtures are never serialized.
 final class SamlPendingStoreCleanupTests {
     private static final Instant START = Instant.parse("2026-11-02T00:00:00Z");
     private static final Duration BUDGET = Duration.ofSeconds(5);

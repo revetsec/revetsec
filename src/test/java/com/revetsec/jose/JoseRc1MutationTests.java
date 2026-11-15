@@ -63,7 +63,7 @@ final class JoseRc1MutationTests {
   Assertions.assertNotNull(decision);
   Assertions.assertEquals("LEAD", Objects.requireNonNull(field(decision, "action")).toString());
   Object flight = Objects.requireNonNull(field(decision, "flight"));
-  Assertions.assertEquals(Boolean.FALSE, call(flight, "isOverdue", System.nanoTime()));
+  Assertions.assertEquals(false, call(flight, "isOverdue", System.nanoTime()));
   Assertions.assertEquals(0, lock(cache).getHoldCount());
  }
 
@@ -201,11 +201,11 @@ final class JoseRc1MutationTests {
 
  @Test void flightExpiryUsesStrictElapsedBudgetAndAlreadyCompletedState()throws Exception {
   Object flight=flight();long start=(Long)Objects.requireNonNull(field(flight,"startNanos")),budget=(Long)Objects.requireNonNull(field(flight,"budgetNanos"));
-  Assertions.assertEquals(Boolean.FALSE,call(flight,"isOverdue",start+budget-1));
-  Assertions.assertEquals(Boolean.FALSE,call(flight,"isOverdue",start+budget));
-  Assertions.assertEquals(Boolean.TRUE,call(flight,"isOverdue",start+budget+1));
+  Assertions.assertEquals(false,call(flight,"isOverdue",start+budget-1));
+  Assertions.assertEquals(false,call(flight,"isOverdue",start+budget));
+  Assertions.assertEquals(true,call(flight,"isOverdue",start+budget+1));
   future(flight).complete(staticField("FlightResult","CUT_SHORT"));
-  Assertions.assertEquals(Boolean.TRUE,call(flight,"isOverdue",start));
+  Assertions.assertEquals(true,call(flight,"isOverdue",start));
  }
 
  private static @NonNull JwksCache cache() {

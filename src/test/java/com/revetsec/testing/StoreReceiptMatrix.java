@@ -27,6 +27,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 /** Explicit SC-API-08 test-only known-receipt faults. Impossible factory shapes invoke private constructors, never production APIs. */
+@SuppressWarnings("RethrowReflectiveOperationExceptionAsLinkageError") // Reflection failures mean the matrix no longer matches the store carrier shape.
 public final class StoreReceiptMatrix {
  private StoreReceiptMatrix() { }
  public enum Case {

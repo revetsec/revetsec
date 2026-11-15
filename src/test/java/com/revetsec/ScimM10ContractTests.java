@@ -133,13 +133,13 @@ class ScimM10ContractTests {
             @Override
             public @Nullable Void visitThrow(@NonNull ThrowTree node, @Nullable Void ignored) {
                 found.add(node);
-                return super.visitThrow(node, ignored);
+                return super.visitThrow(node, null);
             }
 
             @Override
             public @Nullable Void visitCatch(@NonNull CatchTree node, @Nullable Void ignored) {
                 found.add(node);
-                return super.visitCatch(node, ignored);
+                return super.visitCatch(node, null);
             }
         }.scan(tree, null);
         return found;

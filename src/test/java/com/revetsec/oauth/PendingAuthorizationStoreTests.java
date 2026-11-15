@@ -96,7 +96,7 @@ final class PendingAuthorizationStoreTests {
 		assertTrue(store.consume("other-browser", "state").isEmpty());
 		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE,
 				store.save("browser", "expired-save", "record", START.plusSeconds(60)));
-		clock.advance(Duration.ofSeconds(-60));
+		clock.advance(Duration.ofMinutes(-1));
 		assertTrue(store.consume("browser", "state").isEmpty());
 		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE,
 				store.save("browser", "new-state", "record", START.plusSeconds(30)));

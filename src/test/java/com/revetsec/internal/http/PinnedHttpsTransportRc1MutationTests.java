@@ -32,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Numeric loopback connection and an injected TLS engine; no external connections or TLS trust changes. */
 @Isolated
+@SuppressWarnings("serial") // Test-only provider is never serialized.
 final class PinnedHttpsTransportRc1MutationTests {
  private static final Duration BOUND = Duration.ofSeconds(2);
  @Test void cacheVariantProfileCoversEveryFixedRequestByte() throws Exception {

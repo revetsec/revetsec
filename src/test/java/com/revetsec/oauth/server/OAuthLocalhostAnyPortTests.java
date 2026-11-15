@@ -193,8 +193,8 @@ final class OAuthLocalhostAnyPortTests {
  }
  private static class Events implements OAuthServerObserver {
   int enabled,used,will,terminal;
-  public void didEnableLocalhostAnyPortRedirects(){enabled++;}
-  public void didUseLocalhostAnyPortRedirects(){used++;}
+  @Override public void didEnableLocalhostAnyPortRedirects(){enabled++;}
+  @Override public void didUseLocalhostAnyPortRedirects(){used++;}
   @Override public void willHandleEndpoint(@NonNull Endpoint endpoint){if(endpoint==Endpoint.AUTHORIZATION)will++;}
   @Override public void didHandleEndpoint(@NonNull Endpoint endpoint,@Nullable Integer status,@NonNull Duration elapsed){if(endpoint==Endpoint.AUTHORIZATION)terminal++;}
   @Override public void didRejectEndpoint(@NonNull Endpoint endpoint,OAuthServerException.@NonNull Reason reason,@Nullable Integer status,@NonNull Duration elapsed){if(endpoint==Endpoint.AUTHORIZATION)terminal++;}
@@ -221,12 +221,12 @@ final class OAuthLocalhostAnyPortTests {
   }));
  }
  @Test void observerFailuresAreContainedAndInterruptedStatusIsRestored() throws Exception {
-  Events events=new Events(){public void didEnableLocalhostAnyPortRedirects(){super.didEnableLocalhostAnyPortRedirects();throw new IllegalStateException("private detail");}public void didUseLocalhostAnyPortRedirects(){super.didUseLocalhostAnyPortRedirects();Thread.currentThread().interrupt();throw new IllegalStateException("private detail");}};
+  Events events=new Events(){@Override public void didEnableLocalhostAnyPortRedirects(){super.didEnableLocalhostAnyPortRedirects();throw new IllegalStateException("private detail");}@Override public void didUseLocalhostAnyPortRedirects(){super.didUseLocalhostAnyPortRedirects();Thread.currentThread().interrupt();throw new IllegalStateException("private detail");}};
   Fixture f=new Fixture(document("http://localhost/callback"),false,false,false,true,events);assertEquals(1,events.enabled);
   try{assertEquals(OAuthServerException.Reason.STORE_UNAVAILABLE,assertThrows(OAuthServerStoreException.class,()->f.begin("http://localhost:49152/callback")).getReason());assertTrue(Thread.currentThread().isInterrupted());assertEquals(1,events.used);}finally{Thread.interrupted();}
  }
  @Test void fatalObserverErrorPropagatesAtUse() throws Exception {
-  Events events=new Events(){public void didUseLocalhostAnyPortRedirects(){super.didUseLocalhostAnyPortRedirects();throw new InternalError("sentinel");}};
+  Events events=new Events(){@Override public void didUseLocalhostAnyPortRedirects(){super.didUseLocalhostAnyPortRedirects();throw new InternalError("sentinel");}};
   Fixture f=new Fixture(document("http://localhost/callback"),false,false,false,true,events);var rows=Map.copyOf(f.store.rows);assertThrows(InternalError.class,()->f.begin("http://localhost:49152/callback"));assertEquals(rows,f.store.rows);assertEquals(1,events.used);
  }
  @Test void invalidBuildDoesNotEmitEnable() throws Exception {

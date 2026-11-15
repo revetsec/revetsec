@@ -48,6 +48,7 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Selected EC signing: genuine signatures, independent P1363 oracle and exact structural boundaries. */
+@SuppressWarnings("serial") // Test-only mutable key fixtures are never serialized.
 final class JwsSignerEcExpansionTests {
  private static final @NonNull List<@NonNull JwsAlgorithm> ALGORITHMS=List.of(JwsAlgorithm.ES256,JwsAlgorithm.ES384);
  private static final @NonNull Duration BUDGET=Duration.ofSeconds(5);

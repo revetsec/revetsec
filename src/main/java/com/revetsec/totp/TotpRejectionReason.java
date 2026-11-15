@@ -48,8 +48,5 @@ public enum TotpRejectionReason {
     RECOVERY_BATCH_MISMATCH,
     /** The server-owned operation or browser binding did not match.
      * @since 1.0.0 */
-    BINDING_MISMATCH,
-    /** The observed time precedes authoritative stored time.
-     * @since 1.0.0 */
-    CLOCK_ROLLBACK
+    BINDING_MISMATCH
 }

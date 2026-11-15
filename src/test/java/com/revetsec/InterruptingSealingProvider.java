@@ -33,6 +33,7 @@ import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
 /** Serialized test provider: authenticates existing rows, then interrupts only a new seal. */
+@SuppressWarnings("TypeParameterUnusedInFormals") // Test-only provider bridge preserves the SPI generic signature.
 public final class InterruptingSealingProvider extends Provider {
  private static final long serialVersionUID=1L;
  private static final @NonNull String NAME="RevetsecInterruptingSealing";

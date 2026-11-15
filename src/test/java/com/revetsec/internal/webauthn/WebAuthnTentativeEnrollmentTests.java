@@ -69,7 +69,7 @@ final class WebAuthnTentativeEnrollmentTests {
         F f=new F(3);
         for(int i=0;i<64;i++){
             byte[] handle={(byte)(i+1)};var request=f.begin(handle);assertTentative(f,handle);
-            assertEquals(2,f.source.records().size());f.advance(Duration.ofSeconds(300));
+            assertEquals(2,f.source.records().size());f.advance(Duration.ofMinutes(5));
             var key=f.ceremonyKey(request);var snapshot=assertInstanceOf(WebAuthnStoreReadResult.Available.class,f.source.read(Set.of(key,f.root()),Duration.ofSeconds(1))).getSnapshot();
             // Explicit fixture maintenance at the known authenticated expiry, never a read side effect.
             assertEquals(WebAuthnStoreCommitResult.COMMITTED,f.source.compareAndCommit(ScriptedWebAuthnStore.write(snapshot,List.of(WebAuthnStoreWrite.Mutation.delete(key))),Duration.ofSeconds(1)).getStatus());
@@ -107,12 +107,12 @@ final class WebAuthnTentativeEnrollmentTests {
         assertEquals(WebAuthnEngine.Status.REJECTED,f.engine.completeRegistration(request.ceremonyId(),wrong,registrationJson(f.pair,ID,Base64Url.encode(request.challenge()))).status());assertTentative(f,HANDLE);
     }
     @Test void exactExpiryCannotEstablishAnAccount() throws Exception {
-        F f=new F();var request=f.begin(HANDLE);f.advance(Duration.ofSeconds(300));
+        F f=new F();var request=f.begin(HANDLE);f.advance(Duration.ofMinutes(5));
         assertEquals(WebAuthnEngine.Status.REJECTED,f.complete(request,ID).status());assertTentative(f,HANDLE);
     }
     @Test void expiryAtCommitLeavesNoPartialAccountOrConsumption() throws Exception {
         F f=new F();var request=f.begin(HANDLE);var before=f.source.records();
-        f.store.before=write->{f.advance(Duration.ofSeconds(300));};
+        f.store.before=write->{f.advance(Duration.ofMinutes(5));};
         assertEquals(WebAuthnEngine.Status.UNAVAILABLE,f.complete(request,ID).status());assertSameRecords(before,f.source.records());assertTentative(f,HANDLE);
     }
     @Test void capacityRefusalLeavesTentativeCeremonyUnconsumed() throws Exception {

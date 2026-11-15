@@ -47,6 +47,7 @@ import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthStoreFailure.Reason.*;
 
 /** Two-coordinator controlled interleavings; no durable multi-node/process-crash backend proof. */
+@SuppressWarnings("try") // Held permit scope is itself the coordination condition under test.
 class OAuthStoreCoordinationTests {
 	private static final @NonNull Instant NOW = Instant.parse("2026-10-04T00:00:00.123456789Z");
 	private static final @NonNull String NONCE = "A".repeat(43);

@@ -128,7 +128,7 @@ final class LegacyPasswordVerifierTests {
             assertFalse(verifying.isAlive());
             assertEquals(null, failure.get());
             assertEquals(UNAVAILABLE, result.get());
-            assertEquals(Boolean.TRUE, interruptedFlag.get());
+            assertEquals(true, interruptedFlag.get());
         } finally {
             verifying.interrupt();
             verifying.join(10_000);

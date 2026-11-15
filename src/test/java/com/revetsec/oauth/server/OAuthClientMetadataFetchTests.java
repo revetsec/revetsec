@@ -125,7 +125,7 @@ class OAuthClientMetadataFetchTests {
   OAuthClientMetadataPolicy narrower=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).maximumFreshness(Duration.ofSeconds(30)).build();
   assertTrue(codec(sealer,narrower).open(ID,entry,NOW).isEmpty());
   assertNotEquals(c.key(ID),new OAuthClientMetadataCacheCodec(ISSUER,sealer,p,OAuthServerIngressLimits.fromDefaults(),true,false).key(ID));
-  String app=sealer.seal("untrusted", "context",Duration.ofSeconds(300));
+  String app=sealer.seal("untrusted", "context",Duration.ofMinutes(5));
   assertTrue(c.open(ID,OAuthClientMetadataCacheEntry.fromStoredForm(entry.getKey(),entry.getVersion(),entry.getExpiresAt(),app),NOW).isEmpty());
   String store=SealedStateAccess.get().seal(sealer,SealedStateType.AS_RECORD,"{}",context(entry),entry.getExpiresAt());
   assertTrue(c.open(ID,copy(entry,store),NOW).isEmpty());

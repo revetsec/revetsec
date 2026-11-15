@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+@SuppressWarnings("LockNotBeforeTry") // The intervening latch assertion is part of the deliberate lock-state fixture.
 final class OAuthClientMetadataCacheTests {
     private static final @NonNull Duration WAIT = Duration.ofSeconds(5);
 

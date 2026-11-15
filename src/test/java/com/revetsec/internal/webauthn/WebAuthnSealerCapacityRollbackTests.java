@@ -49,6 +49,7 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Historical WebAuthn decode capacity is independent of the current emission cap; no size/floor/type bypass. */
+@SuppressWarnings("ArrayRecordComponent") // Private fixture record owns an immutable-by-convention byte snapshot.
 final class WebAuthnSealerCapacityRollbackTests {
  private static final @NonNull Instant NOW=Instant.parse("2026-11-02T12:00:00.123456789Z"),PERMANENT=WebAuthnRecordPayloadV2.PERMANENT;
  private static final @NonNull Clock CLOCK=Clock.fixed(NOW,ZoneOffset.UTC);

@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import java.util.Optional;
 import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -45,7 +46,7 @@ final class OAuthRc1GuardMutationTests {
         });
         assertFalse(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(1, Duration.ZERO))));
         IntrospectionFailureGuard.Attempt first = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
-        OAuthException failure = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+        OAuthException failure = endpointSignal();
         onCaller(() -> { guard.failed(first, failure); return true; });
         nanos.set(130);
         IntrospectionFailureGuard.Attempt probe = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
@@ -72,21 +73,22 @@ final class OAuthRc1GuardMutationTests {
         AtomicLong nanos = new AtomicLong();
         IntrospectionFailureGuard guard = new IntrospectionFailureGuard(Duration.ofNanos(30), nanos::get);
         IntrospectionFailureGuard.Attempt first = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
-        OAuthException initial = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+        OAuthException initial = endpointSignal();
         onCaller(() -> { guard.failed(first, initial); return true; });
         nanos.set(29);
-        assertIndependentFailure(initial, onCaller(() -> assertThrows(OAuthException.class, () -> guard.acquire(deadline(), Duration.ofSeconds(1)))));
+        OAuthException unavailable = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+        assertIndependentFailure(unavailable, onCaller(() -> assertThrows(OAuthException.class, () -> guard.acquire(deadline(), Duration.ofSeconds(1)))));
         nanos.set(30);
         IntrospectionFailureGuard.Attempt probe = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         FutureTask<IntrospectionFailureGuard.Attempt> follower = task(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         try {
             assertTrue(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(1, Duration.ofSeconds(2)))));
-            OAuthException replacement = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+            OAuthException replacement = endpointSignal();
             onCaller(() -> { guard.failed(probe, replacement); return true; });
-            assertIndependentFailure(replacement, failure(follower));
+            assertIndependentFailure(unavailable, failure(follower));
             assertTrue(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(0, Duration.ZERO))));
             assertFalse(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(1, Duration.ZERO))));
-            assertIndependentFailure(replacement, onCaller(() -> assertThrows(OAuthException.class,
+            assertIndependentFailure(unavailable, onCaller(() -> assertThrows(OAuthException.class,
                     () -> guard.acquire(deadline(), Duration.ofSeconds(1)))));
         } finally { follower.cancel(true); }
     }
@@ -96,7 +98,7 @@ final class OAuthRc1GuardMutationTests {
         AtomicLong nanos = new AtomicLong();
         IntrospectionFailureGuard guard = new IntrospectionFailureGuard(Duration.ofNanos(30), nanos::get);
         IntrospectionFailureGuard.Attempt first = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
-        onCaller(() -> { guard.failed(first, OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null)); return true; });
+        onCaller(() -> { guard.failed(first, endpointSignal()); return true; });
         nanos.set(30);
         IntrospectionFailureGuard.Attempt probe = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         FutureTask<IntrospectionFailureGuard.Attempt> follower = task(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
@@ -117,7 +119,7 @@ final class OAuthRc1GuardMutationTests {
         AtomicLong nanos = new AtomicLong();
         IntrospectionFailureGuard guard = new IntrospectionFailureGuard(Duration.ofNanos(30), nanos::get);
         IntrospectionFailureGuard.Attempt first = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
-        onCaller(() -> { guard.failed(first, OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null)); return true; });
+        onCaller(() -> { guard.failed(first, endpointSignal()); return true; });
         nanos.set(30);
         IntrospectionFailureGuard.Attempt probe = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         FutureTask<OAuthException.Reason> follower = new FutureTask<>(() -> {
@@ -142,7 +144,7 @@ final class OAuthRc1GuardMutationTests {
         AtomicLong nanos = new AtomicLong();
         IntrospectionFailureGuard guard = new IntrospectionFailureGuard(Duration.ofNanos(30), nanos::get);
         IntrospectionFailureGuard.Attempt first = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
-        onCaller(() -> { guard.failed(first, OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null)); return true; });
+        onCaller(() -> { guard.failed(first, endpointSignal()); return true; });
         nanos.set(30);
         IntrospectionFailureGuard.Attempt overdue = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         nanos.set(31 + Duration.ofSeconds(2).toNanos());
@@ -154,6 +156,9 @@ final class OAuthRc1GuardMutationTests {
     }
 
     private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(5)); }
+    private static @NonNull OAuthErrorResponseException endpointSignal() {
+        return OAuthErrorResponseException.fromResponse(401, "", Optional.empty());
+    }
     private static <T> @NonNull FutureTask<@NonNull T> task(@NonNull Supplier<@NonNull T> operation) {
         FutureTask<T> future = new FutureTask<>(operation::get);
         Thread thread = new Thread(future, "rc1-isolated-health-caller"); thread.setDaemon(true); thread.start();

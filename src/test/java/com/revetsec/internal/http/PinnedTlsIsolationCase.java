@@ -50,6 +50,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.util.Objects.requireNonNull;
 
 /** Child-only global-property/probe qualification. Emits fixed structural success facts, never runtime key bytes. */
+@SuppressWarnings("try") // TLS peer cleanup deliberately preserves interruption behavior.
 public final class PinnedTlsIsolationCase {
  private PinnedTlsIsolationCase() {}
  public static void main(@NonNull String @NonNull [] arguments) throws Exception {

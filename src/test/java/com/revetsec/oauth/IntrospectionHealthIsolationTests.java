@@ -26,6 +26,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("ThreadPriorityCheck") // Scheduler yielding only coordinates bounded contention in this test.
 final class IntrospectionHealthIsolationTests {
     private static final Duration SECOND = Duration.ofSeconds(1);
     private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(10)); }
@@ -54,7 +55,7 @@ final class IntrospectionHealthIsolationTests {
     }
     @Test void aPartialServerFailureProbeCannotPublishLateHealth() {
         AtomicLong time = new AtomicLong(); var guard = new IntrospectionFailureGuard(SECOND, time::get);
-        var old = allowed(guard); guard.failed(allowed(guard), network()); time.set(SECOND.toNanos());
+        var old = allowed(guard); openWithNetworkFailures(guard); time.set(SECOND.toNanos());
         var stale = allowed(guard); guard.failed(stale, status(503));
         var second = allowed(guard); guard.healthy(stale); guard.healthy(old); guard.failed(second, status(503));
         guard.failed(allowed(guard), status(503));
@@ -123,9 +124,19 @@ final class IntrospectionHealthIsolationTests {
     }
     @Test void anAbandonedProbeCannotPublishLateHealth() {
         AtomicLong time = new AtomicLong(); var guard = new IntrospectionFailureGuard(SECOND, time::get);
-        var old = allowed(guard); guard.failed(allowed(guard), network()); time.set(SECOND.toNanos());
+        var old = allowed(guard); openWithNetworkFailures(guard); time.set(SECOND.toNanos());
         var abandoned = allowed(guard); guard.abandon(abandoned);
         var replacement = allowed(guard); guard.healthy(abandoned); guard.healthy(old); guard.failed(replacement, network());
+        guard.failed(allowed(guard), network()); guard.failed(allowed(guard), network());
+        assertThrows(OAuthTransportException.class, () -> guard.acquire(deadline(), SECOND));
+    }
+    @Test void oneNetworkFailureDoesNotOpenButThreeMixedFailuresInAWindowDo() {
+        AtomicLong time = new AtomicLong(); var guard = new IntrospectionFailureGuard(SECOND, time::get);
+        guard.failed(allowed(guard), network());
+        guard.healthy(allowed(guard));
+        guard.failed(allowed(guard), network());
+        guard.failed(allowed(guard), status(503));
+        guard.failed(allowed(guard), network());
         assertThrows(OAuthTransportException.class, () -> guard.acquire(deadline(), SECOND));
     }
     @Test void isolatedServerErrorsDoNotOpenTheGuardButThreeInAWindowDo() {
@@ -158,16 +169,17 @@ final class IntrospectionHealthIsolationTests {
     }
     @Test void tokenResponseDuringRecoveryPreservesPreviousHealthAndFailureStreak() {
         AtomicLong time = new AtomicLong(); var guard = new IntrospectionFailureGuard(SECOND, time::get);
-        guard.failed(allowed(guard), network()); time.set(SECOND.toNanos());
+        openWithNetworkFailures(guard); time.set(SECOND.toNanos());
         guard.failed(allowed(guard), status(403));
         var another = allowed(guard); guard.failed(another, network());
+        guard.failed(allowed(guard), network()); guard.failed(allowed(guard), network());
         time.addAndGet(SECOND.toNanos());
         assertThrows(OAuthTransportException.class, () -> guard.acquire(deadline(), SECOND));
         time.addAndGet(SECOND.toNanos()); guard.healthy(allowed(guard));
     }
     @Test void interruptedRecoveryDoesNotMarkItsFollowersInterrupted() throws Exception {
         AtomicLong time = new AtomicLong(); var guard = new IntrospectionFailureGuard(SECOND, time::get);
-        guard.failed(allowed(guard), network()); time.set(SECOND.toNanos());
+        openWithNetworkFailures(guard); time.set(SECOND.toNanos());
         var probe = allowed(guard); ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             Future<OAuthException> one = pool.submit(() -> assertThrows(OAuthException.class, () -> guard.acquire(deadline(), SECOND)));
@@ -179,5 +191,8 @@ final class IntrospectionHealthIsolationTests {
             assertEquals(first.getReason(), second.getReason()); assertNotSame(first, second);
             guard.healthy(allowed(guard));
         } finally { pool.shutdownNow(); assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS)); }
+    }
+    private static void openWithNetworkFailures(@NonNull IntrospectionFailureGuard guard) {
+        for (int failure = 0; failure < 3; failure++) guard.failed(allowed(guard), network());
     }
 }

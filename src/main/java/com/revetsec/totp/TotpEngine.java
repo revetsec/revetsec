@@ -143,9 +143,9 @@ final class TotpEngine {
 					else result.accountStatus=status(state.account);
 					return result; // Snapshot-point query: no write, quota action or barrier.
 				} else {
-					TotpRecords.Account account=state.account;
+					TotpRecordState.Account account=state.account;
 					if(account==null && command.action==Action.BEGIN) {
-						account=new TotpRecords.Account(Objects.requireNonNull(command.accountId),this.records.freshId(),state.now);
+						account=new TotpRecordState.Account(Objects.requireNonNull(command.accountId),this.records.freshId(),state.now);
 						state.account=account;
 					}
 					if(account==null)result.reject(command.action==Action.CANCEL
@@ -156,7 +156,7 @@ final class TotpEngine {
 							upper=minimum(run.artifactUpper(),account.pending==null?null:account.pending.expiresAt);
 						}
 						case CANCEL -> {
-							TotpRecords.Pending pending=account.pending;
+							TotpRecordState.Pending pending=account.pending;
 							if(pending==null || !ConstantTime.isEqual(pending.enrollmentId,command.first))result.reject(TotpRejectionReason.ENROLLMENT_NOT_FOUND);
 							else if(!ConstantTime.isEqual(pending.browserHash,browserHash(command.third)))result.reject(TotpRejectionReason.BINDING_MISMATCH);
 							else {
@@ -165,12 +165,12 @@ final class TotpEngine {
 							}
 						}
 						case REMOVE -> {
-							TotpRecords.Active active=account.active;
+							TotpRecordState.Active active=account.active;
 							if(active==null || !ConstantTime.isEqual(active.factorId,command.first))result.reject(TotpRejectionReason.FACTOR_MISMATCH);
 							else {account.erase();account.active=null;account.pending=null;account.batchId=null;account.recoveryHashes.clear();account.fence=this.records.freshId();}
 						}
 						case ROTATE -> {
-							TotpRecords.Active active=account.active;
+							TotpRecordState.Active active=account.active;
 							if(active==null || !ConstantTime.isEqual(active.factorId,command.first))result.reject(TotpRejectionReason.FACTOR_MISMATCH);
 							else if(!ConstantTime.isEqual(account.batchId,command.second))result.reject(TotpRejectionReason.RECOVERY_BATCH_MISMATCH);
 							else {upper=run.artifactUpper();result.codes=rotate(account,state.now);}
@@ -193,27 +193,27 @@ final class TotpEngine {
 		return run.failed(TotpUnavailableReason.CONFLICT_LIMIT_REACHED);
 	}
 
-	private void begin(@NonNull Command command, TotpRecords.@NonNull Account account,
+	private void begin(@NonNull Command command, TotpRecordState.@NonNull Account account,
 			@NonNull Instant now, @NonNull Result result, @NonNull Run run) {
 		if (account.charges.size() >= 5) { result.status = Status.THROTTLED; result.retryAfter = retryAfter(account, now, false); return; }
 		if (account.pending != null) { result.reject(TotpRejectionReason.ENROLLMENT_CONFLICT); return; }
 		TotpEnrollmentOptions options = Objects.requireNonNull(command.options);
 		String expected = options.getReplacingFactorId().orElse(null);
-		TotpRecords.Active active = account.active;
+		TotpRecordState.Active active = account.active;
 		if (expected == null && active != null) { result.reject(TotpRejectionReason.ALREADY_ENROLLED); return; }
 		if (expected != null && (active == null || !ConstantTime.isEqual(expected, active.factorId))) {
 			result.reject(TotpRejectionReason.FACTOR_MISMATCH); return;
 		}
-		TotpRecords.Pending prepared=run.enrollment;
+		TotpRecordState.Pending prepared=run.enrollment;
 		if(prepared==null){
-			prepared=new TotpRecords.Pending(this.records.freshId(),this.records.freshId(),EntropySource.fromDefaults().nextBytes(20),
+			prepared=new TotpRecordState.Pending(this.records.freshId(),this.records.freshId(),EntropySource.fromDefaults().nextBytes(20),
 					browserHash(command.third),now.plusSeconds(300),expected);
 			run.enrollment=prepared;
 		}
 		String enrollmentId=prepared.enrollmentId,factorId=prepared.factorId;
 		Instant expires=prepared.expiresAt;
 		byte[] secret=prepared.secret.clone();
-		account.pending=new TotpRecords.Pending(enrollmentId,factorId,secret,prepared.browserHash.clone(),expires,expected);
+		account.pending=new TotpRecordState.Pending(enrollmentId,factorId,secret,prepared.browserHash.clone(),expires,expected);
 		String manual = TotpPrimitives.base32(secret);
 		String uri = TotpProvisioning.uri(this.issuer,options.getAccountName(),manual);
 		result.enrollment = new TotpEnrollment(enrollmentId, factorId, expires, uri, manual, this.epoch);
@@ -225,12 +225,12 @@ final class TotpEngine {
 		boolean reserved=false;
 		for(int retry=0;retry<=8;retry++) {
 			try(State state=load(run,command.accountId,false,null)) {
-				TotpRecords.Account account=state.account;
-				if(account==null){account=new TotpRecords.Account(Objects.requireNonNull(command.accountId),this.records.freshId(),state.now);state.account=account;}
+				TotpRecordState.Account account=state.account;
+				if(account==null){account=new TotpRecordState.Account(Objects.requireNonNull(command.accountId),this.records.freshId(),state.now);state.account=account;}
 				boolean throttled=account.charges.size()>=5 || (authentication.sixDigit && account.totpCharges.size()>=10);
 				if(!authentication.prepared)authentication.prepare(run,command,account,state.now,!throttled);
 				List<TotpStoreWrite.Mutation> changes=new ArrayList<>();
-				if(!throttled){account.charges.add(new TotpRecords.Charge(authentication.chargeId,state.now));if(authentication.sixDigit)account.totpCharges.add(new TotpRecords.Charge(authentication.chargeId,state.now));changes.add(accountMutation(state,account));}
+				if(!throttled){account.charges.add(new TotpRecordState.Charge(authentication.chargeId,state.now));if(authentication.sixDigit)account.totpCharges.add(new TotpRecordState.Charge(authentication.chargeId,state.now));changes.add(accountMutation(state,account));}
 				TotpStoreCommitResult committed=run.commit(state,changes,TotpStoreWrite.Purpose.UPDATE,
 						throttled?CommitRole.BARRIER:CommitRole.CHARGE_RESERVATION,authentication.upper);
 				if(committed==TotpStoreCommitResult.CONFLICT){run.backoff(retry);continue;}
@@ -242,7 +242,7 @@ final class TotpEngine {
 		if(!reserved)return run.failed(TotpUnavailableReason.CONFLICT_LIMIT_REACHED);
 		for(int retry=0;retry<=8;retry++) {
 			try(State state=load(run,command.accountId,false,null)) {
-				TotpRecords.Account account=state.account;
+				TotpRecordState.Account account=state.account;
 				if(account==null)throw new Failure(run.failed(TotpUnavailableReason.INVALID_STORED_STATE));
 				boolean chargePresent=account.charges.stream().anyMatch(charge->charge.id.equals(authentication.chargeId));
 				if(authentication.sixDigit)chargePresent &= account.totpCharges.stream().anyMatch(charge->charge.id.equals(authentication.chargeId));
@@ -269,9 +269,9 @@ final class TotpEngine {
 		return run.failed(TotpUnavailableReason.CONFLICT_LIMIT_REACHED);
 	}
 
-	private void confirm(@NonNull Command command, TotpRecords.@NonNull Account account, @NonNull Instant now,
+	private void confirm(@NonNull Command command, TotpRecordState.@NonNull Account account, @NonNull Instant now,
 			@NonNull AuthAttempt attempt, @NonNull Result result) throws Failure {
-		TotpRecords.Pending pending = account.pending;
+		TotpRecordState.Pending pending = account.pending;
 		if (pending == null || !ConstantTime.isEqual(pending.enrollmentId, command.first)
 				|| !ConstantTime.isEqual(pending.factorId, attempt.factorId)) {
 			result.reject(TotpRejectionReason.ENROLLMENT_NOT_FOUND); return;
@@ -279,7 +279,7 @@ final class TotpEngine {
 		if (!ConstantTime.isEqual(pending.browserHash, browserHash(command.third))) {
 			result.reject(TotpRejectionReason.BINDING_MISMATCH); return;
 		}
-		TotpRecords.Active active = account.active;
+		TotpRecordState.Active active = account.active;
 		if ((pending.expectedFactorId == null && active != null)
 				|| (pending.expectedFactorId != null && (active == null
 				|| !ConstantTime.isEqual(active.factorId, pending.expectedFactorId)))) {
@@ -288,15 +288,15 @@ final class TotpEngine {
 		long matched = attempt.matchedStep;
 		if (matched < 0) { result.reject(TotpRejectionReason.INVALID_CODE); return; }
 		if (active != null) Arrays.fill(active.secret, (byte) 0);
-		account.active = new TotpRecords.Active(pending.factorId, pending.secret.clone(), now, matched);
+		account.active = new TotpRecordState.Active(pending.factorId, pending.secret.clone(), now, matched);
 		Arrays.fill(pending.secret, (byte) 0); Arrays.fill(pending.browserHash, (byte) 0); account.pending = null; account.fence = this.records.freshId();
 		result.factor = factor(account, Objects.requireNonNull(account.active));
 		result.codes = rotate(account, now);
 	}
 
-	private void verify(@NonNull Command command, TotpRecords.@NonNull Account account, @NonNull Instant now,
+	private void verify(@NonNull Command command, TotpRecordState.@NonNull Account account, @NonNull Instant now,
 			@NonNull AuthAttempt attempt, @NonNull Result result) throws Failure {
-		TotpRecords.Active active = account.active;
+		TotpRecordState.Active active = account.active;
 		if (active == null || !ConstantTime.isEqual(active.factorId, attempt.factorId)) {
 			result.reject(TotpRejectionReason.NOT_ENROLLED); return;
 		}
@@ -308,9 +308,9 @@ final class TotpEngine {
 				active.factorId, now, command.third);
 	}
 
-	private void recovery(@NonNull Command command, TotpRecords.@NonNull Account account, @NonNull Instant now,
+	private void recovery(@NonNull Command command, TotpRecordState.@NonNull Account account, @NonNull Instant now,
 			@NonNull AuthAttempt attempt, @NonNull Result result) {
-		TotpRecords.Active active = account.active;
+		TotpRecordState.Active active = account.active;
 		if (active == null || !ConstantTime.isEqual(active.factorId, attempt.factorId)) {
 			result.reject(TotpRejectionReason.NOT_ENROLLED); return;
 		}
@@ -329,7 +329,7 @@ final class TotpEngine {
 				active.factorId, now, command.third, account.recoveryHashes.size());
 	}
 
-	private @NonNull RecoveryCodes rotate(TotpRecords.@NonNull Account account, @NonNull Instant now) {
+	private @NonNull RecoveryCodes rotate(TotpRecordState.@NonNull Account account, @NonNull Instant now) {
 		for (byte[] hash : account.recoveryHashes) Arrays.fill(hash, (byte) 0);
 		account.recoveryHashes.clear(); account.batchId = this.records.freshId();
 		List<String> codes = new ArrayList<>();
@@ -343,7 +343,7 @@ final class TotpEngine {
 		return new RecoveryCodes(this.namespace, this.epoch, account.accountId,
 				Objects.requireNonNull(account.active).factorId, account.batchId, now, codes);
 	}
-	private byte @NonNull [] recoveryHash(TotpRecords.@NonNull Account account, @NonNull String code) {
+	private byte @NonNull [] recoveryHash(TotpRecordState.@NonNull Account account, @NonNull String code) {
 		return TotpPrimitives.digest("revetsec/totp/recovery-verifier/v1", this.namespace, this.epoch,
 				account.accountId, Objects.requireNonNull(account.active).factorId,
 				Objects.requireNonNull(account.batchId), code);
@@ -358,16 +358,16 @@ final class TotpEngine {
 			throw new Failure(Result.unavailable(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE));
 		}
 	}
-	private @NonNull TotpFactor factor(TotpRecords.@NonNull Account account, TotpRecords.@NonNull Active active) {
+	private @NonNull TotpFactor factor(TotpRecordState.@NonNull Account account, TotpRecordState.@NonNull Active active) {
 		return new TotpFactor(this.namespace, this.epoch, account.accountId, active.factorId, active.enrolledAt);
 	}
-	private @NonNull TotpStatus status(TotpRecords.@NonNull Account account) {
-		TotpRecords.Active active = account.active; TotpRecords.Pending pending = account.pending;
+	private @NonNull TotpStatus status(TotpRecordState.@NonNull Account account) {
+		TotpRecordState.Active active = account.active; TotpRecordState.Pending pending = account.pending;
 		return new TotpStatus(active == null ? null : factor(account, active),
 				pending == null ? null : new TotpPendingEnrollment(pending.enrollmentId, pending.factorId, pending.expiresAt),
 				account.batchId, account.recoveryHashes.size());
 	}
-	private static @NonNull Duration retryAfter(TotpRecords.@NonNull Account account, @NonNull Instant now,
+	private static @NonNull Duration retryAfter(TotpRecordState.@NonNull Account account, @NonNull Instant now,
 			boolean sixDigitAttempt) {
 		Instant blockedUntil = now;
 		if (account.charges.size() >= 5)
@@ -379,10 +379,10 @@ final class TotpEngine {
 		Duration remaining = Duration.between(now, blockedUntil);
 		return remaining.isNegative() || remaining.isZero() ? Duration.ofSeconds(1) : remaining;
 	}
-	private static @NonNull Instant firstChargeExpiry(@NonNull List<TotpRecords.@NonNull Charge> charges,
+	private static @NonNull Instant firstChargeExpiry(@NonNull List<TotpRecordState.@NonNull Charge> charges,
 			long windowSeconds) {
 		Instant first = charges.get(0).at;
-		for (TotpRecords.Charge charge : charges) if (charge.at.isBefore(first)) first = charge.at;
+		for (TotpRecordState.Charge charge : charges) if (charge.at.isBefore(first)) first = charge.at;
 		return first.plusSeconds(windowSeconds);
 	}
 
@@ -402,7 +402,7 @@ final class TotpEngine {
 		else if(initializing)namespace=new TotpRecordsV3.Namespace(observation.getAdmission().getAuthorityId(),now);
 		else throw new Failure(run.failed(TotpUnavailableReason.NAMESPACE_NOT_INITIALIZED));
 		run.root(namespace,observation,present);
-		TotpRecords.Account account=null;
+		TotpRecordState.Account account=null;
 		if(accountKey!=null && snapshot.getEntry(accountKey) instanceof TotpStoreEntry.Present entry){
 			TotpRecordsV3.Decoded decoded=this.records.open(entry.getRecord());account=Objects.requireNonNull(decoded.account);accountKeyId=decoded.keyId;
 		}
@@ -410,7 +410,7 @@ final class TotpEngine {
 			if(account!=null){
 				if(!supported(account.observedAt) || account.observedAt.isAfter(now))throw new Failure(run.failed(TotpUnavailableReason.TIME_AUTHORITY_UNAVAILABLE));
 				if(maintenanceKey==null){
-					TotpRecords.Pending pending=account.pending;
+					TotpRecordState.Pending pending=account.pending;
 					if(pending!=null && !now.isBefore(pending.expiresAt)){Arrays.fill(pending.secret,(byte)0);Arrays.fill(pending.browserHash,(byte)0);account.pending=null;}
 					Instant shortFloor=now.minusSeconds(300),dailyFloor=now.minusSeconds(86400);
 					account.charges.removeIf(charge->!charge.at.isAfter(shortFloor));account.totpCharges.removeIf(charge->!charge.at.isAfter(dailyFloor));
@@ -419,7 +419,7 @@ final class TotpEngine {
 			return new State(snapshot,namespace,account,now,present,accountKey,rootKeyId,accountKeyId);
 		}catch(Failure | RuntimeException failure){if(account!=null)account.erase();throw failure;}
 	}
-	private TotpStoreWrite.@NonNull Mutation accountMutation(@NonNull State state,TotpRecords.@NonNull Account account){
+	private TotpStoreWrite.@NonNull Mutation accountMutation(@NonNull State state,TotpRecordState.@NonNull Account account){
 		TotpStoreKey key=Objects.requireNonNull(state.accountKey);account.observedAt=state.now;
 		TotpStoreRecord record=this.records.sealAccount(key,account);
 		return state.snapshot.getEntry(key) instanceof TotpStoreEntry.Present?TotpStoreWrite.Mutation.replace(record):TotpStoreWrite.Mutation.insert(record);
@@ -481,14 +481,14 @@ final class TotpEngine {
 	@NotThreadSafe private static final class State implements AutoCloseable {
 		final @NonNull TotpStoreSnapshot snapshot;
 		final TotpRecordsV3.@NonNull Namespace namespace;
-		TotpRecords.@Nullable Account account;
+		TotpRecordState.@Nullable Account account;
 		final @NonNull Instant now;
 		final boolean namespacePresent;
 		final @Nullable TotpStoreKey accountKey;
 		final @Nullable String namespaceKeyId;
 		final @Nullable String accountKeyId;
 		State(@NonNull TotpStoreSnapshot snapshot,TotpRecordsV3.@NonNull Namespace namespace,
-				TotpRecords.@Nullable Account account,@NonNull Instant now,boolean present,@Nullable TotpStoreKey key,
+				TotpRecordState.@Nullable Account account,@NonNull Instant now,boolean present,@Nullable TotpStoreKey key,
 				@Nullable String rootKeyId,@Nullable String accountKeyId){
 			this.snapshot=snapshot;this.namespace=namespace;this.account=account;this.now=now;this.namespacePresent=present;this.accountKey=key;
 			this.namespaceKeyId=rootKeyId;this.accountKeyId=accountKeyId;
@@ -506,11 +506,11 @@ final class TotpEngine {
 		@Nullable Instant upper;
 		@NonNull TotpRejectionReason expiredReason=TotpRejectionReason.REJECTED;
 		AuthAttempt(@NonNull String chargeId,boolean sixDigit){this.chargeId=chargeId;this.sixDigit=sixDigit;}
-		void prepare(@NonNull Run run,@NonNull Command command,TotpRecords.@NonNull Account account,@NonNull Instant now,
+		void prepare(@NonNull Run run,@NonNull Command command,TotpRecordState.@NonNull Account account,@NonNull Instant now,
 				boolean evaluateCode) throws Failure {
 			this.fence=account.fence;this.batchId=account.batchId;this.upper=run.artifactUpper();
 			if(command.action==Action.CONFIRM){
-				TotpRecords.Pending pending=account.pending;
+				TotpRecordState.Pending pending=account.pending;
 				if(pending!=null){
 					this.factorId=pending.factorId;
 					if(!pending.expiresAt.isAfter(Objects.requireNonNull(this.upper))){this.upper=pending.expiresAt;this.expiredReason=TotpRejectionReason.ENROLLMENT_NOT_FOUND;}
@@ -543,7 +543,7 @@ final class TotpEngine {
 		private @Nullable Instant minimum;
 		private @Nullable Instant actionUpper;
 		private @Nullable Duration firstObservationBudget;
-		private TotpRecords.@Nullable Pending enrollment;
+		private TotpRecordState.@Nullable Pending enrollment;
 		private StoreTimeObservation.@Nullable Healthy finalObservation;
 		private long finalCallStart;
 		Run() {}
@@ -677,7 +677,7 @@ final class TotpEngine {
 			return elapsed!=null && StoreTimeRules.isWorkerClockHealthy(observation,wall,elapsed)
 					&& (upper==null || StoreTimeRules.isReleaseBefore(observation,elapsed,upper));
 		}
-		private void erase(){TotpRecords.Pending pending=this.enrollment;if(pending!=null){Arrays.fill(pending.secret,(byte)0);Arrays.fill(pending.browserHash,(byte)0);this.enrollment=null;}}
+		private void erase(){TotpRecordState.Pending pending=this.enrollment;if(pending!=null){Arrays.fill(pending.secret,(byte)0);Arrays.fill(pending.browserHash,(byte)0);this.enrollment=null;}}
 		private void backoff(int retry) throws Failure {
 			if(retry>=8)return;
 			checkCurrent();byte[] random=EntropySource.fromDefaults().nextBytes(2);

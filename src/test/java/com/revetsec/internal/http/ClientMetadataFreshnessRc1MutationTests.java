@@ -36,7 +36,7 @@ final class ClientMetadataFreshnessRc1MutationTests {
         RawResponse response = new RawResponse(200,
                 HttpHeaders.of(Map.of("Cache-Control", List.of(cacheControl)), (name, value) -> true),
                 new byte[] {1}, null, false, Duration.ZERO);
-        return ClientMetadataFreshness.remaining(response, NOW, Duration.ofSeconds(300));
+        return ClientMetadataFreshness.remaining(response, NOW, Duration.ofMinutes(5));
     }
 
     @Test

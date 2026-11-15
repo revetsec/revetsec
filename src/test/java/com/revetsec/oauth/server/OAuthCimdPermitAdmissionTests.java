@@ -38,6 +38,7 @@ import java.util.function.Supplier;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real bounded semaphores, deterministic held transport, no socket or production test hook. */
+@SuppressWarnings("ThreadPriorityCheck") // Scheduler yielding only coordinates bounded contention in this test.
 final class OAuthCimdPermitAdmissionTests {
  private static final String ID="https://client.example.com/metadata";
  private static @NonNull Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}

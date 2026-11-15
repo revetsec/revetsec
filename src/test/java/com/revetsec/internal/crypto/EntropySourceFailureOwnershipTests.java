@@ -32,6 +32,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Isolated scripted-provider memory ownership calibration, not an entropy quality/provider qualification. */
+@SuppressWarnings("StaticAssignmentOfThrowable") // Shared exact throwable identities are the subject of these ownership tests.
 final class EntropySourceFailureOwnershipTests {
 	private static byte @Nullable [] observed;
 	private static @Nullable Error error;

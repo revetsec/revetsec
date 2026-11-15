@@ -44,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Signed public-flow conformance for the fixed attribute profile; original production already enforces it. */
+@SuppressWarnings("ExposedPrivateType") // Private parameterized fixture types are consumed only by JUnit.
 final class SamlAttributeLimitsTests {
     private static final String SP = "https://sp.example.test/saml";
     private static final URI ACS = URI.create("https://sp.example.test/acs");

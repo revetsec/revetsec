@@ -61,7 +61,7 @@ final class SealerRc1MutationTests {
   predicate.setAccessible(true);
   for (long notAfter : new long[]{Long.MAX_VALUE, 0}) {
    String sealed = SealerV1.seal(key, SealedStateType.APP, "c", notAfter, new byte[]{'x'}, new byte[16], new byte[12]);
-   Assertions.assertEquals(Boolean.FALSE, predicate.invoke(null, sealed, Map.of("k", key), "c"));
+   Assertions.assertEquals(false, predicate.invoke(null, sealed, Map.of("k", key), "c"));
   }
  }
 

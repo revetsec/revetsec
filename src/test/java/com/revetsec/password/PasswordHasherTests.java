@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("try") // Permit lifetime, including intentionally unused scope variables, is under test.
 final class PasswordHasherTests {
     private static final Argon2idParameters PARAMETERS = Argon2idParameters.fromCosts(19_456, 2, 1);
     private static final String BCRYPT_2A = "$2a$05$CCCCCCCCCCCCCCCCCCCCC.E5YPO9kmyuRGyh0XouQYb4YMJKvyOeW";
@@ -234,7 +235,7 @@ final class PasswordHasherTests {
             assertNull(failure.get());
             assertEquals(PasswordUnavailableReason.INTERRUPTED,
                     assertInstanceOf(PasswordHashResult.Unavailable.class, result.get()).getReason());
-            assertEquals(Boolean.TRUE, interruptedFlag.get());
+            assertEquals(true, interruptedFlag.get());
             try (PasswordWorkGate.Permit ignored = Objects.requireNonNull(gate.tryAcquire(65_536))) {
                 assertNull(gate.tryAcquire(0));
             }

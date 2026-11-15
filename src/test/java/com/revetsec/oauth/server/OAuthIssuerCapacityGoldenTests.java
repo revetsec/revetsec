@@ -55,6 +55,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** CAP-02 complete envelopes, independently sized golden JSON, and refusal before store mutation. */
+@SuppressWarnings("JavaInstantGetSecondsGetNano") // Golden payload construction intentionally writes the nanosecond adjustment.
 final class OAuthIssuerCapacityGoldenTests {
     private static final @NonNull String RESOURCE = "/fixtures/oauth/cap-02.properties";
     private static final @NonNull String MASTER = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";

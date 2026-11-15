@@ -35,6 +35,7 @@ import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("try") // Permit lifetime and explicit early close are the behavior under test.
 final class PasswordWorkGateTests {
     private static final int MEMORY = 19_456;
     private static final Argon2idParameters PARAMETERS = Argon2idParameters.fromCosts(MEMORY, 2, 1);
@@ -215,9 +216,9 @@ final class PasswordWorkGateTests {
             Attempt attempt = contend(gate, () -> {
                 Thread.currentThread().interrupt();
                 permit.close();
-                return Boolean.TRUE;
+                return true;
             }, false);
-            assertEquals(Boolean.TRUE, attempt.result());
+            assertEquals(true, attempt.result());
             assertTrue(attempt.interrupted.get());
         }
         assertEntireBudgetAvailable(gate, MEMORY);

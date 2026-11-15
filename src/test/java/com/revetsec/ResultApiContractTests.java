@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("EffectivelyPrivate") // Deliberately malformed nested API shapes exercise the contract checker.
 final class ResultApiContractTests {
     private static final Set<String> PROVIDER_CONSTRUCTIBLE_RESULTS = Set.of(
             "com.revetsec.oauth.server.OAuthStoreReadResult",

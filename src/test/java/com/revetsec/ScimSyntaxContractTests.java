@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Closed construction and rejection-payload guards for the approved SCIM result-first surface. */
+@SuppressWarnings("EffectivelyPrivate") // Deliberately malformed nested API shape exercises the contract checker.
 final class ScimSyntaxContractTests {
     @Test
     void syntaxOutcomesHaveClosedConstructionAndImmutablePayloads() {

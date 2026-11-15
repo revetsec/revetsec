@@ -48,9 +48,12 @@ import org.jspecify.annotations.Nullable;
  * atomically reclaims expired ceremonies outside its predicate set using the same fresh admitted
  * store time. Permanent records are never evicted to make room.
  * <p>The first operational call establishes this store's own volatile UTC/elapsed projection and
- * admission metadata. The relying party's worker Clock is never its time source. Construction
- * performs no I/O, random acquisition or time sampling. This demonstration does not qualify
- * external UTC, restore, device durability, suspend/rate continuity or a shared deployment.
+ * admission metadata. The relying party's worker Clock is never its time source. Each operation
+ * checks the projection against fresh host UTC. A discontinuity starts a new clock generation,
+ * fencing old work; after a backward step the store waits for the last published time before it
+ * resumes. Construction performs no I/O, random acquisition or time sampling. This demonstration
+ * does not qualify external UTC, restore, device durability, suspend/rate continuity or a shared
+ * deployment.
  * @since 1.0.0
  */
 @javax.annotation.concurrent.ThreadSafe
@@ -73,6 +76,7 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 	private @Nullable StoreAdmission admission;
 	private @Nullable String clockGeneration;
 	private @Nullable Instant authorityAnchor;
+	private @Nullable Instant authorityHighWater;
 	private long authorityStartedNanos;
 	private long lastAuthorityNanos;
 	private boolean authorityContinuityLost;
@@ -217,29 +221,62 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 	}
 	private @NonNull StoreTimeObservation observe() {
 		StoreAdmission current = operationalAdmission();
+		long before = System.nanoTime();
+		Instant captured = Instant.now();
+		long after = System.nanoTime();
+		Optional<Duration> bracket = StoreTimeRules.elapsed(before, after);
+		if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured))
+			return StoreTimeObservation.Unavailable.fromAdmission(current);
+		if (this.authorityContinuityLost)
+			return StoreTimeObservation.Unavailable.fromAdmission(current);
 		Instant anchor = this.authorityAnchor;
-		if (anchor == null && !this.authorityContinuityLost) {
-			long before = System.nanoTime(); Instant captured = Instant.now(); long after = System.nanoTime();
-			Optional<Duration> bracket = StoreTimeRules.elapsed(before, after);
-			// A long first sample can be caused by a transient process pause. No clock continuity
-			// exists yet to lose, so leave the anchor unset and allow the next operation to retry.
-			if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured))
+		if (anchor == null) {
+			Instant highWater = this.authorityHighWater;
+			if (highWater != null && captured.isBefore(highWater))
 				return StoreTimeObservation.Unavailable.fromAdmission(current);
-			else { this.authorityAnchor = captured; this.authorityStartedNanos = after; this.lastAuthorityNanos = after; anchor = captured; }
+			return reanchor(current, captured, after);
 		}
-		if (anchor == null || this.authorityContinuityLost) return StoreTimeObservation.Unavailable.fromAdmission(current);
-		long now = System.nanoTime(); Optional<Duration> elapsed = StoreTimeRules.elapsed(this.authorityStartedNanos, now);
-		if (StoreTimeRules.elapsed(this.lastAuthorityNanos, now).isEmpty() || elapsed.isEmpty()) {
+		Optional<Duration> lowerElapsed = StoreTimeRules.elapsed(this.authorityStartedNanos, before);
+		Optional<Duration> upperElapsed = StoreTimeRules.elapsed(this.authorityStartedNanos, after);
+		if (StoreTimeRules.elapsed(this.lastAuthorityNanos, after).isEmpty()
+				|| lowerElapsed.isEmpty() || upperElapsed.isEmpty()) {
 			this.authorityContinuityLost = true; return StoreTimeObservation.Unavailable.fromAdmission(current);
 		}
-		this.lastAuthorityNanos = now;
 		try {
-			Instant point = anchor.plus(elapsed.get());
+			Instant lower = anchor.plus(lowerElapsed.get());
+			Instant point = anchor.plus(upperElapsed.get());
 			if (!supported(point)) { this.authorityContinuityLost = true; return StoreTimeObservation.Unavailable.fromAdmission(current); }
+			if (captured.isBefore(lower.minus(LOCAL_UTC_ERROR))
+					|| captured.isAfter(point.plus(LOCAL_UTC_ERROR))) {
+				this.clockGeneration = newIdentity();
+				this.authorityAnchor = null;
+				this.authorityStartedNanos = after;
+				this.lastAuthorityNanos = after;
+				Instant highWater = this.authorityHighWater;
+				if (highWater != null && captured.isBefore(highWater))
+					return StoreTimeObservation.Unavailable.fromAdmission(current);
+				return reanchor(current, captured, after);
+			}
+			Instant highWater = this.authorityHighWater;
+			if (highWater != null && point.isBefore(highWater)) {
+				this.authorityContinuityLost = true;
+				return StoreTimeObservation.Unavailable.fromAdmission(current);
+			}
+			this.lastAuthorityNanos = after;
+			this.authorityHighWater = point;
 			return StoreTimeObservation.Healthy.fromObservation(current, Objects.requireNonNull(this.clockGeneration), point, LOCAL_UTC_ERROR);
 		} catch (DateTimeException | ArithmeticException invalid) {
 			this.authorityContinuityLost = true; return StoreTimeObservation.Unavailable.fromAdmission(current);
 		}
+	}
+	private @NonNull StoreTimeObservation reanchor(@NonNull StoreAdmission admission,
+			@NonNull Instant captured, long after) {
+		this.authorityAnchor = captured;
+		this.authorityHighWater = captured;
+		this.authorityStartedNanos = after;
+		this.lastAuthorityNanos = after;
+		return StoreTimeObservation.Healthy.fromObservation(admission,
+				Objects.requireNonNull(this.clockGeneration), captured, LOCAL_UTC_ERROR);
 	}
 	private static boolean supported(@NonNull Instant time) { return time.getEpochSecond() >= 0 && time.getEpochSecond() <= 253402300799L; }
 	private byte @NonNull [] randomBytes(int count) {

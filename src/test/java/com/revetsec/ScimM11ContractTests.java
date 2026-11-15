@@ -44,6 +44,7 @@ import javax.tools.ToolProvider;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Calibrated PATCH guards for direct outcomes, one passed budget, closed proof and pure construction. */
+@SuppressWarnings("EffectivelyPrivate") // Deliberately exposed fixture member exercises source-policy detection.
 final class ScimM11ContractTests {
     @Test void patchHelpersNeverThrowCatchExpectedInputsOrRestartWorkBudgets() throws IOException {
         for(String file:List.of("ScimPatchParsing","ScimPatchEngine","ScimMembershipReduction","ScimTypedComparison","ScimFilterEvaluation"))
@@ -87,12 +88,12 @@ final class ScimM11ContractTests {
     private static void assertDirect(@NonNull Tree tree) {
         List<Tree> defects=new ArrayList<>();
         new TreeScanner<@Nullable Void,@Nullable Void>() {
-            @Override public @Nullable Void visitThrow(@NonNull ThrowTree node,@Nullable Void ignored) { defects.add(node); return super.visitThrow(node,ignored); }
-            @Override public @Nullable Void visitCatch(@NonNull CatchTree node,@Nullable Void ignored) { defects.add(node); return super.visitCatch(node,ignored); }
+            @Override public @Nullable Void visitThrow(@NonNull ThrowTree node,@Nullable Void ignored) { defects.add(node); return super.visitThrow(node,null); }
+            @Override public @Nullable Void visitCatch(@NonNull CatchTree node,@Nullable Void ignored) { defects.add(node); return super.visitCatch(node,null); }
             @Override public @Nullable Void visitNewClass(@NonNull NewClassTree node,@Nullable Void ignored) {
                 String type=node.getIdentifier().toString();
                 if(type.equals("ScimWork") || type.equals("com.revetsec.scim.ScimWork")) defects.add(node);
-                return super.visitNewClass(node,ignored);
+                return super.visitNewClass(node,null);
             }
         }.scan(tree,null);
         assertTrue(defects.isEmpty(),"Pure PATCH helpers use direct rejection outcomes and the caller's original work budget");
@@ -106,16 +107,16 @@ final class ScimM11ContractTests {
                     new TreeScanner<@Nullable Void,@Nullable Void>() {
                         @Override public @Nullable Void visitMethodInvocation(@NonNull MethodInvocationTree call,@Nullable Void unused) {
                             if(!snapshots.contains(call.getMethodSelect().toString())) defects.add(call);
-                            return super.visitMethodInvocation(call,unused);
+                            return super.visitMethodInvocation(call,null);
                         }
                         @Override public @Nullable Void visitNewClass(@NonNull NewClassTree allocation,@Nullable Void unused) {
                             if(!allocation.getIdentifier().toString().startsWith("LinkedHashSet<")) defects.add(allocation);
-                            return super.visitNewClass(allocation,unused);
+                            return super.visitNewClass(allocation,null);
                         }
                     }.scan(node.getBody(),null);
                     return null;
                 }
-                return super.visitMethod(node,ignored);
+                return super.visitMethod(node,null);
             }
         }.scan(tree,null);
         assertTrue(defects.isEmpty(),"Carrier construction contains only reviewed defensive snapshots and null checks");

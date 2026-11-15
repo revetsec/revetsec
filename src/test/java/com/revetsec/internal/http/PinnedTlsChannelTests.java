@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("try") // Explicit early closure is part of the channel lifecycle assertions.
 final class PinnedTlsChannelTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> realTlsHandlesSingleByteReadsWritesAndZeroReturns() {
   return Stream.of(1,7).flatMap(chunk->Stream.of("TLSv1.2","TLSv1.3").map(protocol->DynamicTest.dynamicTest(chunk+" "+protocol,()->{

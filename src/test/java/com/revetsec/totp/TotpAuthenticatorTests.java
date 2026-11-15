@@ -260,7 +260,7 @@ final class TotpAuthenticatorTests {
         TotpStoreRecord record = assertInstanceOf(TotpStoreEntry.Present.class,
                 fixture.accountRecordEntry()).getRecord();
         try (TotpRecordsV3.Decoded decoded = new TotpRecordsV3(fixture.sealer).open(record)) {
-            TotpRecords.Account account = java.util.Objects.requireNonNull(decoded.account);
+            TotpRecordState.Account account = java.util.Objects.requireNonNull(decoded.account);
             assertEquals(1, account.charges.size());
             assertEquals(1, account.totpCharges.size());
             assertEquals(account.charges.get(0).id, account.totpCharges.get(0).id);
@@ -636,8 +636,8 @@ final class TotpAuthenticatorTests {
                 String committedBatch;
                 try (TotpRecordsV3.Decoded oldDecoded = new TotpRecordsV3(fixture.sealer).open(before);
                         TotpRecordsV3.Decoded newDecoded = new TotpRecordsV3(fixture.sealer).open(committed)) {
-                    TotpRecords.Account oldAccount = java.util.Objects.requireNonNull(oldDecoded.account);
-                    TotpRecords.Account newAccount = java.util.Objects.requireNonNull(newDecoded.account);
+                    TotpRecordState.Account oldAccount = java.util.Objects.requireNonNull(oldDecoded.account);
+                    TotpRecordState.Account newAccount = java.util.Objects.requireNonNull(newDecoded.account);
                     committedBatch = java.util.Objects.requireNonNull(newAccount.batchId);
                     assertNotEquals(oldAccount.batchId, committedBatch);
                     assertEquals(9, oldAccount.recoveryHashes.size());
@@ -650,8 +650,8 @@ final class TotpAuthenticatorTests {
                     assertEquals(oldAccount.fence, newAccount.fence);
                     assertEquals(oldAccount.observedAt, newAccount.observedAt);
                     assertEquals(oldAccount.pending, newAccount.pending);
-                    TotpRecords.Active oldActive = java.util.Objects.requireNonNull(oldAccount.active);
-                    TotpRecords.Active newActive = java.util.Objects.requireNonNull(newAccount.active);
+                    TotpRecordState.Active oldActive = java.util.Objects.requireNonNull(oldAccount.active);
+                    TotpRecordState.Active newActive = java.util.Objects.requireNonNull(newAccount.active);
                     assertEquals(oldActive.factorId, newActive.factorId);
                     assertTrue(Arrays.equals(oldActive.secret, newActive.secret));
                     assertEquals(oldActive.usedStep, newActive.usedStep);
@@ -1107,22 +1107,22 @@ final class TotpAuthenticatorTests {
             if (decoded.namespace != null) {
                 scMig06Text(digest, decoded.namespace.getAuthorityId()); scMig06Instant(digest, decoded.namespace.getMinimum());
             } else {
-                TotpRecords.Account account = java.util.Objects.requireNonNull(decoded.account);
+                TotpRecordState.Account account = java.util.Objects.requireNonNull(decoded.account);
                 scMig06Text(digest, account.accountId); scMig06Text(digest, account.fence); scMig06Instant(digest, account.observedAt);
                 scMig06Long(digest, account.active == null ? 0 : 1);
                 if (account.active != null) {
-                    TotpRecords.Active active = account.active; scMig06Text(digest, active.factorId); scMig06Bytes(digest, active.secret);
+                    TotpRecordState.Active active = account.active; scMig06Text(digest, active.factorId); scMig06Bytes(digest, active.secret);
                     scMig06Instant(digest, active.enrolledAt); scMig06Long(digest, active.usedStep);
                 }
                 scMig06Long(digest, account.pending == null ? 0 : 1);
                 if (account.pending != null) {
-                    TotpRecords.Pending pending = account.pending; scMig06Text(digest, pending.enrollmentId); scMig06Text(digest, pending.factorId);
+                    TotpRecordState.Pending pending = account.pending; scMig06Text(digest, pending.enrollmentId); scMig06Text(digest, pending.factorId);
                     scMig06Bytes(digest, pending.secret); scMig06Bytes(digest, pending.browserHash); scMig06Instant(digest, pending.expiresAt); scMig06Text(digest, pending.expectedFactorId);
                 }
                 scMig06Text(digest, account.batchId); scMig06Long(digest, account.recoveryHashes.size());
                 for (byte[] hash : account.recoveryHashes) scMig06Bytes(digest, hash);
-                for (List<TotpRecords.Charge> charges : List.of(account.charges, account.totpCharges)) {
-                    scMig06Long(digest, charges.size()); for (TotpRecords.Charge charge : charges) { scMig06Text(digest, charge.id); scMig06Instant(digest, charge.at); }
+                for (List<TotpRecordState.Charge> charges : List.of(account.charges, account.totpCharges)) {
+                    scMig06Long(digest, charges.size()); for (TotpRecordState.Charge charge : charges) { scMig06Text(digest, charge.id); scMig06Instant(digest, charge.at); }
                 }
             }
         }

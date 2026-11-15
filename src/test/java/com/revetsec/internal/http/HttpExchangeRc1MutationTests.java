@@ -30,6 +30,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /** Private helper boundaries and deterministic injected-client cancellation, without network I/O. */
+@SuppressWarnings("RethrowReflectiveOperationExceptionAsLinkageError") // Reflection failures mean the test no longer matches the implementation shape.
 final class HttpExchangeRc1MutationTests {
  @Test void cancellationTouchesOnlyPendingFutures()throws Exception{
   ProbeFuture pending=new ProbeFuture();call("cancelIfPending",new Class<?>[]{CompletableFuture.class},pending);Assertions.assertEquals(1,pending.cancels);

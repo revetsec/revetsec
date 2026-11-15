@@ -55,6 +55,7 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** First-issuance and deterministic CAS interleavings; a memory fixture is not durable backend proof. */
+@SuppressWarnings("static") // Fixture calls retain their fluent form for paired-flow readability.
 final class OAuthRefreshRotationTests {
  private static final @NonNull Instant NOW = Instant.parse("2026-10-04T00:00:00.123456789Z");
  private static final @NonNull String ISSUER = "https://issuer.example/tenant", RESOURCE = "https://resource.example/mcp";

@@ -179,7 +179,7 @@ final class InternalNullabilityContractTests {
 							for (VariableElement parameter : executable.getParameters())
 								inspect(owner + " parameter " + parameter.getSimpleName(), parameter.asType(), violations);
 						}
-						return super.visitMethod(method, unused);
+						return super.visitMethod(method, null);
 					}
 
 					@Override
@@ -191,7 +191,7 @@ final class InternalNullabilityContractTests {
 								if (component.getSimpleName().contentEquals(variable.getName()))
 									inspect(owner(variable, "record component " + component.getSimpleName()), component.asType(), violations);
 						}
-						return super.visitVariable(variable, unused);
+						return super.visitVariable(variable, null);
 					}
 					}.scan(unit, null);
 			}

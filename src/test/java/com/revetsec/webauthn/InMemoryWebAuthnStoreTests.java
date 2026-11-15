@@ -48,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("ThreadPriorityCheck") // Scheduler yielding only coordinates bounded contention in this test.
 final class InMemoryWebAuthnStoreTests {
  private static final Duration BUDGET = Duration.ofSeconds(3);
  private static final WebAuthnStoreKey FIRST = WebAuthnStoreKey.forCredential(
@@ -251,6 +252,37 @@ final class InMemoryWebAuthnStoreTests {
   assertArrayEquals(version, present(unavailable, CEREMONY).getVersion());
   assertEquals(WebAuthnStoreCommitResult.TIME_UNAVAILABLE, store.compareAndCommit(write(before, List.of()), BUDGET).getStatus());
   assertArrayEquals(version, present(snapshot(store, Set.of(CEREMONY)), CEREMONY).getVersion());
+ }
+
+ @Test void hostClockDiscontinuitiesRotateGenerationWithoutLosingCredentialsOrMovingBackward() throws Exception {
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100L);
+  WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST));
+  assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(empty,
+    List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1}))), BUDGET).getStatus());
+  WebAuthnStoreSnapshot beforeForward = snapshot(store, Set.of(FIRST));
+  byte[] retainedVersion = present(beforeForward, FIRST).getVersion();
+  Field anchor = InMemoryWebAuthnStore.class.getDeclaredField("authorityAnchor"); anchor.setAccessible(true);
+  anchor.set(store, ((Instant) Objects.requireNonNull(anchor.get(store))).minusSeconds(10));
+  WebAuthnStoreSnapshot afterForward = snapshot(store, Set.of(FIRST));
+  StoreTimeObservation.Healthy forward = healthy(afterForward);
+  assertNotEquals(healthy(beforeForward).getClockGeneration(), forward.getClockGeneration());
+  assertArrayEquals(retainedVersion, present(afterForward, FIRST).getVersion());
+  assertEquals(WebAuthnStoreCommitResult.FENCED, store.compareAndCommit(write(beforeForward,
+    List.of(WebAuthnStoreWrite.Mutation.replace(FIRST, new byte[] {2}))), BUDGET).getStatus());
+
+  WebAuthnStoreSnapshot beforeBackward = snapshot(store, Set.of(FIRST));
+  Field highWater = InMemoryWebAuthnStore.class.getDeclaredField("authorityHighWater"); highWater.setAccessible(true);
+  anchor.set(store, ((Instant) Objects.requireNonNull(anchor.get(store))).plusSeconds(10));
+  highWater.set(store, Instant.now().plusSeconds(10));
+  WebAuthnStoreSnapshot waiting = snapshot(store, Set.of(FIRST));
+  assertInstanceOf(StoreTimeObservation.Unavailable.class, waiting.getTimeObservation());
+  assertArrayEquals(retainedVersion, present(waiting, FIRST).getVersion());
+  highWater.set(store, Instant.now().minusSeconds(1));
+  WebAuthnStoreSnapshot recovered = snapshot(store, Set.of(FIRST));
+  StoreTimeObservation.Healthy resumed = healthy(recovered);
+  assertNotEquals(healthy(beforeBackward).getClockGeneration(), resumed.getClockGeneration());
+  assertFalse(resumed.getObservedAt().isBefore((Instant) Objects.requireNonNull(highWater.get(store))));
+  assertArrayEquals(retainedVersion, present(recovered, FIRST).getVersion());
  }
 
  @Test void timedBarrierHasRequiredReceiptButTouchesNoDataCountersOrBackingMap() throws Exception {

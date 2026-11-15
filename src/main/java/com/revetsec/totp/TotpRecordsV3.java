@@ -18,6 +18,7 @@ package com.revetsec.totp;
 
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
+import com.revetsec.internal.crypto.EntropySource;
 import com.revetsec.internal.crypto.TotpPrimitives;
 import com.revetsec.internal.crypto.UnsealException;
 import com.revetsec.internal.encoding.Base64Url;
@@ -41,22 +42,24 @@ import java.util.Arrays;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Active TTR3 normal codec; legacy authentication remains restricted to the closed migration helper.
+ * Active TTR3 normal codec. Unknown formats are rejected without fallback.
  * The stable namespace minimum is immutable; an account's preparation floor may legitimately exceed it.
- * No decode or migration operation establishes external recovery admission or trusted UTC.
+ * Decoding does not establish external recovery admission or trusted UTC.
  */
 @ThreadSafe
 final class TotpRecordsV3 {
 	private static final int MAGIC = 0x54545233;
 	private final @NonNull StateSealer sealer;
-	private final @NonNull TotpRecords legacy;
 
 	TotpRecordsV3(@NonNull StateSealer sealer) {
 		this.sealer = requireNonNull(sealer);
-		this.legacy = new TotpRecords(sealer);
 	}
 
-	@NonNull String freshId() { return this.legacy.freshId(); }
+	@NonNull String freshId() {
+		byte[] bytes = EntropySource.fromDefaults().nextBytes(32);
+		try { return Base64Url.encode(bytes); }
+		finally { Arrays.fill(bytes, (byte) 0); }
+	}
 
 	@NonNull TotpStoreRecord sealNamespace(@NonNull TotpStoreKey key, @NonNull Namespace namespace) {
 		requireNonNull(namespace);
@@ -65,7 +68,7 @@ final class TotpRecordsV3 {
 		return seal(key, namespace, null);
 	}
 
-	@NonNull TotpStoreRecord sealAccount(@NonNull TotpStoreKey key, TotpRecords.@NonNull Account account) {
+	@NonNull TotpStoreRecord sealAccount(@NonNull TotpStoreKey key, TotpRecordState.@NonNull Account account) {
 		requireNonNull(account);
 		if (key.getKind() != TotpStoreKey.Kind.ACCOUNT_STATE)
 			throw new IllegalArgumentException("Invalid TOTP account kind");
@@ -73,9 +76,9 @@ final class TotpRecordsV3 {
 	}
 
 	private @NonNull TotpStoreRecord seal(@NonNull TotpStoreKey key, @Nullable Namespace namespace,
-			TotpRecords.@Nullable Account account) {
+			TotpRecordState.@Nullable Account account) {
 		requireNonNull(key);
-		String version = this.legacy.freshId();
+		String version = freshId();
 		byte[] bytes;
 		try (PlaintextBuffer buffer = new PlaintextBuffer(); DataOutputStream out = new DataOutputStream(buffer)) {
 			out.writeInt(MAGIC);
@@ -129,7 +132,7 @@ final class TotpRecordsV3 {
 	private static @NonNull Decoded decode(@NonNull TotpStoreKey key, @NonNull String version,
 			byte @NonNull [] bytes, @NonNull String keyId) throws IOException {
 		if (bytes.length > 32_000) throw invalid();
-		TotpRecords.Account account = null;
+		TotpRecordState.Account account = null;
 		try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
 			if (in.readInt() != MAGIC || !text(in).equals(key.getStorageKey()) || !text(in).equals(version))
 				throw invalid();
@@ -158,17 +161,17 @@ final class TotpRecordsV3 {
 		finally { Arrays.fill(hash, (byte) 0); }
 	}
 
-	private static void writeAccount(@NonNull DataOutputStream out, TotpRecords.@NonNull Account account) throws IOException {
+	private static void writeAccount(@NonNull DataOutputStream out, TotpRecordState.@NonNull Account account) throws IOException {
 		if (account.recoveryHashes.size() > 10 || account.charges.size() > 5 || account.totpCharges.size() > 10)
 			throw invalid();
 		text(out, account.accountId); text(out, account.fence); instant(out, account.observedAt);
 		out.writeBoolean(account.active != null);
-		TotpRecords.Active active = account.active;
+		TotpRecordState.Active active = account.active;
 		if (active != null) {
 			text(out, active.factorId); blob(out, active.secret); instant(out, active.enrolledAt); out.writeLong(active.usedStep);
 		}
 		out.writeBoolean(account.pending != null);
-		TotpRecords.Pending pending = account.pending;
+		TotpRecordState.Pending pending = account.pending;
 		if (pending != null) {
 			text(out, pending.enrollmentId); text(out, pending.factorId); blob(out, pending.secret);
 			blob(out, pending.browserHash); instant(out, pending.expiresAt);
@@ -178,12 +181,12 @@ final class TotpRecordsV3 {
 		out.writeInt(account.recoveryHashes.size());
 		for (byte[] hash : account.recoveryHashes) blob(out, hash);
 		out.writeInt(account.charges.size());
-		for (TotpRecords.Charge charge : account.charges) { text(out, charge.id); instant(out, charge.at); }
+		for (TotpRecordState.Charge charge : account.charges) { text(out, charge.id); instant(out, charge.at); }
 		out.writeInt(account.totpCharges.size());
-		for (TotpRecords.Charge charge : account.totpCharges) { text(out, charge.id); instant(out, charge.at); }
+		for (TotpRecordState.Charge charge : account.totpCharges) { text(out, charge.id); instant(out, charge.at); }
 	}
-	private static TotpRecords.@NonNull Account readAccount(@NonNull DataInputStream in) throws IOException {
-		TotpRecords.Account account = new TotpRecords.Account(text(in), identifier(in), instant(in));
+	private static TotpRecordState.@NonNull Account readAccount(@NonNull DataInputStream in) throws IOException {
+		TotpRecordState.Account account = new TotpRecordState.Account(text(in), identifier(in), instant(in));
 		boolean accepted = false;
 		try {
 			if (flag(in)) {
@@ -194,7 +197,7 @@ final class TotpRecordsV3 {
 					Instant enrolled = instant(in);
 					long used = in.readLong();
 					if (used < 0) throw invalid();
-					account.active = new TotpRecords.Active(factorId, secret, enrolled, used);
+					account.active = new TotpRecordState.Active(factorId, secret, enrolled, used);
 					transferred = true;
 				} finally { if (!transferred) Arrays.fill(secret, (byte) 0); }
 			}
@@ -207,7 +210,7 @@ final class TotpRecordsV3 {
 					browser = blob(in, 32);
 					Instant expires = instant(in); String expected = text(in);
 					if (!expected.isEmpty()) requireIdentifier(expected);
-					account.pending = new TotpRecords.Pending(id, factor, secret, browser, expires, expected.isEmpty() ? null : expected);
+					account.pending = new TotpRecordState.Pending(id, factor, secret, browser, expires, expected.isEmpty() ? null : expected);
 					transferred = true;
 				} finally {
 					if (!transferred) {
@@ -224,15 +227,15 @@ final class TotpRecordsV3 {
 			for (int i = 0; i < charges; i++) {
 				String id = identifier(in); Instant at = instant(in);
 				if (at.isAfter(account.observedAt)) throw invalid();
-				for (TotpRecords.Charge previous : account.charges) if (previous.id.equals(id)) throw invalid();
-				account.charges.add(new TotpRecords.Charge(id, at));
+				for (TotpRecordState.Charge previous : account.charges) if (previous.id.equals(id)) throw invalid();
+				account.charges.add(new TotpRecordState.Charge(id, at));
 			}
 			int totpCharges = count(in, 10);
 			for (int i = 0; i < totpCharges; i++) {
 				String id = identifier(in); Instant at = instant(in);
 				if (at.isAfter(account.observedAt)) throw invalid();
-				for (TotpRecords.Charge previous : account.totpCharges) if (previous.id.equals(id)) throw invalid();
-				account.totpCharges.add(new TotpRecords.Charge(id, at));
+				for (TotpRecordState.Charge previous : account.totpCharges) if (previous.id.equals(id)) throw invalid();
+				account.totpCharges.add(new TotpRecordState.Charge(id, at));
 			}
 			if ((account.active == null && (account.batchId != null || hashes != 0))
 					|| (account.active != null && account.batchId == null)) throw invalid();
@@ -309,15 +312,15 @@ final class TotpRecordsV3 {
 	@NotThreadSafe
 	static final class Decoded implements AutoCloseable {
 		final @Nullable Namespace namespace;
-		final TotpRecords.@Nullable Account account;
+		final TotpRecordState.@Nullable Account account;
 		final @NonNull String keyId;
-		Decoded(@Nullable Namespace namespace, TotpRecords.@Nullable Account account, @NonNull String keyId) {
+		Decoded(@Nullable Namespace namespace, TotpRecordState.@Nullable Account account, @NonNull String keyId) {
 			this.namespace = namespace;
 			this.account = account;
 			this.keyId = keyId;
 		}
 		@Override public void close() {
-			TotpRecords.Account value = this.account;
+			TotpRecordState.Account value = this.account;
 			if (value != null) value.erase();
 		}
 		@Override public @NonNull String toString() { return "Decoded{record=<redacted>}"; }

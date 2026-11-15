@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("try") // Held permit scope is itself the admission condition under test.
 final class PasswordPreparationAdmissionTests {
     private static final int MEMORY = 19_456;
     private static final Argon2idParameters PARAMETERS = Argon2idParameters.fromCosts(MEMORY, 2, 1);

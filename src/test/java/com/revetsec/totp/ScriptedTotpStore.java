@@ -86,7 +86,7 @@ final class ScriptedTotpStore implements TotpStore {
 	synchronized void advance(@NonNull Duration duration) {this.time=this.time.plus(duration);}
 	synchronized void setTime(@NonNull Instant value) {this.time=value;}
 	synchronized void setHealthy(boolean value) {this.healthy=value;}
-	synchronized void rotateClockGeneration() {this.clockGeneration=identity("clock/"+this.namespace+'/'+(++this.clockSequence));}
+	synchronized void rotateClockGeneration() {this.clockGeneration=identity("clock/"+this.namespace+'/'+ ++this.clockSequence);}
 	synchronized @NonNull StoreAdmission admission() {return this.admission;}
 	synchronized @NonNull String clockGeneration() {return this.clockGeneration;}
 	synchronized @NonNull TotpStoreCommitResult provisionRecoveryEpoch(@NonNull String next,@NonNull Duration budget) {

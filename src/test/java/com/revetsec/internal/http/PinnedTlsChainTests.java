@@ -51,6 +51,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real certificates, real PKIX validation, and real TLS; reflection only supplies an observing delegate. */
+@SuppressWarnings("try") // TLS peer cleanup deliberately preserves interruption behavior.
 final class PinnedTlsChainTests {
  private static PinnedTlsPki pki;
  private static X509Certificate leaf,issuer,root;

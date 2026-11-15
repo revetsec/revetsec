@@ -147,7 +147,7 @@ final class WebAuthnRecordCodecV2Tests {
 		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).openRecord(
 				legacy.key(), prepared.sealedBytes(), Clock.fixed(expires, ZoneOffset.UTC)));
 		assertThrows(IllegalArgumentException.class, () -> migration.authenticateRoot(
-				ClosedMigrationIntent.fromExternalIntent(identifier(1), admission(), Set.of(ClosedMigrationIntent.Format.TOTP_TTR3)),
+				ClosedMigrationIntent.fromExternalIntent(identifier(1), admission(), Set.of(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)),
 				ROOT.getStorageKey(), rootBytes));
 	}
 

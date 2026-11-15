@@ -36,7 +36,7 @@ class ClientMetadataFreshnessTests {
   return new RawResponse(200, HttpHeaders.of(headers, (a,b)->true), new byte[]{1}, null, false, elapsed);
  }
  private static @NonNull Duration ttl(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
-  return ClientMetadataFreshness.remaining(response(headers,Duration.ZERO), NOW,Duration.ofSeconds(300));
+  return ClientMetadataFreshness.remaining(response(headers,Duration.ZERO), NOW,Duration.ofMinutes(5));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> blockedOrAmbiguousControlIsNeverReusable() {
   return Stream.of("no-store, max-age=120", "no-cache, max-age=120", "no-cache=\"field\", max-age=120",
@@ -50,33 +50,33 @@ class ClientMetadataFreshnessTests {
    assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Age",List.of(value))))));
  }
  @Test void explicitGrammarAndCapAreReused() {
-  assertEquals(Duration.ofSeconds(300),ttl(Map.of("Cache-Control",List.of("max-age=1000"))));
+  assertEquals(Duration.ofMinutes(5),ttl(Map.of("Cache-Control",List.of("max-age=1000"))));
   assertEquals(Duration.ofSeconds(5),ttl(Map.of("Cache-Control",List.of("s-maxage=5, max-age=120"))));
-  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("s-maxage=120"))));
-  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of(",, max-age=\"120\", unknown=\"private,x\",", "MAX-AGE=120"))));
+  assertEquals(Duration.ofMinutes(2),ttl(Map.of("Cache-Control",List.of("s-maxage=120"))));
+  assertEquals(Duration.ofMinutes(2),ttl(Map.of("Cache-Control",List.of(",, max-age=\"120\", unknown=\"private,x\",", "MAX-AGE=120"))));
   assertEquals(Duration.ZERO,ttl(Map.of()));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=0"))));
   assertEquals(Duration.ZERO,ClientMetadataFreshness.remaining(response(Map.of("Cache-Control",List.of("max-age=10")),Duration.ZERO),NOW,Duration.ZERO));
  }
  @Test void ageApparentAgeAndExchangeDelayAreConservative() {
-  assertEquals(Duration.ofMillis(119750),ClientMetadataFreshness.remaining(response(Map.of("Cache-Control",List.of("max-age=120")),Duration.ofMillis(250)),NOW,Duration.ofSeconds(300)));
-  assertEquals(Duration.ofMillis(79250),ClientMetadataFreshness.remaining(response(Map.of("Cache-Control",List.of("max-age=120"),"Age",List.of("40")),Duration.ofMillis(750)),NOW,Duration.ofSeconds(300)));
+  assertEquals(Duration.ofMillis(119750),ClientMetadataFreshness.remaining(response(Map.of("Cache-Control",List.of("max-age=120")),Duration.ofMillis(250)),NOW,Duration.ofMinutes(5)));
+  assertEquals(Duration.ofMillis(79250),ClientMetadataFreshness.remaining(response(Map.of("Cache-Control",List.of("max-age=120"),"Age",List.of("40")),Duration.ofMillis(750)),NOW,Duration.ofMinutes(5)));
   assertEquals(Duration.ofSeconds(30),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Date",List.of("Tue, 06 Oct 2026 11:58:30 GMT"),"Age",List.of("10"))));
-  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Date",List.of("Tue, 06 Oct 2026 12:01:00 GMT"))));
+  assertEquals(Duration.ofMinutes(2),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Date",List.of("Tue, 06 Oct 2026 12:01:00 GMT"))));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Age",List.of("9".repeat(500)))));
  }
  @Test void invalidSingletonsCannotGuessFreshnessAndNamedVaryMatchesTheFixedRequest() {
   for(String name:List.of("Date","Age","Expires")) assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),name,List.of("bad","bad"))));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Date",List.of("bad"))));
-  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of(""))));
-  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of("Accept"))));
+  assertEquals(Duration.ofMinutes(2),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of(""))));
+  assertEquals(Duration.ofMinutes(2),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of("Accept"))));
  }
  @Test void expiresRequiresExplicitFiniteDateAndAge() {
   assertEquals(Duration.ofSeconds(60),ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 12:01:00 GMT"))));
   assertEquals(Duration.ofSeconds(30),ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 12:01:00 GMT"),"Age",List.of("30"))));
   String distant=DateTimeFormatter.RFC_1123_DATE_TIME.format(
    NOW.plusSeconds(CacheLifetime.MAXIMUM_DELTA_SECONDS+1).atZone(ZoneOffset.UTC));
-  assertEquals(Duration.ofSeconds(300),ttl(Map.of("Expires",List.of(distant))));
+  assertEquals(Duration.ofMinutes(5),ttl(Map.of("Expires",List.of(distant))));
   assertEquals(Duration.ZERO,ttl(Map.of("Expires",List.of("0"))));
   assertEquals(Duration.ZERO,ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 11:59:59 GMT"))));
  }
@@ -85,7 +85,7 @@ class ClientMetadataFreshnessTests {
  }
  @Test void errorAndInvalidBoundsCannotSupplyReuse() {
   RawResponse error=new RawResponse(503,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=100")),(a,b)->true),new byte[0],null,false,Duration.ZERO);
-  assertEquals(Duration.ZERO,ClientMetadataFreshness.remaining(error,NOW,Duration.ofSeconds(300)));
+  assertEquals(Duration.ZERO,ClientMetadataFreshness.remaining(error,NOW,Duration.ofMinutes(5)));
   assertThrows(IllegalArgumentException.class,()->ClientMetadataFreshness.remaining(response(Map.of(),Duration.ZERO),NOW,Duration.ofSeconds(-1)));
  }
 }

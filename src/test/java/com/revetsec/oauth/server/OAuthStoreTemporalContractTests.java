@@ -34,6 +34,7 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Exact public envelopes, temporal validation and narrow fence-only structural conformance. */
+@SuppressWarnings("ThreadPriorityCheck") // Scheduler yielding only coordinates bounded contention in this test.
 final class OAuthStoreTemporalContractTests {
     private static final @NonNull Instant NOW=Instant.parse("2026-10-04T00:00:00Z");
     private static final @NonNull Duration BUDGET=Duration.ofSeconds(1);

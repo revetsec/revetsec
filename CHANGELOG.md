@@ -25,7 +25,10 @@ Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, 
 
 - WebAuthn and TOTP operation timeouts now start at one second, and each commit's deadline reserves the store's declared UTC error so that a committed transition can still be released.
 - `InMemoryWebAuthnStore` reclaims expired ceremonies during successful mutating commits. Application `WebAuthnStore` implementations must reclaim expired ceremonies the same way or through explicit admitted maintenance; the PostgreSQL example adds a bounded `reclaimExpiredCeremonies` call.
-- OIDC session references are sealed under their own sealed-state type. References sealed by earlier pre-release builds no longer open and require authentication again.
+- The volatile in-memory WebAuthn and TOTP stores detect host-clock discontinuities, rotate their clock generation and fence in-flight work. They resume immediately after a forward step and wait for the last published instant after a backward step without discarding stored credentials or factors.
+- TOTP durable records start at TTR3. Unreleased TTR1/TTR2 conversion code and the unused `TotpRejectionReason.CLOCK_ROLLBACK` outcome were removed before 1.0; unknown record formats fail closed.
+- Introspection endpoint backoff opens immediately for HTTP 401/429 and after three transport or 5xx failures in one cooldown window. A single connection failure no longer blocks the endpoint.
+- OIDC session references are sealed under their own sealed-state type.
 - SCIM refuses any submitted value for an assigned immutable attribute that is never returned, rather than comparing it with the stored value.
 
 ### Added

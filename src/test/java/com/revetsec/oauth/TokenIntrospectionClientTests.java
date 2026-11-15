@@ -39,6 +39,7 @@ import java.util.stream.*;
 import static com.revetsec.oauth.Phase2Fixtures.*;
 
 /** RFC7662 sections2.1/2.2; distinct endpoint authentication; uncached/replay/outage boundaries. */
+@SuppressWarnings("UnnecessaryAsync") // Atomic counter is updated by the HTTP server thread.
 final class TokenIntrospectionClientTests {
     @Test void everyHealthyOrInactiveCallPostsAgainIncludingTokensWithoutExpiry() throws Exception {
         try(TestHttpsServer server=TestHttpsServer.start()) {

@@ -29,6 +29,7 @@ import java.security.SignatureSpi;
 import java.security.spec.AlgorithmParameterSpec;
 
 /** Deterministic application-provider interruption seam; installation is serialized and always reversed. */
+@SuppressWarnings({"StaticAssignmentOfThrowable", "TypeParameterUnusedInFormals", "deprecation"}) // Test provider preserves exact throwable identity and required legacy SPI methods.
 public final class InterruptingSignatureProvider extends Provider {
  private static final long serialVersionUID=1L;
  private static final @NonNull String NAME="RevetsecInterruptingSignature";

@@ -56,6 +56,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import static java.util.Objects.requireNonNull;
 
 /** A loopback ALPN h2 server with direct frame control for transport regression tests. */
+@SuppressWarnings({"FutureReturnValueIgnored", "deprecation"}) // Netty test server owns shutdown futures and the pinned test version uses this group type.
 public final class OAuthHttp2Server implements AutoCloseable {
 	private final NioEventLoopGroup boss = new NioEventLoopGroup(1);
 	private final NioEventLoopGroup worker = new NioEventLoopGroup(1);

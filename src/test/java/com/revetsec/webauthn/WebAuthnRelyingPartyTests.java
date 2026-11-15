@@ -105,7 +105,7 @@ final class WebAuthnRelyingPartyTests {
         assertEquals(RP, ((JsonObject) creation.find("rp").orElseThrow()).find("id").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals("required", ((JsonObject) creation.find("authenticatorSelection").orElseThrow())
                 .find("residentKey").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
-        assertEquals(Boolean.TRUE, ((JsonObject) creation.find("extensions").orElseThrow())
+        assertEquals(true, ((JsonObject) creation.find("extensions").orElseThrow())
                 .find("credProps").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
         assertTrue(((JsonArray) creation.find("excludeCredentials").orElseThrow()).getElements().isEmpty());
         JsonArray algorithms = (JsonArray) creation.find("pubKeyCredParams").orElseThrow();

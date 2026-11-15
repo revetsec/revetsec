@@ -61,7 +61,7 @@ final class OAuthClientMetadataTests {
   var a=OAuthClientMetadataPolicy.withAddressResolver(resolver).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).build(); var b=OAuthClientMetadataPolicy.fromAddressResolverAndCache(resolver, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   assertEquals(0,calls.get()); assertEquals(resolver,a.getAddressResolver().orElseThrow()); assertEquals(resolver,b.getAddressResolver().orElseThrow());
   assertTrue(a.getEnabled()); assertTrue(a.getAllowedOrigins().isEmpty()); assertEquals(5120,a.getMaximumDocumentBytes()); assertEquals(128,assertInstanceOf(InMemoryOAuthClientMetadataCache.class,a.getCache().orElseThrow()).getMaximumEntries());
-  assertEquals(Duration.ofSeconds(300),a.getMaximumFreshness()); assertEquals(8,a.getMaximumConcurrentFetches()); assertEquals(16,a.getMaximumResolvedAddresses());
+  assertEquals(Duration.ofMinutes(5),a.getMaximumFreshness()); assertEquals(8,a.getMaximumConcurrentFetches()); assertEquals(16,a.getMaximumResolvedAddresses());
   var disabled=OAuthClientMetadataPolicy.disabledInstance(); assertSame(disabled,OAuthClientMetadataPolicy.disabledInstance());
   assertFalse(disabled.getEnabled()); assertTrue(disabled.getAddressResolver().isEmpty()); assertTrue(disabled.getAllowedOrigins().isEmpty());
   assertEquals(a.getMaximumDocumentBytes(),disabled.getMaximumDocumentBytes()); assertTrue(disabled.getCache().isEmpty());
@@ -130,7 +130,7 @@ final class OAuthClientMetadataTests {
    .map(v->DynamicTest.dynamicTest(v.toString(),()->{var b=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
     if(v.isNegative()||v.compareTo(Duration.ofHours(1))>0)assertThrows(IllegalArgumentException.class,()->b.maximumFreshness(v));
     else assertEquals(v,b.maximumFreshness(v).build().getMaximumFreshness());
-    assertEquals(Duration.ofSeconds(300),b.maximumFreshness(null).build().getMaximumFreshness());
+    assertEquals(Duration.ofMinutes(5),b.maximumFreshness(null).build().getMaximumFreshness());
    }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> ineligibleClientIds() {

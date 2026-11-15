@@ -40,6 +40,7 @@ import java.util.zip.Deflater;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
+@SuppressWarnings("JavaInstantGetSecondsGetNano") // XML fixture intentionally formats the nanosecond adjustment.
 final class SamlLogoutRequestTests {
     @Test void signedLogoutRequestStopsAtExactReplayExpiryBeforeStoreAccess() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");

@@ -40,6 +40,7 @@ import static java.util.Objects.requireNonNull;
  * key address, lengths, canonical ordering and kind-specific fields. It grants no proof.
  */
 @Immutable
+@SuppressWarnings("EnumOrdinal") // Frozen pre-release codec must preserve its original wire representation.
 final class LegacyWebAuthnCeremonyRecordCodec {
     private static final int VERSION = 1;
     private static final int FIXED_BYTES = 3 + 32 + 32 + 32 + 8 + 4 + 8 + 4 + 1 + 1 + 1;

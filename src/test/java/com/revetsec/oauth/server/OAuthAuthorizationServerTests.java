@@ -72,6 +72,7 @@ import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthServerException.Reason.*;
 
 /** Public engine integration with an atomic single-process fixture; no durability/distributed claim. */
+@SuppressWarnings("RethrowReflectiveOperationExceptionAsLinkageError") // Reflection failures mean the test no longer matches the implementation shape.
 final class OAuthAuthorizationServerTests {
  private static final @NonNull String ISSUER="https://issuer.example/tenant",RESOURCE="https://resource.example/mcp",REDIRECT="https://client.example/cb?original=%2f";
  private static final @NonNull String BROWSER="A".repeat(43),VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",CHALLENGE="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";

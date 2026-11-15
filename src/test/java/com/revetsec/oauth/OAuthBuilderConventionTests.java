@@ -209,8 +209,8 @@ final class OAuthBuilderConventionTests {
 		AuthorizationServerMetadata reset = AuthorizationServerMetadata.withIssuer("https://issuer.example")
 				.authorizationEndpoint(URI.create("https://issuer.example/auth")).tokenEndpoint(URI.create("https://issuer.example/token"))
 				.authorizationResponseIssuerSupported(true).authorizationResponseIssuerSupported(null).build();
-		assertEquals(Boolean.FALSE, reset.isAuthorizationResponseIssuerSupported());
-		assertEquals(Boolean.FALSE, reset.isRemotelyDiscovered());
+		assertEquals(false, reset.isAuthorizationResponseIssuerSupported());
+		assertEquals(false, reset.isRemotelyDiscovered());
 		assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult("https://issuer.example", "{\"issuer\":\"https://issuer.example\"}")).getReason());
 		assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class,
 				AuthorizationServerMetadata.fromJsonResult("https://issuer.example",

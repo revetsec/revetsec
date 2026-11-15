@@ -61,6 +61,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Genuine engine transactions with separate worker/authority controls and independent retained-state checks. */
+@SuppressWarnings("RethrowReflectiveOperationExceptionAsLinkageError") // Reflection failures mean the test no longer matches the implementation shape.
 final class WebAuthnSharedClockEngineTests {
     private static final @NonNull String NAMESPACE="shared-clock-tests",RP="login.example.com",ORIGIN="https://"+RP;
     private static final @NonNull Instant BASE=Instant.parse("2026-10-09T12:00:00Z");

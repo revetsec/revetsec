@@ -41,13 +41,31 @@ final class WebAuthnMigrationCorruptionConformanceTests {
   else{var migration=new WebAuthnRecordMigration(sealer());var intent=ClosedMigrationIntent.fromExternalIntent(s.get("migrationId"),StoreAdmission.fromIdentifiers(s.get("authority"),s.get("recovery")),Set.of(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));byte[] root=rawFrame(s,s.get("rootKey"),HexFormat.of().parseHex(s.get("rootPlain")),"payload");var anchor=migration.authenticateRoot(intent,s.get("rootKey"),root);if(s.get("kind").equals("NAMESPACE_CLOCK"))anchor=migration.authenticateRoot(intent,s.get("key"),raw);migration.prepare(intent,anchor,s.get("key"),version,raw);}
  }
  private static byte @NonNull [] frame(@NonNull Spec s,byte @NonNull [] body,@NonNull String op)throws Exception{
-  byte[] result=rawFrame(s,s.get("key"),body,op);switch(op){
-   case "frame-magic":result[3]='9';break;case "frame-count-zero":ByteBuffer.wrap(result).putShort(4,(short)0);break;case "frame-count-257":ByteBuffer.wrap(result).putShort(4,(short)257);break;case "frame-size-zero":ByteBuffer.wrap(result).putShort(6,(short)0);break;case "frame-size-over":ByteBuffer.wrap(result).putShort(6,(short)65535);break;case "frame-id":result[8]^=1;break;
-   case "frame-trailing":result=Arrays.copyOf(result,result.length+1);break;case "frame-truncation":result=Arrays.copyOf(result,result.length-1);break;
-   case "swap-chunks":{int first=Short.toUnsignedInt(ByteBuffer.wrap(result).getShort(24));int second=26+first;int length=Short.toUnsignedInt(ByteBuffer.wrap(result).getShort(second));assertEquals(first,length);byte[] copy=result.clone();System.arraycopy(copy,second+2,result,26,first);System.arraycopy(copy,26,result,second+2,first);break;}
-   case "splice-chunks":{byte[] other=rawFrame(s,s.get("key"),body,"payload");int first=Short.toUnsignedInt(ByteBuffer.wrap(result).getShort(24));int otherLength=Short.toUnsignedInt(ByteBuffer.wrap(other).getShort(24));assertEquals(first,otherLength);System.arraycopy(other,26,result,26,first);break;}
-   default:break;
-  }return result;
+  byte[] result=rawFrame(s,s.get("key"),body,op);switch (op) {
+  case "frame-magic" ->
+result[3]='9';
+  case "frame-count-zero" ->
+ByteBuffer.wrap(result).putShort(4,(short)0);
+  case "frame-count-257" ->
+ByteBuffer.wrap(result).putShort(4,(short)257);
+  case "frame-size-zero" ->
+ByteBuffer.wrap(result).putShort(6,(short)0);
+  case "frame-size-over" ->
+ByteBuffer.wrap(result).putShort(6,(short)65535);
+  case "frame-id" ->
+result[8]^=1;
+  case "frame-trailing" ->
+result=Arrays.copyOf(result,result.length+1);
+  case "frame-truncation" ->
+result=Arrays.copyOf(result,result.length-1);
+  case "swap-chunks" -> {
+int first=Short.toUnsignedInt(ByteBuffer.wrap(result).getShort(24));int second=26+first;int length=Short.toUnsignedInt(ByteBuffer.wrap(result).getShort(second));assertEquals(first,length);byte[] copy=result.clone();System.arraycopy(copy,second+2,result,26,first);System.arraycopy(copy,26,result,second+2,first);
+}
+  case "splice-chunks" -> {
+byte[] other=rawFrame(s,s.get("key"),body,"payload");int first=Short.toUnsignedInt(ByteBuffer.wrap(result).getShort(24));int otherLength=Short.toUnsignedInt(ByteBuffer.wrap(other).getShort(24));assertEquals(first,otherLength);System.arraycopy(other,26,result,26,first);
+}
+  default -> {}
+}return result;
  }
  private static byte @NonNull [] rawFrame(@NonNull Spec s,@NonNull String key,byte @NonNull [] raw,@NonNull String op)throws Exception{
   int size=467;if(op.equals("chunk-noncanonical") && raw.length%3==0 && raw.length<size)size=Math.max(1,raw.length-1);byte[] id=EntropySource.fromDefaults().nextBytes(16);List<byte[]> chunks=new ArrayList<>();if(raw.length==0)chunks.add(new byte[0]);else for(int at=0;at<raw.length;at+=size)chunks.add(Arrays.copyOfRange(raw,at,Math.min(raw.length,at+size)));

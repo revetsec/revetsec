@@ -4,7 +4,7 @@ The unpublished [closed migration/restore fixture](../verification/shared-clock-
 
 Its adapter-join lane starts from the actual legacy schemas, obtains exact WebAuthn retention from authenticated payloads, and preflights the fixed target against current schema and capacity constraints before rewriting authentication rows. It installs the full current metadata, registries, reservations and sequence continuation under a separate protected schema intent. Actual current adapters run only after both intents settle and fresh witness admission succeeds. These scripted disposable checks complete the source integration checkpoint; real witness and platform qualification remain required.
 
-The current pre-1.0 source switches TOTP, WebAuthn and the OAuth issuer together. Applications must update their stores, wrappers, examples and result handling together. Existing persisted records require the selected closed migration procedure before activation; compiling the new API does not migrate a namespace or permit mixed old/new writers.
+The current pre-1.0 source switches TOTP, WebAuthn and the OAuth issuer together. Applications must update their stores, wrappers, examples and result handling together. TTR3 is the first released TOTP format and has no legacy conversion path. Persisted WebAuthn or issuer records that predate their current formats require the selected closed migration procedure before activation; compiling the new API does not migrate a namespace or permit mixed old/new writers.
 
 This document describes the joined source contract. Local fixture checks do not establish approved UTC accuracy, witness ownership, platform durability, old-writer exclusion or a production shared-store profile. The bounded volatile stores remain process-local examples.
 

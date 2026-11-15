@@ -310,15 +310,15 @@ final class TotpSharedClockReceiptTests {
 				}
 				changed.set(competingAccountChange(f, account -> {
 					switch (mode) {
-						case "FACTOR" -> { var active = Objects.requireNonNull(account.active); account.active = new TotpRecords.Active(f.codec.freshId(), active.secret.clone(), active.enrolledAt, active.usedStep); }
+						case "FACTOR" -> { var active = Objects.requireNonNull(account.active); account.active = new TotpRecordState.Active(f.codec.freshId(), active.secret.clone(), active.enrolledAt, active.usedStep); }
 						case "FENCE" -> account.fence = f.codec.freshId();
 						case "RESERVATION" -> {
 							String replacement = f.codec.freshId(); var charge = account.charges.get(0);
-							account.charges.set(0, new TotpRecords.Charge(replacement, charge.at));
-							account.totpCharges.set(0, new TotpRecords.Charge(replacement, charge.at));
+							account.charges.set(0, new TotpRecordState.Charge(replacement, charge.at));
+							account.totpCharges.set(0, new TotpRecordState.Charge(replacement, charge.at));
 						}
 						case "USED_STEP" -> Objects.requireNonNull(account.active).usedStep = matched;
-						case "PENDING_FACTOR" -> { var old = Objects.requireNonNull(account.pending); account.pending = new TotpRecords.Pending(old.enrollmentId, f.codec.freshId(), old.secret.clone(), old.browserHash.clone(), old.expiresAt, old.expectedFactorId); }
+						case "PENDING_FACTOR" -> { var old = Objects.requireNonNull(account.pending); account.pending = new TotpRecordState.Pending(old.enrollmentId, f.codec.freshId(), old.secret.clone(), old.browserHash.clone(), old.expiresAt, old.expectedFactorId); }
 						case "PENDING_BINDING" -> Objects.requireNonNull(account.pending).browserHash[0] ^= 1;
 						case "RECOVERY_BATCH" -> account.batchId = f.codec.freshId();
 						case "RECOVERY_HASH" -> { for (byte[] hash : account.recoveryHashes) Arrays.fill(hash, (byte) 0); account.recoveryHashes.clear(); }
@@ -395,7 +395,7 @@ final class TotpSharedClockReceiptTests {
 		}
 	}
 
-	private static @NonNull TotpStoreRecord competingAccountChange(@NonNull F f, @NonNull Consumer<TotpRecords.@NonNull Account> change) {
+	private static @NonNull TotpStoreRecord competingAccountChange(@NonNull F f, @NonNull Consumer<TotpRecordState.@NonNull Account> change) {
 		TotpStoreSnapshot snapshot = assertInstanceOf(TotpStoreReadResult.Available.class,
 				f.source.read(Set.of(f.root(), f.key()), Duration.ofSeconds(2))).getSnapshot();
 		TotpStoreRecord record;

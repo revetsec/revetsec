@@ -36,6 +36,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /** Exactly one test connection; closes the raw TCP socket to unblock all TLS fixture work. */
+@SuppressWarnings("try") // This test peer reports interruption from bounded shutdown.
 final class PinnedTlsPeer implements AutoCloseable {
  private final @NonNull ServerSocket server;
  private final @NonNull ExecutorService executor;

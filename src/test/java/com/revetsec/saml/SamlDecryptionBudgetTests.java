@@ -46,6 +46,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Shared entry/final fixture. Functional cases run in process; real-provider call counts run in one owned child. */
+@SuppressWarnings("serial") // Test-only provider fixture is never serialized.
 final class SamlDecryptionBudgetTests {
     private static final String A = "urn:oasis:names:tc:SAML:2.0:assertion";
     private static final String P = "urn:oasis:names:tc:SAML:2.0:protocol";
@@ -65,7 +66,7 @@ final class SamlDecryptionBudgetTests {
     }
 
     @Test void realPrivateAndContentWorkIsMeasuredInAnIsolatedJvm() throws Exception {
-        ChildJvm.Result result = ChildJvm.withMainClass(WorkMain.class).timeout(Duration.ofSeconds(120)).build().run();
+        ChildJvm.Result result = ChildJvm.withMainClass(WorkMain.class).timeout(Duration.ofMinutes(2)).build().run();
         assertFalse(result.isTimedOut(), result::toString);
         String output = result.getStandardOutput();
         Files.createDirectories(Path.of("target"));

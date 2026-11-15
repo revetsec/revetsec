@@ -47,10 +47,11 @@ import org.jspecify.annotations.Nullable;
  * an atomic initialization write. Fresh recovery epochs retain old records and permanently fence
  * old writers; this process-local history is not a substitute for an external durable controller.
  * <p>The first operational call establishes this store's own volatile UTC projection and metadata.
- * The authenticator's worker Clock is not its time source. Healthy time is a fixed projection of
- * that initial store-owned host UTC reading using this process's elapsed clock; no per-operation
- * wall-clock maximum or mutable namespace record is written. This is a local demonstration
- * assertion, not external UTC, restore, device-durability or suspend/rate qualification.
+ * The authenticator's worker Clock is not its time source. The store checks its elapsed projection
+ * against a fresh host UTC sample on each operation. A discontinuity starts a new clock generation,
+ * fencing work from the old generation; after a backward step the store remains unavailable until
+ * host UTC reaches the last published point. This is a local demonstration assertion, not external
+ * UTC, restore, device-durability or suspend/rate qualification.
  * @since 1.0.0
  */
 @javax.annotation.concurrent.ThreadSafe
@@ -74,6 +75,7 @@ public final class InMemoryTotpStore implements TotpStore {
 	private @Nullable StoreAdmission admission;
 	private @Nullable String clockGeneration;
 	private @Nullable Instant authorityAnchor;
+	private @Nullable Instant authorityHighWater;
 	private long authorityStartedNanos;
 	private long lastAuthorityNanos;
 	private boolean authorityContinuityLost;
@@ -228,42 +230,67 @@ public final class InMemoryTotpStore implements TotpStore {
 	// Caller holds lock; the worker's configured Clock is never sampled here.
 	private @NonNull StoreTimeObservation observe() {
 		StoreAdmission current = operationalAdmission();
+		long before = System.nanoTime();
+		Instant captured = Instant.now();
+		long after = System.nanoTime();
+		Optional<Duration> bracket = StoreTimeRules.elapsed(before, after);
+		if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured))
+			return StoreTimeObservation.Unavailable.fromAdmission(current);
+		if (this.authorityContinuityLost)
+			return StoreTimeObservation.Unavailable.fromAdmission(current);
 		Instant anchor = this.authorityAnchor;
-		if (anchor == null && !this.authorityContinuityLost) {
-			long before = System.nanoTime();
-			Instant captured = Instant.now();
-			long after = System.nanoTime();
-			Optional<Duration> bracket = StoreTimeRules.elapsed(before, after);
-			if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured)) {
-				// A transient pause during the first sample is not a continuity failure: there is no
-				// established authority clock yet. Keep the anchor unset so a later call can retry.
+		if (anchor == null) {
+			Instant highWater = this.authorityHighWater;
+			if (highWater != null && captured.isBefore(highWater))
 				return StoreTimeObservation.Unavailable.fromAdmission(current);
-			} else {
-				this.authorityAnchor = captured;
-				this.authorityStartedNanos = after;
-				this.lastAuthorityNanos = after;
-				anchor = captured;
-			}
+			return reanchor(current, captured, after);
 		}
-		if (anchor == null || this.authorityContinuityLost) return StoreTimeObservation.Unavailable.fromAdmission(current);
-		long now = System.nanoTime();
-		Optional<Duration> elapsed = StoreTimeRules.elapsed(this.authorityStartedNanos, now);
-		if (StoreTimeRules.elapsed(this.lastAuthorityNanos, now).isEmpty() || elapsed.isEmpty()) {
+		Optional<Duration> lowerElapsed = StoreTimeRules.elapsed(this.authorityStartedNanos, before);
+		Optional<Duration> upperElapsed = StoreTimeRules.elapsed(this.authorityStartedNanos, after);
+		if (StoreTimeRules.elapsed(this.lastAuthorityNanos, after).isEmpty()
+				|| lowerElapsed.isEmpty() || upperElapsed.isEmpty()) {
 			this.authorityContinuityLost = true;
 			return StoreTimeObservation.Unavailable.fromAdmission(current);
 		}
-		this.lastAuthorityNanos = now;
 		try {
-			Instant point = anchor.plus(elapsed.get());
+			Instant lower = anchor.plus(lowerElapsed.get());
+			Instant point = anchor.plus(upperElapsed.get());
 			if (!supported(point)) {
 				this.authorityContinuityLost = true;
 				return StoreTimeObservation.Unavailable.fromAdmission(current);
 			}
+			if (captured.isBefore(lower.minus(LOCAL_UTC_ERROR))
+					|| captured.isAfter(point.plus(LOCAL_UTC_ERROR))) {
+				this.clockGeneration = newIdentity();
+				this.authorityAnchor = null;
+				this.authorityStartedNanos = after;
+				this.lastAuthorityNanos = after;
+				Instant highWater = this.authorityHighWater;
+				if (highWater != null && captured.isBefore(highWater))
+					return StoreTimeObservation.Unavailable.fromAdmission(current);
+				return reanchor(current, captured, after);
+			}
+			Instant highWater = this.authorityHighWater;
+			if (highWater != null && point.isBefore(highWater)) {
+				this.authorityContinuityLost = true;
+				return StoreTimeObservation.Unavailable.fromAdmission(current);
+			}
+			this.lastAuthorityNanos = after;
+			this.authorityHighWater = point;
 			return StoreTimeObservation.Healthy.fromObservation(current, Objects.requireNonNull(this.clockGeneration), point, LOCAL_UTC_ERROR);
 		} catch (DateTimeException | ArithmeticException invalid) {
 			this.authorityContinuityLost = true;
 			return StoreTimeObservation.Unavailable.fromAdmission(current);
 		}
+	}
+	private @NonNull StoreTimeObservation reanchor(@NonNull StoreAdmission admission,
+			@NonNull Instant captured, long after) {
+		this.authorityAnchor = captured;
+		this.authorityHighWater = captured;
+		this.authorityStartedNanos = after;
+		this.lastAuthorityNanos = after;
+		return StoreTimeObservation.Healthy.fromObservation(admission,
+				Objects.requireNonNull(this.clockGeneration), captured, LOCAL_UTC_ERROR);
 	}
 	private static boolean supported(@NonNull Instant time) { return time.getEpochSecond() >= 0 && time.getEpochSecond() <= 253402300799L; }
 	private @NonNull String newIdentity() {

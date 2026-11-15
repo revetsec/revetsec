@@ -174,7 +174,7 @@ final class TokenEndpointTests {
 					() -> client(server).requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 			assertEquals(502, error.getStatus());
 			assertTrue(error.isTemporaryCondition());
-			assertEquals(java.time.Duration.ofSeconds(120), error.getRetryAfter().orElseThrow());
+			assertEquals(java.time.Duration.ofMinutes(2), error.getRetryAfter().orElseThrow());
 			assertTrue(error.getErrorCode().isEmpty());
 			assertTrue(!error.toString().contains("private echoed credential"));
 			assertEquals(1, server.getHitCount("/token"));
