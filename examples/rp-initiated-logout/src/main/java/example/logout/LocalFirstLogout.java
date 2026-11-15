@@ -17,6 +17,8 @@
 package example.logout;
 
 import com.revetsec.BrowserBinding;
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import com.revetsec.oidc.*;
 import com.revetsec.oauth.PendingAuthorizationSaveResult;
 import com.revetsec.oauth.PendingAuthorizationStore;
@@ -83,7 +85,7 @@ public final class LocalFirstLogout {
   @Override public byte @NonNull [] body(){return this.body.clone();}
   @Override public @NonNull String toString(){return "Reply{status="+this.status+", values=<redacted>}";}
  }
- private final @NonNull Configuration config;private final @NonNull OidcClient client;private final @NonNull PendingAuthorizationStore pending;private final @NonNull Sessions sessions;private final @NonNull SecureRandom random;private final @NonNull LongSupplier nanoTime;private final @NonNull Semaphore work=new Semaphore(8);
+ private final @NonNull Configuration config;private final @NonNull BrowserRequestOriginPolicy browserOriginPolicy;private final @NonNull OidcClient client;private final @NonNull PendingAuthorizationStore pending;private final @NonNull Sessions sessions;private final @NonNull SecureRandom random;private final @NonNull LongSupplier nanoTime;private final @NonNull Semaphore work=new Semaphore(8);
  private final @NonNull Map<@NonNull String,@NonNull RetainedBinding> retainedBindings=new LinkedHashMap<>();
  /**
   * The client must configure this origin's /logout/callback, a selected provider and a totalDeadline no greater
@@ -91,7 +93,7 @@ public final class LocalFirstLogout {
   * capacity/expiry and a trusted protected session backend; in-memory fixtures are not a durable profile.
   */
  public LocalFirstLogout(@NonNull Configuration config,@NonNull OidcClient client,@NonNull PendingAuthorizationStore pending,@NonNull Sessions sessions){this(config,client,pending,sessions,new SecureRandom(),System::nanoTime);}
- LocalFirstLogout(@NonNull Configuration config,@NonNull OidcClient client,@NonNull PendingAuthorizationStore pending,@NonNull Sessions sessions,@NonNull SecureRandom random,@NonNull LongSupplier nanoTime){this.config=requireNonNull(config);this.client=requireNonNull(client);this.pending=requireNonNull(pending);this.sessions=requireNonNull(sessions);this.random=requireNonNull(random);this.nanoTime=requireNonNull(nanoTime);}
+ LocalFirstLogout(@NonNull Configuration config,@NonNull OidcClient client,@NonNull PendingAuthorizationStore pending,@NonNull Sessions sessions,@NonNull SecureRandom random,@NonNull LongSupplier nanoTime){this.config=requireNonNull(config);this.browserOriginPolicy=BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(config.origin())).build();this.client=requireNonNull(client);this.pending=requireNonNull(pending);this.sessions=requireNonNull(sessions);this.random=requireNonNull(random);this.nanoTime=requireNonNull(nanoTime);}
  /** Invoke once with complete raw carrier values. No store, session or provider operation is automatically retried. */
  public @NonNull Reply handle(@NonNull Request request){
   boolean callback=request.path().equals("/logout/callback"),possibleClose=false,closed=false,acquired=false;Budget budget=new Budget(this.nanoTime);
@@ -100,7 +102,7 @@ public final class LocalFirstLogout {
    if(!callback&&!request.path().equals("/logout"))throw new Refused(404);
    if(request.body.length!=0)throw new Refused(400);
    if(callback){if(!request.method().equals("GET"))throw new Refused(405);String handle=cookieValue(request,PENDING_COOKIE);if(handle==null||!token(handle))throw new Refused(400);if(!this.work.tryAcquire())throw new Refused(503);acquired=true;BrowserBinding binding=claimBinding(handle);if(binding==null)throw new Refused(400);OidcLogoutResult result=this.client.completeLogoutResult(request.rawQuery()==null?"":request.rawQuery(),PendingOidcLogoutSource.fromStore(this.pending,binding),this.config.callback());budget.check();return fixed(result instanceof OidcLogoutResult.Returned?200:400,result instanceof OidcLogoutResult.Returned?"Provider return correlated; provider-session termination is not confirmed.":"Logout return not accepted.",List.of(clear(PENDING_COOKIE)));}
-   if(!request.method().equals("POST"))throw new Refused(405);if(request.rawQuery()!=null)throw new Refused(400);if(!values(request,"origin").equals(List.of(this.config.origin().toString())))throw new Refused(403);
+   if(!request.method().equals("POST"))throw new Refused(405);if(request.rawQuery()!=null)throw new Refused(400);if(!(this.browserOriginPolicy.checkResult(request.method(),values(request,"sec-fetch-site"),values(request,"origin")) instanceof BrowserRequestOriginResult.Allowed))throw new Refused(403);
    List<String> contentTypes=values(request,"content-type");if(contentTypes.size()>1||contentTypes.size()==1&&!contentTypes.get(0).equalsIgnoreCase("application/x-www-form-urlencoded"))throw new Refused(415);
    String session=cookieValue(request,SESSION_COOKIE),csrf=one(request,"x-csrf-token");if(session==null||!token(session)||!token(csrf))throw new Refused(403);
    if(!this.work.tryAcquire())throw new Refused(503);acquired=true;budget.check();possibleClose=true;CloseResult outcome=this.sessions.closeAuthorized(session,csrf,budget.remaining());

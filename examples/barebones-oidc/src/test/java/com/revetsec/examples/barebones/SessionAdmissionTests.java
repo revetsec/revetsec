@@ -68,7 +68,11 @@ final class SessionAdmissionTests {
                     assertEquals(403, sim.performHttpRequest(request(HttpMethod.POST, "/session", body, null)).getMarshaledResponse().getStatusCode());
                 assertEquals(403, sim.performHttpRequest(request(HttpMethod.POST, "/session?x=1", "begin=1", null)).getMarshaledResponse().getStatusCode());
                 assertEquals(413, sim.performHttpRequest(valid.copy().contentTooLarge(true).finish()).getMarshaledResponse().getStatusCode());
-                assertEquals(303, sim.performHttpRequest(valid).getMarshaledResponse().getStatusCode());
+                var noReferrer = valid.copy().headers(h -> {
+                    h.put("Sec-Fetch-Site", List.of("same-origin"));
+                    h.put("Origin", List.of("null"));
+                }).finish();
+                assertEquals(303, sim.performHttpRequest(noReferrer).getMarshaledResponse().getStatusCode());
             });
         }
     }

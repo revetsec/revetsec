@@ -36,7 +36,7 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-/** Exact WAR2 payloads for active admitted-time operation and closed migration. This helper never admits a credential or chooses authority time. */
+/** Exact WAR2 payloads for active admitted-time operation. This helper never admits a credential or chooses authority time. */
 @ThreadSafe
 final class WebAuthnRecordPayloadV2 {
 	static final @NonNull Instant PERMANENT = Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
@@ -106,29 +106,6 @@ final class WebAuthnRecordPayloadV2 {
 		}
 	}
 
-	static @NonNull Instant legacyMinimum(@NonNull String storageKey, byte @NonNull [] plaintext,
-			long authenticatedNotAfter) throws WebAuthnRecordException {
-		Address address = address(storageKey);
-		if (address.kind != WebAuthnStoreKey.Kind.NAMESPACE_CLOCK || plaintext.length != 13
-				|| plaintext[0] != 1 || authenticatedNotAfter != PERMANENT.getEpochSecond()) throw new WebAuthnRecordException();
-		try {
-			ByteBuffer reader = ByteBuffer.wrap(plaintext);
-			reader.get();
-			return readInstant(reader);
-		} catch (IllegalArgumentException | DateTimeException failure) { throw new WebAuthnRecordException(); }
-	}
-
-	static @NonNull Decoded legacyEntity(@NonNull String storageKey, byte @NonNull [] plaintext,
-			long authenticatedNotAfter, @NonNull Instant minimum) throws WebAuthnRecordException {
-		requireNonNull(minimum);
-		Address address = address(storageKey);
-		if (address.kind == WebAuthnStoreKey.Kind.NAMESPACE_CLOCK) throw new WebAuthnRecordException();
-		Inner info = validateInner(address, plaintext);
-		if (authenticatedNotAfter != info.notAfter) throw new WebAuthnRecordException();
-		Instant floor = info.issuedAt != null && info.issuedAt.isAfter(minimum) ? info.issuedAt : minimum;
-		return new Decoded(info.key, floor, null, plaintext, info.expiresAt);
-	}
-
 	static @NonNull WebAuthnStoreKey namespaceKeyForAddress(@NonNull String storageKey)
 			throws WebAuthnRecordException {
 		return address(storageKey).root();
@@ -160,15 +137,17 @@ final class WebAuthnRecordPayloadV2 {
 		int idLength;
 		int handleLength;
 		int keyLength = 0;
-		if (version == 1) {
-			if (payload.length < 13 || payload.length > 2_124) throw new WebAuthnRecordException();
+		byte[] aaguid = new byte[16];
+		if (version == 3) {
+			if (payload.length < 29 || payload.length > 2_140) throw new WebAuthnRecordException();
 			algorithm = reader.getShort();
 			counter = Integer.toUnsignedLong(reader.getInt());
 			flags = reader.get() & 0xff;
+			reader.get(aaguid);
 			idLength = Short.toUnsignedInt(reader.getShort());
 			handleLength = reader.get() & 0xff;
 			keyLength = Short.toUnsignedInt(reader.getShort());
-			if ((flags & ~3) != 0 || keyLength < 1 || keyLength > 1_024) throw new WebAuthnRecordException();
+			if ((flags & ~7) != 0 || keyLength < 1 || keyLength > 1_024) throw new WebAuthnRecordException();
 		} else if (version == 2) {
 			if (payload.length < 6 || payload.length > 1_091) throw new WebAuthnRecordException();
 			idLength = Short.toUnsignedInt(reader.getShort());
@@ -183,10 +162,10 @@ final class WebAuthnRecordPayloadV2 {
 			reader.get(id).get(handle).get(publicKey);
 			WebAuthnStoreKey key = WebAuthnStoreKey.forCredential(address.namespace, address.rp, id);
 			address.requireKey(key);
-			if (version == 1) WebAuthnCredentialState.checked(id, handle, publicKey, algorithm, counter,
-					(flags & 1) != 0, (flags & 2) != 0);
-			return new Inner(key, PERMANENT, null);
-		} finally { Arrays.fill(id, (byte) 0); Arrays.fill(handle, (byte) 0); Arrays.fill(publicKey, (byte) 0); }
+			if (version == 3) WebAuthnCredentialState.checked(id, handle, aaguid, publicKey,
+					algorithm, counter, (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0);
+			return new Inner(key, PERMANENT);
+		} finally { Arrays.fill(aaguid, (byte) 0); Arrays.fill(id, (byte) 0); Arrays.fill(handle, (byte) 0); Arrays.fill(publicKey, (byte) 0); }
 	}
 
 	private static @NonNull Inner index(@NonNull Address address, byte @NonNull [] payload)
@@ -216,7 +195,7 @@ final class WebAuthnRecordPayloadV2 {
 			if (reader.hasRemaining()) throw new WebAuthnRecordException();
 			WebAuthnStoreKey key = WebAuthnStoreKey.forAccountCredentialIndex(address.namespace, address.rp, handle);
 			address.requireKey(key);
-			return new Inner(key, PERMANENT, null);
+			return new Inner(key, PERMANENT);
 		} finally { Arrays.fill(handle, (byte) 0); for (byte[] id : ids) Arrays.fill(id, (byte) 0); }
 	}
 
@@ -228,7 +207,7 @@ final class WebAuthnRecordPayloadV2 {
 		try {
 			WebAuthnStoreKey key = WebAuthnStoreKey.forAccountFence(address.namespace, address.rp, handle);
 			address.requireKey(key);
-			return new Inner(key, PERMANENT, null);
+			return new Inner(key, PERMANENT);
 		} finally { Arrays.fill(handle, (byte) 0); }
 	}
 
@@ -288,7 +267,7 @@ final class WebAuthnRecordPayloadV2 {
 					purposeLength == 0 ? null : new String(purpose, StandardCharsets.US_ASCII), issuedAt, expiresAt, consumed == 1);
 			WebAuthnStoreKey key = WebAuthnStoreKey.forCeremony(address.namespace, address.rp, id);
 			address.requireKey(key);
-			return new Inner(key, expiresAt, issuedAt);
+			return new Inner(key, expiresAt);
 		} finally {
 			Arrays.fill(id, (byte) 0); Arrays.fill(challenge, (byte) 0); Arrays.fill(binding, (byte) 0);
 			if (handle != null) Arrays.fill(handle, (byte) 0);
@@ -351,9 +330,8 @@ final class WebAuthnRecordPayloadV2 {
 		private final @NonNull WebAuthnStoreKey key;
 		private final long notAfter;
 		private final @NonNull Instant expiresAt;
-		private final @Nullable Instant issuedAt;
-		private Inner(@NonNull WebAuthnStoreKey key, @NonNull Instant expiresAt, @Nullable Instant issuedAt) {
-			this.key = key; this.expiresAt = expiresAt; this.issuedAt = issuedAt;
+		private Inner(@NonNull WebAuthnStoreKey key, @NonNull Instant expiresAt) {
+			this.key = key; this.expiresAt = expiresAt;
 			this.notAfter = expiresAt.getNano() == 0 ? expiresAt.getEpochSecond() : Math.addExact(expiresAt.getEpochSecond(), 1);
 		}
 	}

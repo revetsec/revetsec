@@ -180,7 +180,9 @@ public final class WebAuthnRelyingParty {
                     throw new IllegalStateException("Invalid registration fact");
                 yield WebAuthnRegistrationResult.succeeded(new WebAuthnRegistration(
                         this.credentialNamespace, this.relyingPartyId,
-                        verified.userHandle(), verified.credentialId()));
+                        verified.userHandle(), verified.credentialId(), requireNonNull(verified.aaguid()),
+                        verified.backupEligible(), verified.backedUp(),
+                        verified.userVerifiedAtRegistration()));
             }
             case REJECTED, COUNTER_RISK -> WebAuthnRegistrationResult.rejected(WebAuthnRejectionReason.REJECTED);
             case UNAVAILABLE -> WebAuthnRegistrationResult.unavailable();
@@ -226,7 +228,8 @@ public final class WebAuthnRelyingParty {
                 };
                 yield WebAuthnAuthenticationResult.succeeded(new WebAuthnAuthentication(
                         this.credentialNamespace, this.relyingPartyId, verified.userHandle(),
-                        verified.credentialId(), kind, verified.purpose()));
+                        verified.credentialId(), verified.backupEligible(), verified.backedUp(),
+                        kind, verified.purpose()));
             }
             case REJECTED -> WebAuthnAuthenticationResult.rejected(WebAuthnRejectionReason.REJECTED);
             case COUNTER_RISK -> WebAuthnAuthenticationResult.rejected(WebAuthnRejectionReason.COUNTER_RISK);
@@ -276,7 +279,8 @@ public final class WebAuthnRelyingParty {
                     return WebAuthnReauthenticationResult.rejected(WebAuthnRejectionReason.REJECTED);
                 return WebAuthnReauthenticationResult.succeeded(new WebAuthnReauthentication(
                         this.credentialNamespace, this.relyingPartyId, proof.getUserHandle(),
-                        proof.getCredentialId(), actionPurpose, ceremonyId));
+                        proof.getCredentialId(), proof.isBackupEligible().booleanValue(),
+                        proof.isBackedUp().booleanValue(), actionPurpose, ceremonyId));
             }
             if (result instanceof WebAuthnAuthenticationResult.Rejected rejected)
                 return WebAuthnReauthenticationResult.rejected(rejected.getReason());

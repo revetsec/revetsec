@@ -391,6 +391,7 @@ final class PlaygroundSaml {
     private boolean trustedCallback(@NonNull Request request, boolean opaquePostOrigin) {
         if (!trustedHost(request)) return false;
         List<String> origins = PlaygroundAdmission.headerValues(request, "Origin");
+        // SAML ACS and POST SLO are cross-site protocol endpoints, so the browser-origin policy does not apply.
         // Opaque Origin is auxiliary only for ACS or enabled POST-SLO. It grants no IdP trust:
         // signed SAML and saved browser pending state (returns) or full session matching remain mandatory.
         return origins.isEmpty() || origins.size() == 1 && (origins.get(0).equals(idpOrigin.toString())

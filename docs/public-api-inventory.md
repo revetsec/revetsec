@@ -1,6 +1,6 @@
 # Current public type inventory
 
-Measured **2026-11-13** from the **1.0.0 release source**, establishing Revetsec's first public compatibility baseline. See the [compatibility policy](../COMPATIBILITY.md) for what is API and how changes are treated.
+Measured **2026-11-15** from the **1.0.0 release source**, establishing Revetsec's first public compatibility baseline. See the [compatibility policy](../COMPATIBILITY.md) for what is API and how changes are treated.
 
 ## Counting rules
 
@@ -9,11 +9,16 @@ Measured **2026-11-13** from the **1.0.0 release source**, establishing Revetsec
 - Exclude internal packages, package-private/private types, types hidden by a non-exported enclosing type, local/anonymous/synthetic classes, and adapter/test/tooling artifacts. Methods, constructors, fields, enum constants and compiler-generated methods are not type declarations.
 - Inclusion does not mean applications can construct or extend a type. Restricted carriers and result variants retain their documented construction and success-only payload rules. No protected nested declarations occur in this snapshot; all listed types are public.
 
-The attributed source inventory and accessible declarations compiled on JDK 21 with `--release 17` agree exactly on **703 types: 341 top-level and 362 nested**. All 606 packaged main sources used for the inventory matched the measured source byte for byte. The intermediate artifact hashes used to establish that count are review evidence, not publication receipts. These declaration counts define the 1.0.0 source inventory but do not by themselves qualify a runtime, provider or deployment. The earlier `javap -protected -s` comparison against the 700-type artifact remains bound to the 702-type API-BIND snapshot; it covers declared public/protected classfile members and JVM descriptors but does not flatten inherited members or establish generic source compatibility, behavior, defaults or storage compatibility. The existing contract tests enforce API shape; they do not automatically keep this Markdown snapshot synchronized. Refresh the counts and complete lists whenever exported declarations change.
+The attributed source inventory and accessible declarations compiled on JDK 21 with `--release 17` agree exactly on **710 types: 343 top-level and 367 nested**. All 608 packaged main sources used for the inventory matched the measured source byte for byte. The intermediate artifact hashes used to establish that count are review evidence, not publication receipts. These declaration counts define the 1.0.0 source inventory but do not by themselves qualify a runtime, provider or deployment. The earlier `javap -protected -s` comparison against the 700-type artifact remains bound to the 702-type API-BIND snapshot; it covers declared public/protected classfile members and JVM descriptors but does not flatten inherited members or establish generic source compatibility, behavior, defaults or storage compatibility. The existing contract tests enforce API shape; they do not automatically keep this Markdown snapshot synchronized. Refresh the counts and complete lists whenever exported declarations change.
 
-The CFG-DIAG component adds the immutable `ConfigurationDiagnostic` enum and construction-only inspection methods on the selected TOTP, WebAuthn and OAuth authorization-server builders. It removes no public type. The fixed codes contain no supplied values and grant no runtime-readiness or deployment claim. The 703-type packaged-consumer guard compiles and runs against the built JAR; the detailed earlier API-BIND member comparison remains historical rather than being relabeled as a comparison of this later API.
+The browser request-origin component adds `BrowserRequestOriginPolicy`, its builder, and the closed
+`BrowserRequestOriginResult` hierarchy (seven declarations total). WebAuthn metadata adds methods to existing proof
+types and therefore changes no type count. The prior 703-type guard and API-BIND comparisons remain historical
+inputs; the current 710-type inventory is the release-source declaration set.
 
-The OAuth checked-grant component adds the member-only `OAuthIssuerAccessTokenResult.Succeeded.getGrantValue()` accessor and no public type, so the 703-type totals are unchanged. The library-created success variant releases the sensitive issuer-local handle only with the access-token proof after authoritative admission. Generic `VerifiedAccessToken` and rejection variants have no such accessor, and the handle remains absent from public wire representations and diagnostics.
+The CFG-DIAG component added the immutable `ConfigurationDiagnostic` enum and construction-only inspection methods on the selected TOTP, WebAuthn and OAuth authorization-server builders. It removed no public type. The fixed codes contain no supplied values and grant no runtime-readiness or deployment claim. At that component snapshot, the 703-type packaged-consumer guard compiled and ran against the built JAR; the current release-source guard is the 710-type inventory above. The detailed earlier API-BIND member comparison remains historical rather than being relabeled as a comparison of this later API.
+
+The OAuth checked-grant component added the member-only `OAuthIssuerAccessTokenResult.Succeeded.getGrantValue()` accessor and no public type, so the then-current 703-type totals were unchanged. The library-created success variant releases the sensitive issuer-local handle only with the access-token proof after authoritative admission. Generic `VerifiedAccessToken` and rejection variants have no such accessor, and the handle remains absent from public wire representations and diagnostics.
 
 This API-BIND component adds the final immutable `BrowserBinding` and `OperationBinding` role carriers and changes affected high-level OAuth/OIDC/SAML/issuer and TOTP/WebAuthn method descriptors from raw `String` to the appropriate carrier. It removes no public type. Public high-level raw-`String` overloads are absent; low-level pending-store SPIs intentionally retain opaque `String` fields as their backend compatibility boundary. The carriers expose fresh canonical 43-character generation, explicit trusted-persistence restoration, explicit secret serialization and fixed redacted diagnostics. They provide correlation typing, not identity, permission, freshness or one-use proof.
 
@@ -23,7 +28,7 @@ The immediately preceding sealed Release25 snapshot contained 700 declarations. 
 
 | Package | Top-level | Nested | Total |
 | --- | ---: | ---: | ---: |
-| [`com.revetsec`](#comrevetsec) | 16 | 6 | 22 |
+| [`com.revetsec`](#comrevetsec) | 18 | 11 | 29 |
 | [`com.revetsec.jose`](#comrevetsecjose) | 26 | 13 | 39 |
 | [`com.revetsec.json`](#comrevetsecjson) | 7 | 1 | 8 |
 | [`com.revetsec.oauth`](#comrevetsecoauth) | 52 | 37 | 89 |
@@ -34,15 +39,17 @@ The immediately preceding sealed Release25 snapshot contained 700 declarations. 
 | [`com.revetsec.scim`](#comrevetsecscim) | 58 | 59 | 117 |
 | [`com.revetsec.totp`](#comrevetsectotp) | 34 | 67 | 101 |
 | [`com.revetsec.webauthn`](#comrevetsecwebauthn) | 26 | 49 | 75 |
-| **Total** | **341** | **362** | **703** |
+| **Total** | **343** | **367** | **710** |
 
 ## com.revetsec
 
-16 top-level + 6 nested = **22 types**. Names link to the declaring source file.
+18 top-level + 11 nested = **29 types**. Names link to the declaring source file.
 
 | Top-level declaration | Kind | Accessible nested declarations |
 | --- | --- | --- |
 | [`BrowserBinding`](../src/main/java/com/revetsec/BrowserBinding.java) | class | — |
+| [`BrowserRequestOriginPolicy`](../src/main/java/com/revetsec/BrowserRequestOriginPolicy.java) | class | [`BrowserRequestOriginPolicy.Builder`](../src/main/java/com/revetsec/BrowserRequestOriginPolicy.java) |
+| [`BrowserRequestOriginResult`](../src/main/java/com/revetsec/BrowserRequestOriginResult.java) | class | [`BrowserRequestOriginResult.Allowed`](../src/main/java/com/revetsec/BrowserRequestOriginResult.java), [`BrowserRequestOriginResult.Basis`](../src/main/java/com/revetsec/BrowserRequestOriginResult.java), [`BrowserRequestOriginResult.Reason`](../src/main/java/com/revetsec/BrowserRequestOriginResult.java), [`BrowserRequestOriginResult.Rejected`](../src/main/java/com/revetsec/BrowserRequestOriginResult.java) |
 | [`ConfigurationDiagnostic`](../src/main/java/com/revetsec/ConfigurationDiagnostic.java) | enum | — |
 | [`ErrorCategory`](../src/main/java/com/revetsec/ErrorCategory.java) | enum | — |
 | [`InvalidSealedStateException`](../src/main/java/com/revetsec/InvalidSealedStateException.java) | class | — |

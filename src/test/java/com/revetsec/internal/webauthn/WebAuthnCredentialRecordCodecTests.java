@@ -43,12 +43,16 @@ final class WebAuthnCredentialRecordCodecTests {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final byte[] ID = {1, 2, 3};
     private static final byte[] HANDLE = {4, 5, 6};
+    private static final byte[] AAGUID = {
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    };
     private static final String NAMESPACE = "tenant";
     private static final String RP = "login.example.com";
 
     @Test void roundTripsCheckedCredentialStateWithUnsignedCounterAndCopies() throws Exception {
         byte[] key = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
-        var state = WebAuthnCredentialState.checked(ID, HANDLE, key, -8, 0xffff_ffffL, true, true);
+        var state = WebAuthnCredentialState.checked(ID, HANDLE, AAGUID, key, -8, 0xffff_ffffL,
+                true, true, false);
         WebAuthnCredentialRecordCodec codec = credentialCodec();
         var encoded = codec.encode(state, NOW);
         assertEquals(WebAuthnStoreKey.forCredential(NAMESPACE, RP, ID), encoded.key());
@@ -63,6 +67,8 @@ final class WebAuthnCredentialRecordCodecTests {
         assertEquals(0xffff_ffffL, restored.counter());
         assertTrue(restored.backupEligible());
         assertTrue(restored.backedUp());
+        assertArrayEquals(AAGUID, restored.aaguid());
+        assertFalse(restored.userVerifiedAtRegistration());
         assertFalse(encoded.toString().contains(encoded.key().getStorageKey()));
         assertFalse(encoded.toString().contains("AQID"));
     }
@@ -70,7 +76,7 @@ final class WebAuthnCredentialRecordCodecTests {
     @Test void rejectsReboundCredentialKeysAndWrongKinds() throws Exception {
         byte[] key = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
         var codec = credentialCodec();
-        var encoded = codec.encode(WebAuthnCredentialState.checked(ID, HANDLE, key, -8, 1, false, false), NOW);
+        var encoded = codec.encode(WebAuthnCredentialState.checked(ID, HANDLE, new byte[16], key, -8, 1, false, false, true), NOW);
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(
                 WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {1, 2, 4}),
                 encoded.sealedBytes(), CLOCK));
@@ -78,28 +84,55 @@ final class WebAuthnCredentialRecordCodecTests {
                 WebAuthnStoreKey.forAccountFence(NAMESPACE, RP, HANDLE), encoded.sealedBytes(), CLOCK));
 
         WebAuthnStoreKey wrongAddress = WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {1, 2, 4});
-        byte[] rebound = malformed(wrongAddress, rawPayload(ID, HANDLE, key, -8, 1, 0),
+        byte[] rebound = malformed(wrongAddress, rawPayload(ID, HANDLE, AAGUID, key, -8, 1, 0),
                 NOW.plusSeconds(300));
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(wrongAddress, rebound, CLOCK));
+    }
+
+    @Test void decodesTheStableVersionThreeByteLayout() throws Exception {
+        byte[] key = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
+        WebAuthnStoreKey address = WebAuthnStoreKey.forCredential(NAMESPACE, RP, ID);
+        byte[] wire = rawPayload(ID, HANDLE, AAGUID, key, -8, 0x01020304L, 5);
+        assertEquals(3, wire[0] & 0xff);
+        assertEquals(-8, ByteBuffer.wrap(wire, 1, 2).getShort());
+        assertEquals(0x01020304, ByteBuffer.wrap(wire, 3, 4).getInt());
+        assertEquals(5, wire[7] & 0xff);
+        assertArrayEquals(AAGUID, Arrays.copyOfRange(wire, 8, 24));
+        assertEquals(ID.length, Short.toUnsignedInt(ByteBuffer.wrap(wire, 24, 2).getShort()));
+        assertEquals(HANDLE.length, wire[26] & 0xff);
+        assertEquals(key.length, Short.toUnsignedInt(ByteBuffer.wrap(wire, 27, 2).getShort()));
+
+        WebAuthnRecordCodec records = recordCodec();
+        byte[] sealed = records.sealEntity(address, wire,
+                Instant.ofEpochSecond(Instant.MAX.getEpochSecond()), NOW);
+        WebAuthnCredentialState restored = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records)
+                .decode(address, sealed, CLOCK);
+        assertArrayEquals(AAGUID, restored.aaguid());
+        assertTrue(restored.backupEligible());
+        assertFalse(restored.backedUp());
+        assertTrue(restored.userVerifiedAtRegistration());
     }
 
     @Test void rejectsAuthenticatedButInvalidCredentialPayloads() throws Exception {
         byte[] key = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
         WebAuthnStoreKey address = WebAuthnStoreKey.forCredential(NAMESPACE, RP, ID);
-        WebAuthnRecordCodec envelopes = recordCodec();
-        WebAuthnCredentialRecordCodec codec = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, envelopes);
-        byte[] valid = rawPayload(ID, HANDLE, key, -8, 7, 0);
-        int[] tamperedOffsets = {0, 1, 7, 8, 10, 11, 12, 13 + ID.length + HANDLE.length};
+        WebAuthnCredentialRecordCodec codec = credentialCodec();
+        byte[] valid = rawPayload(ID, HANDLE, AAGUID, key, -8, 7, 4);
+        Instant permanent = Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
+        // Authentic WAR2 envelopes with permanent retention leave the inner payload as the only defect.
+        assertEquals(7, codec.decode(address, malformed(address, valid, permanent), CLOCK).counter());
+        int[] tamperedOffsets = {0, 1, 24, 25, 26, 27, 28, 29 + ID.length + HANDLE.length};
         for (int offset : tamperedOffsets) {
             byte[] invalid = valid.clone();
             invalid[offset] ^= 0x40;
-            byte[] sealed = envelopes.seal(address, invalid, NOW.plusSeconds(300));
+            byte[] sealed = malformed(address, invalid, permanent);
             assertThrows(WebAuthnRecordException.class, () -> codec.decode(address, sealed, CLOCK));
         }
-        for (byte[] invalid : new byte[][] {Arrays.copyOf(valid, 12), Arrays.copyOf(valid, valid.length - 1),
-                Arrays.copyOf(valid, valid.length + 1), rawPayload(ID, HANDLE, key, -7, 7, 0),
-                rawPayload(ID, HANDLE, key, -8, 7, 2)}) {
-            byte[] sealed = envelopes.seal(address, invalid, NOW.plusSeconds(300));
+        for (byte[] invalid : new byte[][] {Arrays.copyOf(valid, 28), Arrays.copyOf(valid, valid.length - 1),
+                Arrays.copyOf(valid, valid.length + 1), rawPayload(ID, HANDLE, AAGUID, key, -7, 7, 4),
+                rawPayload(ID, HANDLE, AAGUID, key, -8, 7, 8),
+                legacyVersionOnePayload(ID, HANDLE, key, -8, 7, 0)}) {
+            byte[] sealed = malformed(address, invalid, permanent);
             assertThrows(WebAuthnRecordException.class, () -> codec.decode(address, sealed, CLOCK));
         }
     }
@@ -114,8 +147,8 @@ final class WebAuthnCredentialRecordCodecTests {
         assertThrows(WebAuthnRecordException.class,
                 () -> codec.decode(tombstone.key(), tombstone.sealedBytes(), CLOCK));
         assertTrue(tombstone.sealedBytes().length < codec.encode(WebAuthnCredentialState.checked(
-                ID, HANDLE, edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair()),
-                -8, 0, false, false), NOW).sealedBytes().length);
+                ID, HANDLE, new byte[16], edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair()),
+                -8, 0, false, false, true), NOW).sealedBytes().length);
 
         WebAuthnStoreKey address = tombstone.key();
         byte[] valid = {2, 0, 3, 3, 1, 2, 3, 4, 5, 6};
@@ -145,6 +178,16 @@ final class WebAuthnCredentialRecordCodecTests {
     }
 
     private static byte @NonNull [] rawPayload(byte @NonNull [] id, byte @NonNull [] handle,
+            byte @NonNull [] aaguid, byte @NonNull [] key, int algorithm, long counter, int flags) {
+        ByteBuffer writer = ByteBuffer.allocate(29 + id.length + handle.length + key.length);
+        writer.put((byte) 3).putShort((short) algorithm).putInt((int) counter).put((byte) flags);
+        writer.put(aaguid);
+        writer.putShort((short) id.length).put((byte) handle.length).putShort((short) key.length);
+        writer.put(id).put(handle).put(key);
+        return writer.array();
+    }
+
+    private static byte @NonNull [] legacyVersionOnePayload(byte @NonNull [] id, byte @NonNull [] handle,
             byte @NonNull [] key, int algorithm, long counter, int flags) {
         ByteBuffer writer = ByteBuffer.allocate(13 + id.length + handle.length + key.length);
         writer.put((byte) 1).putShort((short) algorithm).putInt((int) counter).put((byte) flags);

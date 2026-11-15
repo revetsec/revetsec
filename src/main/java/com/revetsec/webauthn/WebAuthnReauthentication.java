@@ -30,16 +30,23 @@ public final class WebAuthnReauthentication {
     private final @NonNull String relyingPartyId;
     private final byte @NonNull [] userHandle;
     private final byte @NonNull [] credentialId;
+    private final boolean backupEligible;
+    private final boolean backedUp;
     private final @NonNull String actionPurpose;
     private final @NonNull String ceremonyId;
 
     WebAuthnReauthentication(@NonNull String credentialNamespace, @NonNull String relyingPartyId,
             byte @NonNull [] userHandle, byte @NonNull [] credentialId,
-            @NonNull String actionPurpose, @NonNull String ceremonyId) {
+            boolean backupEligible, boolean backedUp, @NonNull String actionPurpose,
+            @NonNull String ceremonyId) {
         this.credentialNamespace = requireNonNull(credentialNamespace);
         this.relyingPartyId = requireNonNull(relyingPartyId);
         this.userHandle = requireNonNull(userHandle).clone();
         this.credentialId = requireNonNull(credentialId).clone();
+        if (backedUp && !backupEligible)
+            throw new IllegalArgumentException("Invalid WebAuthn backup state");
+        this.backupEligible = backupEligible;
+        this.backedUp = backedUp;
         this.actionPurpose = requireNonNull(actionPurpose);
         this.ceremonyId = requireNonNull(ceremonyId);
     }
@@ -59,6 +66,14 @@ public final class WebAuthnReauthentication {
      * @return defensive credential ID copy
      * @since 1.0.0 */
     public byte @NonNull [] getCredentialId() { return this.credentialId.clone(); }
+    /** Returns the credential's permanent backup eligibility.
+     * @return backup eligibility
+     * @since 1.0.0 */
+    public @NonNull Boolean isBackupEligible() { return Boolean.valueOf(this.backupEligible); }
+    /** Returns the backup state stored by this successful reauthentication.
+     * @return current backed-up state
+     * @since 1.0.0 */
+    public @NonNull Boolean isBackedUp() { return Boolean.valueOf(this.backedUp); }
     /** Returns the exact checked action label.
      * @return action purpose
      * @since 1.0.0 */

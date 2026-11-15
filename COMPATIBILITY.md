@@ -28,13 +28,13 @@ Public top-level types in the exported packages below, and their reachable publi
 | `com.revetsec.password` | Argon2id password hashing, explicit legacy verification and migration, bounded work and pepper rotation |
 | `com.revetsec.totp` | TOTP enrollment and verification, recovery codes, durable record/store contracts and recovery fencing |
 
-### 1.0.0 declaration inventory (2026-11-13)
+### 1.0.0 declaration inventory (2026-11-15)
 
 The [complete current type list](docs/public-api-inventory.md) measures the `1.0.0` release source using the same exported-type rules as `PublicApiContractTests`, cross-checked against compiled declarations. Count each public top-level declaration once and each accessible public or protected nested declaration once under its declaring type. Builders, enums and restricted result variants count as types; methods, constructors, fields, enum constants and compiler-generated helpers do not. No protected nested declarations occur in this release. Adapter artifacts and internal packages are outside these totals.
 
 | Package | Top-level | Nested | Total |
 | --- | ---: | ---: | ---: |
-| [`com.revetsec`](docs/public-api-inventory.md#comrevetsec) | 16 | 6 | 22 |
+| [`com.revetsec`](docs/public-api-inventory.md#comrevetsec) | 18 | 11 | 29 |
 | [`com.revetsec.jose`](docs/public-api-inventory.md#comrevetsecjose) | 26 | 13 | 39 |
 | [`com.revetsec.json`](docs/public-api-inventory.md#comrevetsecjson) | 7 | 1 | 8 |
 | [`com.revetsec.oauth`](docs/public-api-inventory.md#comrevetsecoauth) | 52 | 37 | 89 |
@@ -45,7 +45,7 @@ The [complete current type list](docs/public-api-inventory.md) measures the `1.0
 | [`com.revetsec.scim`](docs/public-api-inventory.md#comrevetsecscim) | 58 | 59 | 117 |
 | [`com.revetsec.totp`](docs/public-api-inventory.md#comrevetsectotp) | 34 | 67 | 101 |
 | [`com.revetsec.webauthn`](docs/public-api-inventory.md#comrevetsecwebauthn) | 26 | 49 | 75 |
-| **Total** | **341** | **362** | **703** |
+| **Total** | **343** | **367** | **710** |
 
 This dated inventory is the 1.0.0 source baseline. It does not by itself qualify a runtime, provider or deployment. The final pre-release API-BIND component added `BrowserBinding` and `OperationBinding` over the sealed 700-type Release25 component and removed no type. Its bounded `javap -protected -s` comparison found 15 changed or added declaration blocks: the two new carriers and 13 existing declarations whose selected browser or operation correlation parameters or returns changed from raw `String` to the appropriate carrier. The detailed transition remains recorded in the [complete inventory](docs/public-api-inventory.md). The earlier snapshots below are retained as history.
 

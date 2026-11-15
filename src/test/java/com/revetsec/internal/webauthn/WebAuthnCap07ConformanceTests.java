@@ -18,8 +18,6 @@ package com.revetsec.internal.webauthn;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
-import com.revetsec.StoreAdmission;
-import com.revetsec.internal.crypto.ClosedMigrationIntent;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
@@ -29,26 +27,18 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
-import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.List;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** CAP-07: exhaustive capacity arithmetic, actual envelopes and all frozen inner forms. */
+/** CAP-07: exhaustive WAR2 capacity arithmetic and actual envelopes. */
 final class WebAuthnCap07ConformanceTests {
     private static final @NonNull String MASTER="AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
-    private static final @NonNull Properties VECTORS=load();
     private static final @NonNull Instant PERMANENT=Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
 
     @TestFactory @NonNull List<@NonNull DynamicTest> everySupportedCapacityAndKeyEndpoint() {
@@ -86,48 +76,6 @@ final class WebAuthnCap07ConformanceTests {
         assertEquals(311120,encodedLength(maximum));assertEquals(349526,encodedLength(262144));
         assertEquals(467,rawChunk(1024));assertEquals(468,rawChunk(1026));
         assertEquals(236,(110000+rawChunk(1026)-1)/rawChunk(1026));
-    }
-
-    @TestFactory @NonNull List<@NonNull DynamicTest> allFrozenFormsAtRepresentativeCapacities() {
-        List<DynamicTest> tests=new ArrayList<>();
-        for(int vector=0;vector<106;vector++) for(int cap:List.of(1024,1026,3800,16384)) for(int keyLength:List.of(1,64)) {
-            int index=vector;
-            tests.add(DynamicTest.dynamicTest("CAP-07/forms/"+vector+"/C"+cap+"/K"+keyLength,()->{
-                var key=WebAuthnStoreKey.fromStoredForm(value(index,"key"));
-                var root=WebAuthnStoreKey.fromStoredForm(value("rootKey"));
-                var migration=new WebAuthnRecordMigration(sealer(cap,keyLength));
-                var intent=ClosedMigrationIntent.fromExternalIntent(value("migrationId"),
-                    StoreAdmission.fromIdentifiers(value("authority"),value("recovery")),Set.of(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));
-                byte[] source=bytes(index,"sealed"),oldRoot=bytes(index,"oldRoot"),original=source.clone(),originalRoot=oldRoot.clone();
-                var anchor=migration.authenticateRoot(intent,root.getStorageKey(),oldRoot);
-                var prepared=migration.prepare(intent,anchor,key.getStorageKey(),new byte[]{7},source);
-                byte[] expected=bytes(index,"target"),frame=prepared.sealedBytes();
-                Instant at=key.getKind()==WebAuthnStoreKey.Kind.NAMESPACE_CLOCK?Instant.EPOCH:time(index,"floor");
-                var codec=new WebAuthnRecordCodecV2(sealer(cap,keyLength));
-                try(var opened=codec.openWithMetadata(key,frame,clock(at));var decoded=codec.openRecord(key,frame,clock(at))) {
-                    assertArrayEquals(expected,opened.plaintext());assertEquals(time(index,"floor"),decoded.floor());
-                    assertEquals(time(index,"expires"),decoded.expiresAt());assertEquals(key,decoded.key());
-                    if(key.getKind()==WebAuthnStoreKey.Kind.NAMESPACE_CLOCK)assertEquals(value("authority"),decoded.authorityId().orElseThrow());
-                    else assertArrayEquals(bytes(index,"inner"),decoded.innerPayload());
-                }
-                assertFrame(frame,expected.length,cap,keyLength);
-                Instant admitted=time(index,"floor");
-                if(admitted.getEpochSecond()<0||admitted.getEpochSecond()>253402300799L)
-                    assertThrows(WebAuthnRecordException.class,()->new WebAuthnRecordCodec(sealer(cap,keyLength)).resealAdmitted(key,frame,clock(admitted)));
-                else {
-                    byte[] resealed=new WebAuthnRecordCodec(sealer(cap,keyLength)).resealAdmitted(key,frame,clock(admitted));
-                    assertArrayEquals(expected,codec.open(key,resealed,clock(admitted)));assertFrame(resealed,expected.length,cap,keyLength);
-                }
-                assertArrayEquals(frame,WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[]{1},frame).getSealedBytes());
-                String sql=Base64Url.encode(frame);assertEquals(encodedLength(frame.length),sql.length());
-                assertArrayEquals(frame,Base64Url.decode(sql));assertThrows(Exception.class,()->Base64Url.decode(sql+"="));
-                assertThrows(WebAuthnRecordException.class,()->codec.openRecord(key,Arrays.copyOf(frame,frame.length+1),clock(at)));
-                assertArrayEquals(original,source);assertArrayEquals(originalRoot,oldRoot);
-                assertArrayEquals(source,prepared.expectedBytes());assertArrayEquals(new byte[]{7},prepared.expectedVersion());
-                assertFalse(Arrays.equals(prepared.version(),new byte[]{7}));
-            }));
-        }
-        return tests;
     }
 
     @TestFactory @NonNull List<@NonNull DynamicTest> actualWorstCaseEnvelopes() {
@@ -176,9 +124,4 @@ final class WebAuthnCap07ConformanceTests {
     }
     private static @NonNull StateSealer sealer(int cap,int keyLength){return StateSealer.withActiveKey(SealingKey.fromBase64("k".repeat(keyLength),"ISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=")).verificationKeys(List.of(SealingKey.fromBase64("f".repeat(64),MASTER))).maximumSealedLength(cap).build();}
     private static @NonNull Clock clock(@NonNull Instant time){return Clock.fixed(time,ZoneOffset.UTC);}
-    private static @NonNull Instant time(int index,@NonNull String prefix){return Instant.ofEpochSecond(Long.parseLong(value(index,prefix+"Seconds")),Integer.parseInt(value(index,prefix+"Nanos")));}
-    private static byte @NonNull [] bytes(int index,@NonNull String field){return HexFormat.of().parseHex(value(index,field));}
-    private static @NonNull String value(int index,@NonNull String field){return value("v."+index+'.'+field);}
-    private static @NonNull String value(@NonNull String key){return Objects.requireNonNull(VECTORS.getProperty(key));}
-    private static @NonNull Properties load(){Properties p=new Properties();try(var in=new InputStreamReader(Objects.requireNonNull(WebAuthnCap07ConformanceTests.class.getResourceAsStream("/fixtures/webauthn/mig-02.properties")),StandardCharsets.US_ASCII)){p.load(in);return p;}catch(Exception failure){throw new ExceptionInInitializerError(failure);}}
 }

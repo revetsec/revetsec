@@ -582,14 +582,16 @@ public final class SealerV1 {
 		return record;
 	}
 
-	/** Authenticates retained records solely for an externally verified closed administrative transform. */
+	/** Authenticates retained issuer records solely for an externally verified closed administrative transform. */
 	public static @NonNull AuthenticatedRecord openForMigration(@NonNull String sealed, int maximumSealedLength,
 			@NonNull Map<@NonNull String, @NonNull Key> keys, @NonNull SealedStateType type,
 			@NonNull String context, @NonNull ClosedMigrationIntent intent) throws UnsealException {
 		requireNonNull(intent);
 		requireRecordTypeAndContext(type, context);
-		intent.requireFormat(type == SealedStateType.AS_RECORD
-				? ClosedMigrationIntent.Format.ISSUER_SCHEMA2 : ClosedMigrationIntent.Format.WEBAUTHN_WAR2);
+		// WebAuthn has a single record format (WAR2) and no closed migration.
+		if (type != SealedStateType.AS_RECORD)
+			throw new IllegalArgumentException("Unsupported closed migration record type.");
+		intent.requireFormat(ClosedMigrationIntent.Format.ISSUER_SCHEMA2);
 		return authenticateRecord(sealed, maximumSealedLength, keys, type, context);
 	}
 
@@ -626,7 +628,7 @@ public final class SealerV1 {
 		requireNonNull(context);
 		boolean allowed = switch (type) {
 			case AS_RECORD -> context.startsWith("revetsec/as-record/v1:") || context.startsWith("revetsec/as-record/v2:");
-			case WEBAUTHN_RECORD -> context.startsWith("revetsec/wa-record/v1:") || context.startsWith("revetsec/wa-record/v2:");
+			case WEBAUTHN_RECORD -> context.startsWith("revetsec/wa-record/v2:");
 			default -> false;
 		};
 		if (!allowed)
@@ -716,7 +718,7 @@ public final class SealerV1 {
 			// 9. A strict UTF-8 decode.
 			byte[] plaintext = Arrays.copyOfRange(body, NOT_AFTER_LENGTH, body.length);
 			try {
-				// Old WA can seal ceil(Instant.MAX fractional), a valid long outside Instant by one second.
+				// A WebAuthn ceremony expiring at fractional Instant.MAX seals its ceiling second, one beyond Instant.
 				long maximum = Instant.MAX.getEpochSecond() + (type == SealedStateType.WEBAUTHN_RECORD ? 1 : 0);
 				if (notAfter < Instant.MIN.getEpochSecond() || notAfter > maximum)
 					throw invalid();

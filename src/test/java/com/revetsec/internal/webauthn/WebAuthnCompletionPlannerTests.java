@@ -148,7 +148,7 @@ final class WebAuthnCompletionPlannerTests {
         var inspected = planner.inspectAuthentication(first, CEREMONY_ID, BINDING,
                 assertionJson(pair.getPrivate(), 8), CLOCK).orElseThrow();
         var keys = inspected.expandedKeys();
-        var stored = WebAuthnCredentialState.checked(ID, HANDLE, edKey(pair), -8, 7, false, false);
+        var stored = WebAuthnCredentialState.checked(ID, HANDLE, new byte[16], edKey(pair), -8, 7, false, false, true);
         var credential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records()).encode(stored, NOW);
         var expanded = expanded(first, keys, Map.of(
                 credentialKey(), present(new byte[] {5}, credential.sealedBytes()),
@@ -249,7 +249,7 @@ final class WebAuthnCompletionPlannerTests {
         var first = first(authentication());
         var inspected = planner.inspectAuthentication(first, CEREMONY_ID, BINDING,
                 assertionJson(pair.getPrivate(), 8), CLOCK).orElseThrow();
-        var stored = WebAuthnCredentialState.checked(ID, HANDLE, edKey(pair), -8, 7, false, false);
+        var stored = WebAuthnCredentialState.checked(ID, HANDLE, new byte[16], edKey(pair), -8, 7, false, false, true);
         var expanded = expanded(first, inspected.expandedKeys(), Map.of(
                 credentialKey(), present(new byte[] {5}, new WebAuthnCredentialRecordCodec(
                         NAMESPACE, RP, records()).encode(stored, NOW).sealedBytes()),
@@ -277,7 +277,7 @@ final class WebAuthnCompletionPlannerTests {
         var first = first(pending);
         var inspected = planner().inspectAuthentication(first, CEREMONY_ID, BINDING,
                 assertionJson(pair.getPrivate(), 8), CLOCK).orElseThrow();
-        var stored = WebAuthnCredentialState.checked(ID, HANDLE, edKey(pair), -8, 7, false, false);
+        var stored = WebAuthnCredentialState.checked(ID, HANDLE, new byte[16], edKey(pair), -8, 7, false, false, true);
         var expanded = expanded(first, inspected.expandedKeys(), Map.of(
                 credentialKey(), present(new byte[] {5}, new WebAuthnCredentialRecordCodec(
                         NAMESPACE, RP, records()).encode(stored, NOW).sealedBytes()),

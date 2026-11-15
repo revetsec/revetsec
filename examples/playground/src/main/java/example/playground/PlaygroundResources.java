@@ -91,7 +91,7 @@ public final class PlaygroundResources {
     /** Bootstrap has no authenticated effect; later controls still require the session's CSRF token. */
     @POST("/api/session") public @NonNull Response beginSession(@NonNull Request request) {
         if (request.getHttpMethod() != HttpMethod.POST || !PlaygroundAdmission.trusted(request, profile.config, false)
-                || !PlaygroundAdmission.headerValues(request, "Origin").equals(List.of(profile.config.origin.toString()))
+                || !PlaygroundAdmission.browserOriginAllowed(request, profile.config)
                 || !PlaygroundAdmission.headerValues(request, "Content-Type").equals(List.of("application/x-www-form-urlencoded"))
                 || request.getRawQuery().isPresent() || request.isContentTooLarge()
                 || !java.util.Arrays.equals(request.getBody().orElseGet(() -> new byte[0]), "begin=1".getBytes(StandardCharsets.US_ASCII)))
@@ -274,8 +274,7 @@ public final class PlaygroundResources {
     private BrowserSessions.@Nullable Session controlSession(@NonNull Request request) {
         sessions.cleanup();
         if (!PlaygroundAdmission.trusted(request, profile.config, false)) return null;
-        List<String> origins = PlaygroundAdmission.headerValues(request, "Origin");
-        if (origins.size() != 1 || !origins.get(0).equals(profile.config.origin.toString())) return null;
+        if (!PlaygroundAdmission.browserOriginAllowed(request, profile.config)) return null;
         BrowserSessions.Session session = sessions.find(request).orElse(null);
         if (session == null) return null;
         List<String> headers = PlaygroundAdmission.headerValues(request, "X-CSRF-Token");

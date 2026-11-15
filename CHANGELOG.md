@@ -32,6 +32,15 @@ Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, 
 - SCIM refuses any submitted value for an assigned immutable attribute that is never returned, rather than comparing it with the stored value.
 
 ### Added
+- A protocol-neutral `BrowserRequestOriginPolicy` with closed, redacted results combines raw `Sec-Fetch-Site` and
+  `Origin` occurrences for browser request admission. Soklet, Jakarta Servlet and javax Servlet adapters provide
+  extraction helpers; applications retain host, session, CSRF/action-token and route authorization responsibilities.
+- WebAuthn registration now exposes and persists display-only AAGUID, backup eligibility, backup state and the factual
+  user-verification-at-registration flag. Successful sign-in and reauthentication expose committed backup flags so
+  applications can refresh their own credential-management rows. The active credential payload is version 3 and
+  version 2 remains the tombstone. Unreleased WebAuthn WAR1 records, version-1 active credential payloads and the
+  WAR1-to-WAR2 closed migration were removed before release; WAR2 is the only record format and older records fail
+  closed.
 - Application-integrated OAuth authorization-server operations: browser authorization and consent, authorization-code exchange, refresh rotation, grant/token revocation, resource-only introspection, online access-token status, metadata and public JWKS responses. The public builder exposes the bounded settings; `OAuthServerResponse` retains explicit credential emission and redacted diagnostics. Applications supply users, authentication, consent, grant policy, keys and authoritative atomic storage. See the [issuer application contracts](docs/oauth-server-application-contracts.md).
 - Opt-in client-ID metadata documents (CIMD), integrated with registered-client selection and fresh code/refresh admission. Address selection and HTTP/TLS transport pin the numeric peer while preserving hostname verification, bounded chain construction and response parsing. Exact registrations are checked first, and source-separated security fingerprints bind consent and grants. Metadata scopes remain untrusted and require application approval. Cache reuse follows authenticated source binding and conservative freshness; the application explicitly selects an `OAuthClientMetadataCache`, including the bounded `InMemoryOAuthClientMetadataCache` option. The storage SPI does not qualify a shared cache deployment by itself.
 - An unpublished self-issued Soklet MCP example with app-owned login/consent, bounded volatile storage, issuance and online revocation checks, plus OIDC, passkey, TOTP and PostgreSQL integration examples. The local examples retain their documented state, session and recovery limitations; see [runnable examples](examples/README.md).

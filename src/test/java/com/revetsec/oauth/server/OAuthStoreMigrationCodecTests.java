@@ -189,9 +189,6 @@ final class OAuthStoreMigrationCodecTests {
 		OAuthStoreEntry source = old.seal(old.issuerKey(), OAuthStoreFormat.PERMANENT, legacyRoot(MINIMUM).toPayload());
 		OAuthStoreMigrationCodec a = migration(next, 16384), b = migration(next, 16384);
 		assertThrows(IllegalArgumentException.class, () -> b.convert(source, a.openRoot(source)));
-		ClosedMigrationIntent wrong = ClosedMigrationIntent.fromExternalIntent(ID,
-				StoreAdmission.fromIdentifiers(AUTHORITY, RECOVERY), Set.of(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));
-		assertThrows(IllegalArgumentException.class, () -> new OAuthStoreMigrationCodec(next, 16384, wrong));
 		assertThrows(IllegalArgumentException.class, () -> a.openRoot(old.seal(old.subjectKey("alice"),
 				OAuthStoreFormat.PERMANENT, OAuthStoreFence.initialSubject(ID).toPayload())));
 		assertThrows(IllegalArgumentException.class,

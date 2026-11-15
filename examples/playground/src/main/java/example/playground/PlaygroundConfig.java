@@ -15,6 +15,7 @@
  */
 package example.playground;
 
+import com.revetsec.BrowserRequestOriginPolicy;
 import com.revetsec.oauth.ClientAuthentication;
 import com.revetsec.oauth.OAuthClient;
 import com.revetsec.oauth.JwtAccessTokenValidator;
@@ -42,6 +43,10 @@ final class PlaygroundConfig {
     final boolean replayEnabled;
     final int httpPort;
     final int mcpPort;
+    // Built once per configuration and shared across requests.
+    final BrowserRequestOriginPolicy browserOriginPolicy;
+    final BrowserRequestOriginPolicy mcpOriginPolicy;
+    final BrowserRequestOriginPolicy providerReturnOriginPolicy;
 
     PlaygroundConfig(@NonNull URI origin, @NonNull String issuer, @NonNull String clientId,
             @NonNull String secretReference, @NonNull String probeClientId,
@@ -64,6 +69,15 @@ final class PlaygroundConfig {
         this.probeSecretReference = bounded(probeSecretReference, 512);
         this.strategy = strategy; this.loopbackHttp = loopbackHttp; this.replayEnabled = replayEnabled;
         this.httpPort = httpPort; this.mcpPort = mcpPort;
+        this.browserOriginPolicy = BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(origin))
+                .allowInsecureLoopback(loopbackHttp).build();
+        // MCP clients may send no browser metadata; browser metadata, when present, is still checked.
+        this.mcpOriginPolicy = BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(origin))
+                .allowInsecureLoopback(loopbackHttp).allowMissingMetadata(true).build();
+        URI providerOrigin = URI.create(provider.getScheme() + "://" + provider.getRawAuthority());
+        this.providerReturnOriginPolicy = BrowserRequestOriginPolicy
+                .withAllowedOrigins(origin.equals(providerOrigin) ? Set.of(origin) : Set.of(origin, providerOrigin))
+                .allowInsecureLoopback(loopbackHttp).allowMissingMetadata(true).build();
     }
 
     static @NonNull PlaygroundConfig fromEnvironment(@NonNull Map<@NonNull String, @NonNull String> env) {

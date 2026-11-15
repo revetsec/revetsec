@@ -56,7 +56,6 @@ final class RecordMigrationCryptoTests {
 		intent.requireFormat(ClosedMigrationIntent.Format.ISSUER_SCHEMA2);
 		assertSame(admission, intent.getTargetAdmission());
 		assertEquals(ID, intent.getMigrationId());
-		assertThrows(IllegalArgumentException.class, () -> intent.requireFormat(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));
 		assertThrows(IllegalArgumentException.class, () -> ClosedMigrationIntent.fromExternalIntent(ID, admission, Set.of()));
 		assertThrows(IllegalArgumentException.class, () -> ClosedMigrationIntent.fromExternalIntent("bad", admission,
 				Set.of(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
@@ -98,8 +97,6 @@ final class RecordMigrationCryptoTests {
 		StateSealer sealer = sealer();
 		String sealed = SealedStateAccess.get().seal(sealer, SealedStateType.AS_RECORD, "payload", CONTEXT, EXPIRY);
 		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
-				SealedStateType.AS_RECORD, sealed, CONTEXT, intent(ClosedMigrationIntent.Format.WEBAUTHN_WAR2)));
-		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
 				SealedStateType.APP, sealed, CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
 				SealedStateType.TOTP_RECORD, sealed, CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
@@ -114,27 +111,39 @@ final class RecordMigrationCryptoTests {
 	}
 
 	@Test
-	void webauthnMetadataUsesItsOwnDomainAndCeilingExpiry() throws Exception {
+	void webauthnMetadataUsesOnlyItsCurrentDomainAndCeilingExpiryWithoutMigration() throws Exception {
 		StateSealer sealer = sealer();
-		String context = "revetsec/wa-record/v1:" + ID + ":record:1:1:0";
+		String context = "revetsec/wa-record/v2:" + ID + ":record:1:1:0";
 		String sealed = SealedStateAccess.get().seal(sealer, SealedStateType.WEBAUTHN_RECORD,
 				"AA", context, EXPIRY.plusNanos(1));
-		try (AuthenticatedRecord opened = SealedStateAccess.get().openForMigration(sealer,
-				SealedStateType.WEBAUTHN_RECORD, sealed, context, intent(ClosedMigrationIntent.Format.WEBAUTHN_WAR2))) {
+		try (AuthenticatedRecord opened = SealedStateAccess.get().openRecord(sealer,
+				SealedStateType.WEBAUTHN_RECORD, sealed, context, fixed(EXPIRY.plusSeconds(1).minusNanos(1)))) {
 			assertEquals(EXPIRY.plusSeconds(1), opened.getNotAfter());
 			assertEquals("AA", opened.getPlaintext());
 		}
+		assertEquals(UnsealException.Kind.EXPIRED, assertThrows(UnsealException.class, () -> SealedStateAccess.get()
+				.openRecord(sealer, SealedStateType.WEBAUTHN_RECORD, sealed, context, fixed(EXPIRY.plusSeconds(1)))).getKind());
+		// WebAuthn has no closed migration, under either the current or the removed record domain.
+		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
+				SealedStateType.WEBAUTHN_RECORD, sealed, context, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
+		String removed = "revetsec/wa-record/v1:" + ID + ":record:1:1:0";
+		String retired = SealedStateAccess.get().seal(sealer, SealedStateType.WEBAUTHN_RECORD, "AA", removed, EXPIRY);
+		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openRecord(sealer,
+				SealedStateType.WEBAUTHN_RECORD, retired, removed, fixed(EXPIRY.minusSeconds(1))));
+		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
+				SealedStateType.WEBAUTHN_RECORD, retired, removed, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 	}
 
 	@org.junit.jupiter.api.TestFactory
 	@NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> expiredMigrationNeverAddsClockOrExpiryGrace() {
 		java.util.List<org.junit.jupiter.api.DynamicTest> cases=new java.util.ArrayList<>();
-		for(int family=0;family<2;family++)for(int version=1;version<=2;version++)for(int keyLength:new int[]{1,64})for(long after:new long[]{0,1,1000000000L}){
-			boolean wa=family==1;String context=wa?"revetsec/wa-record/v"+version+":"+ID+":record:1:1:0":"revetsec/as-record/v"+version+":"+STORAGE.replace("ISSUER_STATE","CODE");
-			SealedStateType type=wa?SealedStateType.WEBAUTHN_RECORD:SealedStateType.AS_RECORD;
-			ClosedMigrationIntent.Format format=wa?ClosedMigrationIntent.Format.WEBAUTHN_WAR2:ClosedMigrationIntent.Format.ISSUER_SCHEMA2;
-			Instant original=wa?EXPIRY.plusNanos(1):EXPIRY,notAfter=wa?EXPIRY.plusSeconds(1):EXPIRY;
-			cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("MIG12/crypto/"+family+"/"+version+"/"+keyLength+"/"+after,()->{
+		// Only the issuer family (0) has a closed migration; WebAuthn has none.
+		for(int version=1;version<=2;version++)for(int keyLength:new int[]{1,64})for(long after:new long[]{0,1,1000000000L}){
+			String context="revetsec/as-record/v"+version+":"+STORAGE.replace("ISSUER_STATE","CODE");
+			SealedStateType type=SealedStateType.AS_RECORD;
+			ClosedMigrationIntent.Format format=ClosedMigrationIntent.Format.ISSUER_SCHEMA2;
+			Instant original=EXPIRY,notAfter=EXPIRY;
+			cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("MIG12/crypto/0/"+version+"/"+keyLength+"/"+after,()->{
 				StateSealer selected=StateSealer.withActiveKey(TestSealers.fixedKey("k".repeat(keyLength))).clock(new UnreadableClock()).build();
 				String sealed=SealedStateAccess.get().seal(selected,type,"payload",context,original);
 				try(var before=SealedStateAccess.get().openRecord(selected,type,sealed,context,fixed(notAfter.minusNanos(1)))){assertEquals(notAfter,before.getNotAfter());}
@@ -237,7 +246,21 @@ final class RecordMigrationCryptoTests {
 				"{}".getBytes(StandardCharsets.UTF_8), new byte[16], new byte[12]);
 		assertInvalid(() -> SealerV1.openForMigration(impossible, 3800, Map.of("k", key), SealedStateType.AS_RECORD,
 				CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
+		String beforeInstant = SealerV1.seal(key, SealedStateType.AS_RECORD, CONTEXT, Long.MIN_VALUE,
+				"{}".getBytes(StandardCharsets.UTF_8), new byte[16], new byte[12]);
+		assertInvalid(() -> SealerV1.openForMigration(beforeInstant, 3800, Map.of("k", key), SealedStateType.AS_RECORD,
+				CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 		Arrays.fill(master, (byte) 0);
+	}
+
+	@Test
+	void issuerRecordOpeningRefusesUnknownRecordDomainVersionsBeforeAuthentication() {
+		StateSealer sealer = sealer();
+		String unknown = "revetsec/as-record/v3:" + STORAGE;
+		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openRecord(sealer,
+				SealedStateType.AS_RECORD, "untrusted", unknown, fixed(EXPIRY)));
+		assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().openForMigration(sealer,
+				SealedStateType.AS_RECORD, "untrusted", unknown, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
 	}
 
 	private static @NonNull StateSealer sealer() { return TestSealers.fromFixedKey(); }

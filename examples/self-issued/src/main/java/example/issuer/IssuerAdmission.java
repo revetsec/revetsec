@@ -43,8 +43,8 @@ final class IssuerAdmission implements McpAdmissionController {
         URI resource=app.config.resourceForEndpoint(context.getEndpoint().getPath()).orElse(null);
         if(resource==null) return fixed(403,"Operation not permitted");
         if(!LocalInputs.headers(request,"Host").equals(List.of(resource.getRawAuthority()))) return fixed(403,"Operation not permitted");
-        List<String> origins=LocalInputs.headers(request,"Origin");
-        if(!origins.isEmpty() && !origins.equals(List.of(app.config.origin.toString()))) return fixed(403,"Operation not permitted");
+        // MCP clients need the named missing-metadata compatibility path; browser metadata is still checked.
+        if(!app.browserOriginCompatible(request)) return fixed(403,"Operation not permitted");
         String scope=switch(context.getOperationType()) {
             case INITIALIZE,NOTIFICATIONS_INITIALIZED,PING,SERVER_DISCOVER,TOOLS_LIST,PROMPTS_LIST,RESOURCES_LIST,RESOURCES_TEMPLATES_LIST,SKILLS_LIST -> "mcp:discover";
             case TOOLS_CALL -> context.getOperationName().filter("whoami"::equals).isPresent()?"mcp:whoami":null;

@@ -28,17 +28,18 @@ import java.util.*;
 import static com.revetsec.internal.crypto.MigrationCodecTestSupport.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** MIG-04 WAR1 admin/WAR2 native payload and authenticated chunk/framing matrix. */
+/** MIG-04 WAR2 native payload and authenticated chunk/framing matrix; removed WAR1 corpus frames have no fallback. */
 final class WebAuthnMigrationCorruptionConformanceTests {
- @Test void corpusAndAllApplicablePositiveControls()throws Exception{verifyCorpus();for(Spec s:specs("WEBAUTHN")){open(s,frame(s,s.bytes(),"payload"),new byte[]{1});if(s.format()==1)open(s,frame(s,s.bytes(),"payload"),new byte[128]);}}
- @TestFactory @NonNull List<@NonNull DynamicTest> normalAuthenticatedCorruptions(){return corruptionTests(true);}
- @TestFactory @NonNull List<@NonNull DynamicTest> closedMigrationAuthenticatedCorruptions(){return corruptionTests(false);}
- private @NonNull List<@NonNull DynamicTest> corruptionTests(boolean normal){List<DynamicTest> tests=new ArrayList<>();for(Case c:cases("WEBAUTHN"))if((c.spec().format()==2)==normal)tests.add(DynamicTest.dynamicTest(c.name(),()->{if(c.op().equals("cas-length"))assertThrows(IllegalArgumentException.class,()->open(c.spec(),frame(c.spec(),c.body(),"payload"),new byte[Integer.parseInt(c.get("value"))]));else assertThrows(WebAuthnRecordException.class,()->open(c.spec(),frame(c.spec(),c.body(),c.op()),new byte[]{1}));}));return tests;}
- @TestFactory @NonNull List<@NonNull DynamicTest> authenticatedLegacyHasNoNormalFallback(){List<DynamicTest> tests=new ArrayList<>();for(Spec s:specs("WEBAUTHN"))if(s.format()==1)tests.add(DynamicTest.dynamicTest("MIG-04/no-fallback/"+s.name(),()->{byte[] old=frame(s,s.bytes(),"payload");open(s,old,new byte[]{1});assertThrows(WebAuthnRecordException.class,()->new WebAuthnRecordCodecV2(sealer()).open(WebAuthnStoreKey.fromStoredForm(s.get("key")),old,CLOCK));}));return tests;}
- private static void open(@NonNull Spec s,byte @NonNull [] raw,byte @NonNull [] version)throws Exception{
-  var key=WebAuthnStoreKey.fromStoredForm(s.get("key"));
-  if(s.format()==2){try(var decoded=new WebAuthnRecordCodecV2(sealer()).openRecord(key,raw,CLOCK)){assertNotNull(decoded);}}
-  else{var migration=new WebAuthnRecordMigration(sealer());var intent=ClosedMigrationIntent.fromExternalIntent(s.get("migrationId"),StoreAdmission.fromIdentifiers(s.get("authority"),s.get("recovery")),Set.of(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));byte[] root=rawFrame(s,s.get("rootKey"),HexFormat.of().parseHex(s.get("rootPlain")),"payload");var anchor=migration.authenticateRoot(intent,s.get("rootKey"),root);if(s.get("kind").equals("NAMESPACE_CLOCK"))anchor=migration.authenticateRoot(intent,s.get("key"),raw);migration.prepare(intent,anchor,s.get("key"),version,raw);}
+ @Test void corpusAndAllApplicablePositiveControls()throws Exception{verifyCorpus();for(Spec s:specs("WEBAUTHN"))if(s.format()==2){byte[] positive=frame(s,s.bytes(),"payload");if(retiredActive(s))assertThrows(WebAuthnRecordException.class,()->open(s,positive));else open(s,positive);}}
+ @TestFactory @NonNull List<@NonNull DynamicTest> normalAuthenticatedCorruptions(){List<DynamicTest> tests=new ArrayList<>();for(Case c:cases("WEBAUTHN"))if(c.spec().format()==2&&!retiredActive(c.spec()))tests.add(DynamicTest.dynamicTest(c.name(),()->assertThrows(WebAuthnRecordException.class,()->open(c.spec(),frame(c.spec(),c.body(),c.op())))));return tests;}
+ @TestFactory @NonNull List<@NonNull DynamicTest> retiredWar1FramesHaveNoNormalFallback(){List<DynamicTest> tests=new ArrayList<>();for(Spec s:specs("WEBAUTHN"))if(s.format()==1)tests.add(DynamicTest.dynamicTest("MIG-04/no-fallback/"+s.name(),()->{
+  byte[] old=frame(s,s.bytes(),"payload");var key=WebAuthnStoreKey.fromStoredForm(s.get("key"));var codec=new WebAuthnRecordCodecV2(sealer());
+  assertThrows(WebAuthnRecordException.class,()->codec.open(key,old,CLOCK));assertThrows(WebAuthnRecordException.class,()->codec.openRecord(key,old,CLOCK));
+  assertThrows(WebAuthnRecordException.class,()->new WebAuthnRecordCodec(sealer()).openAdmitted(key,old,CLOCK));
+ }));return tests;}
+ private static boolean retiredActive(@NonNull Spec spec){return spec.get("kind").equals("CREDENTIAL")&&spec.get("name").startsWith("active/");}
+ private static void open(@NonNull Spec s,byte @NonNull [] raw)throws Exception{
+  try(var decoded=new WebAuthnRecordCodecV2(sealer()).openRecord(WebAuthnStoreKey.fromStoredForm(s.get("key")),raw,CLOCK)){assertNotNull(decoded);}
  }
  private static byte @NonNull [] frame(@NonNull Spec s,byte @NonNull [] body,@NonNull String op)throws Exception{
   byte[] result=rawFrame(s,s.get("key"),body,op);switch (op) {

@@ -49,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -64,6 +65,9 @@ final class WebAuthnRelyingPartyTests {
     private static final String NAMESPACE = "tenant";
     private static final byte[] HANDLE = {4, 5, 6};
     private static final byte[] CREDENTIAL_ID = {1, 2, 3};
+    private static final byte[] AAGUID = {
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    };
     private static final byte[] BINDING = filled(65);
     private static final String BINDING_TEXT = Base64Url.encode(BINDING);
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T12:00:00Z"), ZoneOffset.UTC);
@@ -121,6 +125,11 @@ final class WebAuthnRelyingPartyTests {
         assertArrayEquals(HANDLE, registered.getRegistration().getUserHandle());
         assertArrayEquals(CREDENTIAL_ID, registered.getRegistration().getCredentialId());
         assertEquals(NAMESPACE, registered.getRegistration().getCredentialNamespace());
+        assertEquals(UUID.fromString("00010203-0405-0607-0809-0a0b0c0d0e0f"),
+                registered.getRegistration().getAaguid().orElseThrow());
+        assertFalse(registered.getRegistration().isBackupEligible());
+        assertFalse(registered.getRegistration().isBackedUp());
+        assertTrue(registered.getRegistration().isUserVerifiedAtRegistration());
         assertFalse(registered.getRegistration().toString().contains(Base64Url.encode(CREDENTIAL_ID)));
         for (WebAuthnStoreKey key : List.of(
                 WebAuthnStoreKey.forCredential(NAMESPACE, RP, CREDENTIAL_ID),
@@ -174,6 +183,8 @@ final class WebAuthnRelyingPartyTests {
         assertArrayEquals(HANDLE, authenticated.getAuthentication().getUserHandle());
         assertEquals(WebAuthnAuthentication.Kind.SIGN_IN, authenticated.getAuthentication().getKind());
         assertTrue(authenticated.getAuthentication().getActionPurpose().isEmpty());
+        assertFalse(authenticated.getAuthentication().isBackupEligible());
+        assertFalse(authenticated.getAuthentication().isBackedUp());
 
         var signInAtStepUpRoute = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING_TEXT));
@@ -207,6 +218,44 @@ final class WebAuthnRelyingPartyTests {
                                 .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 5), BINDING_TEXT));
         assertEquals(stepUp.getRequest().getCeremonyId(), stepUpProof.getReauthentication().getCeremonyId());
         assertEquals("transfer", stepUpProof.getReauthentication().getActionPurpose());
+        assertFalse(stepUpProof.getReauthentication().isBackupEligible());
+        assertFalse(stepUpProof.getReauthentication().isBackedUp());
+    }
+
+    @Test void zeroAaguidIsReportedAsAbsent() throws Exception {
+        WebAuthnRelyingParty rp = relyingParty(new MemoryStore(), ADMIT);
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var started = assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
+                rp.beginRegistrationResult(WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                        .userName("alice").userDisplayName("Alice").build(), BINDING_TEXT));
+        String challenge = started.getRequest().getPublicKeyOptions().find("challenge")
+                .filter(JsonString.class::isInstance).map(JsonString.class::cast)
+                .map(JsonString::getValue).orElseThrow();
+        var completed = assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,
+                rp.completeRegistrationResult(started.getRequest().getCeremonyId(),
+                        registrationJson(pair, challenge, new byte[16]), BINDING_TEXT));
+        assertTrue(completed.getRegistration().getAaguid().isEmpty());
+    }
+
+    @Test void registrationMetadataRejectsMalformedAaguidAndImpossibleBackupState() {
+        byte[] id = {1};
+        assertThrows(IllegalArgumentException.class, () -> new WebAuthnRegistration("ns", "example.com",
+                HANDLE, id, new byte[15], false, false, true));
+        assertThrows(IllegalArgumentException.class, () -> new WebAuthnRegistration("ns", "example.com",
+                HANDLE, id, new byte[16], false, true, true));
+
+        byte[] lowHalfOnly = new byte[16];
+        lowHalfOnly[15] = 1;
+        assertEquals(new UUID(0L, 1L), new WebAuthnRegistration("ns", "example.com", HANDLE, id,
+                lowHalfOnly, true, true, true).getAaguid().orElseThrow());
+        byte[] highHalfOnly = new byte[16];
+        highHalfOnly[0] = 0x10;
+        WebAuthnRegistration high = new WebAuthnRegistration("ns", "example.com", HANDLE, id,
+                highHalfOnly, true, false, false);
+        assertEquals(new UUID(0x1000_0000_0000_0000L, 0L), high.getAaguid().orElseThrow());
+        assertEquals(Boolean.TRUE, high.isBackupEligible());
+        assertEquals(Boolean.FALSE, high.isBackedUp());
+        assertEquals(Boolean.FALSE, high.isUserVerifiedAtRegistration());
     }
 
     @Test void configurationAndUncertainBeginDoNotReleaseBrowserOptions() {
@@ -717,7 +766,12 @@ final class WebAuthnRelyingPartyTests {
 
     private static byte @NonNull [] registrationJson(@NonNull KeyPair pair,
             @NonNull String challenge) {
-        byte[] auth = registrationAuth(pair);
+        return registrationJson(pair, challenge, AAGUID);
+    }
+
+    private static byte @NonNull [] registrationJson(@NonNull KeyPair pair,
+            @NonNull String challenge, byte @NonNull [] aaguid) {
+        byte[] auth = registrationAuth(pair, aaguid);
         String id = Base64Url.encode(CREDENTIAL_ID);
         return json("{\"id\":\"" + id + "\",\"rawId\":\"" + id
                 + "\",\"type\":\"public-key\",\"response\":{\"clientDataJSON\":\""
@@ -751,9 +805,13 @@ final class WebAuthnRelyingPartyTests {
     }
 
     private static byte @NonNull [] registrationAuth(@NonNull KeyPair pair) {
+        return registrationAuth(pair, AAGUID);
+    }
+
+    private static byte @NonNull [] registrationAuth(@NonNull KeyPair pair, byte @NonNull [] aaguid) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.writeBytes(hash(RP.getBytes(StandardCharsets.US_ASCII)));
-        out.write(0x45); out.writeBytes(new byte[4]); out.writeBytes(new byte[16]);
+        out.write(0x45); out.writeBytes(new byte[4]); out.writeBytes(aaguid);
         out.write(0); out.write(CREDENTIAL_ID.length); out.writeBytes(CREDENTIAL_ID);
         out.writeBytes(edKey(pair));
         return out.toByteArray();

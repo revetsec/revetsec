@@ -113,3 +113,9 @@ Anonymous page floods can still churn in-progress anonymous sessions. A deployed
 Use the example to explore registration, sign-in, reauthentication and credential
 removal. For deployment, configure trusted HTTPS, authoritative credential
 storage and recovery admission across all application instances.
+
+The demo also shows the intended credential-metadata split. It lists authoritative credential IDs through Revetsec,
+but keeps AAGUID and backup display fields in an application-owned row populated after registration and refreshed
+after successful authentication. Those rows are volatile in this disposable example. A deployed application stores
+them durably with its own credential labels and timestamps. AAGUID is display-only under none attestation and never
+participates in admission or authorization.

@@ -37,8 +37,6 @@ public final class ClosedMigrationIntent {
 	/** The exact selected target format families, independent of sealing-type labels. */
 	@Immutable
 	public enum Format {
-		/** WAR2 WebAuthn records. */
-		WEBAUTHN_WAR2,
 		/** Issuer outer schema 2 records. */
 		ISSUER_SCHEMA2
 	}

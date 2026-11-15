@@ -17,8 +17,12 @@
 package com.revetsec.webauthn;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
+import java.nio.ByteBuffer;
+import java.util.Optional;
+import java.util.UUID;
 
 import static java.util.Objects.requireNonNull;
 
@@ -31,12 +35,26 @@ public final class WebAuthnRegistration {
     private final @NonNull String relyingPartyId;
     private final byte @NonNull [] userHandle;
     private final byte @NonNull [] credentialId;
+    private final @Nullable UUID aaguid;
+    private final boolean backupEligible;
+    private final boolean backedUp;
+    private final boolean userVerifiedAtRegistration;
     WebAuthnRegistration(@NonNull String credentialNamespace, @NonNull String relyingPartyId,
-            byte @NonNull [] userHandle, byte @NonNull [] credentialId) {
+            byte @NonNull [] userHandle, byte @NonNull [] credentialId, byte @NonNull [] aaguid,
+            boolean backupEligible, boolean backedUp, boolean userVerifiedAtRegistration) {
         this.credentialNamespace = requireNonNull(credentialNamespace);
         this.relyingPartyId = requireNonNull(relyingPartyId);
         this.userHandle = requireNonNull(userHandle).clone();
         this.credentialId = requireNonNull(credentialId).clone();
+        if (requireNonNull(aaguid).length != 16 || (backedUp && !backupEligible))
+            throw new IllegalArgumentException("Invalid WebAuthn registration metadata");
+        ByteBuffer identifier = ByteBuffer.wrap(aaguid);
+        long most = identifier.getLong();
+        long least = identifier.getLong();
+        this.aaguid = most == 0 && least == 0 ? null : new UUID(most, least);
+        this.backupEligible = backupEligible;
+        this.backedUp = backedUp;
+        this.userVerifiedAtRegistration = userVerifiedAtRegistration;
     }
     /** Returns the configured namespace.
      * @return namespace
@@ -54,6 +72,25 @@ public final class WebAuthnRegistration {
      * @return defensive ID copy
      * @since 1.0.0 */
     public byte @NonNull [] getCredentialId() { return this.credentialId.clone(); }
+    /** Returns the display-only authenticator model identifier when the client supplied a nonzero value.
+     * Under none attestation this value is not authenticated and must not drive authorization or policy.
+     * @return authenticator model identifier, or empty for the zero AAGUID
+     * @since 1.0.0 */
+    public @NonNull Optional<@NonNull UUID> getAaguid() { return Optional.ofNullable(this.aaguid); }
+    /** Returns whether the credential is eligible for backup.
+     * @return backup eligibility
+     * @since 1.0.0 */
+    public @NonNull Boolean isBackupEligible() { return Boolean.valueOf(this.backupEligible); }
+    /** Returns whether the credential was backed up when registered.
+     * @return backup state at registration
+     * @since 1.0.0 */
+    public @NonNull Boolean isBackedUp() { return Boolean.valueOf(this.backedUp); }
+    /** Returns whether user verification was observed when this credential was registered.
+     * @return registration user-verification fact
+     * @since 1.0.0 */
+    public @NonNull Boolean isUserVerifiedAtRegistration() {
+        return Boolean.valueOf(this.userVerifiedAtRegistration);
+    }
     /** Redacts account and credential identifiers.
      * @return a fixed description
      * @since 1.0.0 */

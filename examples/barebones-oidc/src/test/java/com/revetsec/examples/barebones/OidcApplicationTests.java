@@ -301,7 +301,7 @@ final class OidcApplicationTests {
                 assertEquals(303, status(admission)); HttpRequestResult home = browser.get("/");
                 Map<String, List<String>> headers = home.getMarshaledResponse().getHeaders();
                 assertEquals(List.of("no-store"), headers.get("Cache-Control"));
-                assertEquals(List.of("same-origin"), headers.get("Referrer-Policy"));
+                assertEquals(List.of("no-referrer"), headers.get("Referrer-Policy"));
                 assertTrue(headers.get("Content-Security-Policy").iterator().next().contains("default-src 'none'"));
                 ResponseCookie cookie = admission.getMarshaledResponse().getCookies().iterator().next();
                 assertTrue(cookie.getName().startsWith("__Host-")); assertTrue(cookie.getSecure()); assertTrue(cookie.getHttpOnly());

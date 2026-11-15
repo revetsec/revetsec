@@ -96,7 +96,9 @@ final class WebAuthnCompletionRunner {
         Outcome outcome = finish(attempt, preparation, inspected.orElseThrow().expiresAt());
         return outcome == Outcome.COMMITTED_NO_PROOF
                 ? Completion.verified(new VerifiedFact(WebAuthnCeremonyState.Kind.REGISTRATION,
-                inspected.orElseThrow().approvedHandle(), inspected.orElseThrow().credentialId(), null))
+                inspected.orElseThrow().approvedHandle(), inspected.orElseThrow().credentialId(),
+                inspected.orElseThrow().aaguid(), inspected.orElseThrow().backupEligible(),
+                inspected.orElseThrow().backedUp(), true, null))
                 : Completion.failure(outcome);
     }
 
@@ -145,7 +147,8 @@ final class WebAuthnCompletionRunner {
         return outcome == Outcome.COMMITTED_NO_PROOF
                 ? Completion.verified(new VerifiedFact(inspected.orElseThrow().kind(),
                 inspected.orElseThrow().userHandle(), inspected.orElseThrow().credentialId(),
-                inspected.orElseThrow().actionPurpose()))
+                null, inspected.orElseThrow().backupEligible(), inspected.orElseThrow().backedUp(),
+                false, inspected.orElseThrow().actionPurpose()))
                 : Completion.failure(outcome);
     }
 
@@ -242,17 +245,31 @@ final class WebAuthnCompletionRunner {
         private final WebAuthnCeremonyState.@NonNull Kind kind;
         private final byte @NonNull [] userHandle;
         private final byte @NonNull [] credentialId;
+        private final byte @Nullable [] aaguid;
+        private final boolean backupEligible;
+        private final boolean backedUp;
+        private final boolean userVerifiedAtRegistration;
         private final @Nullable String actionPurpose;
         private VerifiedFact(WebAuthnCeremonyState.@NonNull Kind kind, byte @NonNull [] userHandle,
-                byte @NonNull [] credentialId, @Nullable String actionPurpose) {
+                byte @NonNull [] credentialId, byte @Nullable [] aaguid, boolean backupEligible,
+                boolean backedUp, boolean userVerifiedAtRegistration, @Nullable String actionPurpose) {
             this.kind = requireNonNull(kind);
             this.userHandle = requireNonNull(userHandle).clone();
             this.credentialId = requireNonNull(credentialId).clone();
+            if (aaguid != null && aaguid.length != 16) throw new IllegalArgumentException("Invalid AAGUID");
+            this.aaguid = aaguid == null ? null : aaguid.clone();
+            this.backupEligible = backupEligible;
+            this.backedUp = backedUp;
+            this.userVerifiedAtRegistration = userVerifiedAtRegistration;
             this.actionPurpose = actionPurpose;
         }
         WebAuthnCeremonyState.@NonNull Kind kind() { return this.kind; }
         byte @NonNull [] userHandle() { return this.userHandle.clone(); }
         byte @NonNull [] credentialId() { return this.credentialId.clone(); }
+        byte @Nullable [] aaguid() { return this.aaguid == null ? null : this.aaguid.clone(); }
+        boolean backupEligible() { return this.backupEligible; }
+        boolean backedUp() { return this.backedUp; }
+        boolean userVerifiedAtRegistration() { return this.userVerifiedAtRegistration; }
         @Nullable String actionPurpose() { return this.actionPurpose; }
         @Override public @NonNull String toString() { return "VerifiedFact{identity=<redacted>}"; }
     }

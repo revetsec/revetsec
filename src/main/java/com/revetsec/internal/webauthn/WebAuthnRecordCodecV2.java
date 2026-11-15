@@ -19,7 +19,6 @@ package com.revetsec.internal.webauthn;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.EntropySource;
 import com.revetsec.internal.crypto.AuthenticatedRecord;
-import com.revetsec.internal.crypto.ClosedMigrationIntent;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
 import com.revetsec.internal.crypto.SealerV1;
@@ -28,7 +27,6 @@ import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -44,7 +42,7 @@ import java.util.List;
 import static java.util.Objects.requireNonNull;
 
 /**
- * WAR2 authenticated binary envelope used by normal WebAuthn operation. Legacy decoding remains restricted to closed migration. Each chunk uses
+ * WAR2 authenticated binary envelope, the only WebAuthn record format. Each chunk uses
  * {@link StateSealer} under a dedicated type label and a context binding the exact store key,
  * random envelope ID, chunk count, chunk size and position. Framing is checked before any crypto.
  * The codec authenticates bytes but does not validate a ceremony, credential or account fence.
@@ -102,7 +100,7 @@ final class WebAuthnRecordCodecV2 {
 				try { encoded = Base64Url.encode(chunk); }
 				finally { Arrays.fill(chunk, (byte) 0); }
 				String value = SealedStateAccess.get().seal(this.sealer, SealedStateType.WEBAUTHN_RECORD,
-						encoded, context(addressDigest, recordId, count, this.rawChunkSize, index, false), expiresAt);
+						encoded, context(addressDigest, recordId, count, this.rawChunkSize, index), expiresAt);
 				if (value.length() == 0 || value.length() > 16_384
 						|| total > MAXIMUM_RECORD_BYTES - 2 - value.length())
 					throw new IllegalArgumentException("Invalid WebAuthn sealed record size");
@@ -136,7 +134,7 @@ final class WebAuthnRecordCodecV2 {
 			@NonNull Clock clock) throws WebAuthnRecordException {
 		requireNonNull(key);
 		requireNonNull(clock);
-		return openEnvelope(key.getStorageKey(), untrusted, clock, null, false);
+		return openEnvelope(key.getStorageKey(), untrusted, clock);
 	}
 
 	WebAuthnRecordPayloadV2.@NonNull Decoded openRecord(@NonNull WebAuthnStoreKey key,
@@ -157,14 +155,8 @@ final class WebAuthnRecordCodecV2 {
 		}
 	}
 
-	@NonNull Opened openLegacyForMigration(@NonNull String storageKey, byte @NonNull [] untrusted,
-			@NonNull ClosedMigrationIntent intent) throws WebAuthnRecordException {
-		requireNonNull(intent).requireFormat(ClosedMigrationIntent.Format.WEBAUTHN_WAR2);
-		return openEnvelope(storageKey, untrusted, null, intent, true);
-	}
-
 	private @NonNull Opened openEnvelope(@NonNull String storageKey, byte @NonNull [] untrusted,
-			@Nullable Clock clock, @Nullable ClosedMigrationIntent intent, boolean legacy) throws WebAuthnRecordException {
+			@NonNull Clock clock) throws WebAuthnRecordException {
 		requireNonNull(storageKey);
 		requireNonNull(untrusted);
 		WebAuthnRecordPayloadV2.namespaceKeyForAddress(storageKey);
@@ -173,9 +165,8 @@ final class WebAuthnRecordCodecV2 {
 		byte[] frame = untrusted.clone();
 		byte[] recordId = null;
 		try {
-			String magic = legacy ? "WAR1" : MAGIC;
-			for (int index = 0; index < magic.length(); index++)
-				if (frame[index] != magic.charAt(index)) throw new WebAuthnRecordException();
+			for (int index = 0; index < MAGIC.length(); index++)
+				if (frame[index] != MAGIC.charAt(index)) throw new WebAuthnRecordException();
 			int count = unsignedShort(frame, 4);
 			int chunkSize = unsignedShort(frame, 6);
 			if (count < 1 || count > MAXIMUM_CHUNKS || chunkSize < 1 || chunkSize > 16_384)
@@ -204,12 +195,9 @@ final class WebAuthnRecordCodecV2 {
 			try {
 				for (int index = 0; index < count; index++) {
 					String value = new String(frame, offsets[index], lengths[index], StandardCharsets.US_ASCII);
-					String context = context(addressDigest, recordId, count, chunkSize, index, legacy);
-					try (AuthenticatedRecord authenticated = legacy
-							? SealedStateAccess.get().openForMigration(this.sealer, SealedStateType.WEBAUTHN_RECORD,
-									value, context, requireNonNull(intent))
-							: SealedStateAccess.get().openRecord(this.sealer, SealedStateType.WEBAUTHN_RECORD,
-									value, context, requireNonNull(clock))) {
+					String context = context(addressDigest, recordId, count, chunkSize, index);
+					try (AuthenticatedRecord authenticated = SealedStateAccess.get().openRecord(this.sealer,
+							SealedStateType.WEBAUTHN_RECORD, value, context, clock)) {
 						if (notAfter != null && notAfter.longValue() != authenticated.getNotAfterEpochSecond()) throw new WebAuthnRecordException();
 						notAfter = authenticated.getNotAfterEpochSecond();
 						byte[] chunk = Base64Url.decode(authenticated.getPlaintext());
@@ -260,8 +248,8 @@ final class WebAuthnRecordCodecV2 {
 	}
 
 	private static @NonNull String context(@NonNull String addressDigest, byte @NonNull [] recordId,
-			int count, int chunkSize, int index, boolean legacy) {
-		return (legacy ? "revetsec/wa-record/v1:" : "revetsec/wa-record/v2:") + addressDigest + ':' + Base64Url.encode(recordId)
+			int count, int chunkSize, int index) {
+		return "revetsec/wa-record/v2:" + addressDigest + ':' + Base64Url.encode(recordId)
 				+ ':' + count + ':' + chunkSize + ':' + index;
 	}
 

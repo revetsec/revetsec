@@ -16,6 +16,8 @@
 package com.revetsec.examples.barebones;
 
 import com.revetsec.BrowserBinding;
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import com.revetsec.RevetsecException;
 import com.revetsec.oauth.AuthorizationRedirect;
 import com.revetsec.oauth.AuthorizationResponse;
@@ -26,6 +28,7 @@ import com.revetsec.oidc.OidcAuthenticationResult;
 import com.revetsec.oidc.OidcAuthenticationOptions;
 import com.revetsec.oidc.OidcClient;
 import com.revetsec.soklet.SokletOAuth;
+import com.revetsec.soklet.SokletBrowserRequestOrigins;
 import com.soklet.*;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
@@ -58,6 +61,7 @@ public final class OidcApplication {
     private final @NonNull OidcClient client;
     private final @NonNull URI origin;
     private final @NonNull URI callback;
+    private final @NonNull BrowserRequestOriginPolicy browserOriginPolicy;
     private final @NonNull String issuerOrigin;
     private final @NonNull Clock clock;
     private final @NonNull PendingStore pending;
@@ -73,6 +77,7 @@ public final class OidcApplication {
                     AuthorizationRequestOptions.@NonNull ResponseMode responseMode) {
         this.client = requireNonNull(client);
         this.origin = checkedOrigin(origin);
+        this.browserOriginPolicy = BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(this.origin)).build();
         this.callback = origin.resolve("/callback");
         this.issuerOrigin = requireNonNull(issuer).getScheme() + "://" + issuer.getRawAuthority();
         this.clock = requireNonNull(clock);
@@ -130,7 +135,7 @@ public final class OidcApplication {
      */
     @GET("/")
     public @NonNull Response home(@NonNull Request request) {
-        if (!hostAllowed(request) || !headerAbsentOr(request, "Origin", this.origin.toString()))
+        if (!hostAllowed(request))
             return failure(400, "Invalid request");
         Session session = sessionFor(request);
         String identity = session == null || session.identity == null ? "Signed out" : "Signed in as " + escape(session.identity);
@@ -143,8 +148,8 @@ public final class OidcApplication {
                 + "<form method=\"post\" action=\"/" + action + "\">" + field + "<button>" + label
                 + "</button></form><p>This example uses process-local storage.</p></html>";
         Map<String, List<String>> htmlHeaders = new HashMap<>(headers("text/html; charset=UTF-8"));
-        // Browsers need the same-origin document referrer to send a non-null Origin on navigation POST forms.
-        htmlHeaders.put("Referrer-Policy", List.of("same-origin"));
+        // Same-origin Fetch Metadata remains sufficient when this no-referrer page sends Origin:null.
+        htmlHeaders.put("Referrer-Policy", List.of("no-referrer"));
         // Some browsers apply form-action to redirect destinations. Only the configured provider origin is added.
         htmlHeaders.put("Content-Security-Policy", List.of("default-src 'none'; form-action 'self' "
                 + this.issuerOrigin + "; frame-ancestors 'none'; base-uri 'none'"));
@@ -159,7 +164,7 @@ public final class OidcApplication {
     @POST("/session")
     public @NonNull Response beginSession(@NonNull Request request) {
         if (request.getHttpMethod() != HttpMethod.POST || !hostAllowed(request)
-                || !singleHeader(request, "Origin", this.origin.toString())
+                || !browserOriginAllowed(request)
                 || !singleHeader(request, "Content-Type", "application/x-www-form-urlencoded")
                 || request.getRawQuery().isPresent() || request.isContentTooLarge()
                 || !Arrays.equals(request.getBody().orElseGet(() -> new byte[0]), "begin=1".getBytes(StandardCharsets.US_ASCII)))
@@ -291,7 +296,7 @@ public final class OidcApplication {
     }
 
     private boolean mutationAllowed(@NonNull Request request, @Nullable Session session) {
-        if (session == null || !hostAllowed(request) || !singleHeader(request, "Origin", this.origin.toString())
+        if (session == null || !hostAllowed(request) || !browserOriginAllowed(request)
                 || !singleHeader(request, "Content-Type", "application/x-www-form-urlencoded")
                 || request.getRawQuery().isPresent()) return false;
         byte[] expected = ("csrf=" + session.csrf).getBytes(StandardCharsets.US_ASCII);
@@ -346,6 +351,11 @@ public final class OidcApplication {
 
     private boolean hostAllowed(@NonNull Request request) {
         return singleHeader(request, "Host", this.origin.getRawAuthority());
+    }
+
+    private boolean browserOriginAllowed(@NonNull Request request) {
+        return SokletBrowserRequestOrigins.browserRequestOriginResultFor(this.browserOriginPolicy, request)
+                instanceof BrowserRequestOriginResult.Allowed;
     }
 
     private static @NonNull List<@NonNull String> values(@NonNull Request request, @NonNull String name) {

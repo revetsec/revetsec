@@ -427,7 +427,8 @@ public final class WebAuthnEngine {
                 yield Finish.succeeded(new Verified(fact.kind() == WebAuthnCeremonyState.Kind.REGISTRATION
                         ? Kind.REGISTRATION : fact.kind() == WebAuthnCeremonyState.Kind.ACCOUNT_REAUTHENTICATION
                         ? Kind.REAUTHENTICATION : Kind.AUTHENTICATION,
-                        fact.userHandle(), fact.credentialId(), fact.actionPurpose()));
+                        fact.userHandle(), fact.credentialId(), fact.aaguid(), fact.backupEligible(),
+                        fact.backedUp(), fact.userVerifiedAtRegistration(), fact.actionPurpose()));
             }
             case REJECTED -> Finish.failure(Status.REJECTED);
             case COUNTER_RISK -> Finish.failure(Status.COUNTER_RISK);
@@ -524,17 +525,30 @@ public final class WebAuthnEngine {
         private final @NonNull Kind kind;
         private final byte @NonNull [] userHandle;
         private final byte @NonNull [] credentialId;
+        private final byte @Nullable [] aaguid;
+        private final boolean backupEligible;
+        private final boolean backedUp;
+        private final boolean userVerifiedAtRegistration;
         private final @Nullable String purpose;
         private Verified(@NonNull Kind kind, byte @NonNull [] userHandle,
-                byte @NonNull [] credentialId, @Nullable String purpose) {
+                byte @NonNull [] credentialId, byte @Nullable [] aaguid, boolean backupEligible,
+                boolean backedUp, boolean userVerifiedAtRegistration, @Nullable String purpose) {
             this.kind = kind;
             this.userHandle = userHandle.clone();
             this.credentialId = credentialId.clone();
+            this.aaguid = aaguid == null ? null : aaguid.clone();
+            this.backupEligible = backupEligible;
+            this.backedUp = backedUp;
+            this.userVerifiedAtRegistration = userVerifiedAtRegistration;
             this.purpose = purpose;
         }
         public @NonNull Kind kind() { return this.kind; }
         public byte @NonNull [] userHandle() { return this.userHandle.clone(); }
         public byte @NonNull [] credentialId() { return this.credentialId.clone(); }
+        public byte @Nullable [] aaguid() { return this.aaguid == null ? null : this.aaguid.clone(); }
+        public boolean backupEligible() { return this.backupEligible; }
+        public boolean backedUp() { return this.backedUp; }
+        public boolean userVerifiedAtRegistration() { return this.userVerifiedAtRegistration; }
         public @Nullable String purpose() { return this.purpose; }
         @Override public @NonNull String toString() { return "Verified{identity=<redacted>}"; }
     }

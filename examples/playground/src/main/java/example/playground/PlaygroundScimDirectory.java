@@ -158,6 +158,7 @@ final class PlaygroundScimDirectory {
         try{
             budget.check();String rawPath=request.getRawPath();String path=rawPath.startsWith("/scim/v2/")?"/alpha/v2/"+rawPath.substring("/scim/v2/".length()):rawPath.startsWith("/scim/")?rawPath.substring("/scim".length()):null;Map<String,List<String>> headers=headers(request);
             if(path==null||!request.getRawPath().equals(request.getPath())||!one(headers,"host").equalsIgnoreCase(this.config.origin().getRawAuthority())||headers.containsKey("cookie"))throw new Refused(ScimError.invalidSyntaxInstance());
+            // SCIM uses bearer authentication rather than browser cookies; Origin remains an auxiliary restriction.
             List<String> origins=headers.getOrDefault("origin",List.of());if(!origins.isEmpty()&&!origins.equals(List.of(this.config.origin().toString())))throw new Refused(ScimError.forbiddenInstance());
             String[] parts=path.split("/",-1);if(parts.length<4||parts.length>5||!parts[2].equals("v2")||!this.providers.containsKey(parts[1]))throw new Refused(ScimError.notFoundInstance());provider=this.providers.get(parts[1]);
             rejectQueryCredential(request.getRawQuery().orElse(null));

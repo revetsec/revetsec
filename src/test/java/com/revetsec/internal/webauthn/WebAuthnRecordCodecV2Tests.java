@@ -18,8 +18,8 @@ package com.revetsec.internal.webauthn;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
-import com.revetsec.StoreAdmission;
-import com.revetsec.internal.crypto.ClosedMigrationIntent;
+import com.revetsec.internal.crypto.SealedStateAccess;
+import com.revetsec.internal.crypto.SealedStateType;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import org.jspecify.annotations.NonNull;
@@ -30,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -41,7 +42,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** WAR2 format and closed legacy transformations; frozen WAR1 fixtures preserve migration inputs. */
+/** WAR2, the only WebAuthn record format; the removed WAR1 framing and active-v1 credentials fail closed. */
 final class WebAuthnRecordCodecV2Tests {
 	private static final Instant NOW = Instant.parse("2026-10-29T12:00:00.123456789Z");
 	private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -55,190 +56,146 @@ final class WebAuthnRecordCodecV2Tests {
 
 	@Test void exactGoldenRootHasAuthorityAndFractionalImmutableMinimumIn45Bytes() throws Exception {
 		StateSealer sealer = sealer("k", 3_800);
-		WebAuthnRecordCodec old = new WebAuthnRecordCodec(sealer);
-		byte[] oldRoot = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW);
-		WebAuthnRecordMigration migration = new WebAuthnRecordMigration(sealer);
-		ClosedMigrationIntent intent = intent(1);
-		var root = migration.authenticateRoot(intent, ROOT.getStorageKey(), oldRoot);
-		var prepared = migration.prepare(intent, root, ROOT.getStorageKey(), new byte[] {1}, oldRoot);
-		assertEquals(NOW, prepared.floor());
-		assertArrayEquals(new byte[] {1}, prepared.expectedVersion());
-		assertArrayEquals(oldRoot, prepared.expectedBytes());
-		assertEquals(32, prepared.version().length);
-		assertEquals("WAR2", new String(prepared.sealedBytes(), 0, 4, StandardCharsets.US_ASCII));
-		try (var opened = new WebAuthnRecordCodecV2(sealer).openWithMetadata(ROOT, prepared.sealedBytes(), CLOCK)) {
+		byte[] root = new WebAuthnRecordCodec(sealer).sealNamespace(ROOT, identifier(3), NOW);
+		assertEquals("WAR2", new String(root, 0, 4, StandardCharsets.US_ASCII));
+		try (var opened = new WebAuthnRecordCodecV2(sealer).openWithMetadata(ROOT, root, CLOCK)) {
 			byte[] plain = opened.plaintext();
 			assertEquals(45, plain.length);
-			byte[] expected = ByteBuffer.allocate(45).put((byte) 2)
-					.put(Base64Url.decode(intent.getTargetAdmission().getAuthorityId()))
+			byte[] expected = ByteBuffer.allocate(45).put((byte) 2).put(Base64Url.decode(identifier(3)))
 					.putLong(NOW.getEpochSecond()).putInt(NOW.getNano()).array();
 			assertArrayEquals(expected, plain);
 			assertEquals(PERMANENT.getEpochSecond(), opened.notAfter());
 		}
-		try (var decoded = new WebAuthnRecordCodecV2(sealer).openRecord(ROOT, prepared.sealedBytes(), CLOCK)) {
+		try (var decoded = new WebAuthnRecordCodecV2(sealer).openRecord(ROOT, root, CLOCK)) {
 			assertEquals(NOW, decoded.floor());
-			assertEquals(intent.getTargetAdmission().getAuthorityId(), decoded.authorityId().orElseThrow());
+			assertEquals(identifier(3), decoded.authorityId().orElseThrow());
+			assertEquals(PERMANENT, decoded.expiresAt());
 		}
-		assertThrows(WebAuthnRecordException.class, () -> old.open(ROOT, prepared.sealedBytes(), CLOCK));
-		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).open(ROOT, oldRoot, CLOCK));
-		assertThrows(WebAuthnRecordException.class, () -> migration.authenticateRoot(intent, ROOT.getStorageKey(), prepared.sealedBytes()));
+		byte[] finite = new WebAuthnRecordCodecV2(sealer).seal(ROOT,
+				WebAuthnRecordPayloadV2.namespace(ROOT, identifier(3), NOW), NOW.plusSeconds(100));
+		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).openRecord(ROOT, finite, CLOCK));
 	}
 
-	@Test void migrationPreservesAllSixLogicalFormsAndOriginalInnerBytes() throws Exception {
-		StateSealer sealer = sealer("k".repeat(64), 1_024);
-		WebAuthnRecordCodec old = new WebAuthnRecordCodec(sealer);
-		WebAuthnRecordCodecV2 next = new WebAuthnRecordCodecV2(sealer);
-		WebAuthnRecordMigration migration = new WebAuthnRecordMigration(sealer);
-		byte[] oldRoot = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW.minusSeconds(1));
-		ClosedMigrationIntent intent = intent(1);
-		var root = migration.authenticateRoot(intent, ROOT.getStorageKey(), oldRoot);
-		for (Fixture fixture : fixtures(old)) {
-			byte[] expectedInner = old.open(fixture.key, fixture.sealed, CLOCK);
-			var prepared = migration.prepare(intent, root, fixture.key.getStorageKey(), new byte[] {7}, fixture.sealed);
-			assertEquals(fixture.key, prepared.key());
-			assertEquals(fixture.expiresAt, prepared.expiresAt());
-			assertEquals(fixture.key.getKind() == WebAuthnStoreKey.Kind.CEREMONY ? NOW : NOW.minusSeconds(1), prepared.floor());
-			try (var decoded = next.openRecord(fixture.key, prepared.sealedBytes(), CLOCK)) {
-				assertArrayEquals(expectedInner, decoded.innerPayload());
-				assertEquals(prepared.floor(), decoded.floor());
-				assertEquals(fixture.expiresAt, decoded.expiresAt());
-			}
-			assertFalse(Arrays.equals(prepared.version(), prepared.expectedVersion()));
-			byte[] copy = prepared.sealedBytes(); copy[0] = 0;
-			assertEquals('W', prepared.sealedBytes()[0]);
+	@Test void retiredWar1FramesAndActiveVersionOneCredentialsFailClosed() throws Exception {
+		StateSealer sealer = sealer("k", 3_800);
+		var codec = new WebAuthnRecordCodecV2(sealer);
+		var records = new WebAuthnRecordCodec(sealer);
+		byte[] tombstone = WebAuthnRecordPayloadV2.entity(CREDENTIAL, NOW, revoked(ID, HANDLE));
+		byte[] current = WebAuthnTestPayloads.frame(sealer, CREDENTIAL, tombstone, "WAR2", "revetsec/wa-record/v2:");
+		try (var decoded = codec.openRecord(CREDENTIAL, current, CLOCK)) { assertEquals(NOW, decoded.floor()); }
+		byte[] war1 = WebAuthnTestPayloads.removedWar1(sealer, CREDENTIAL, tombstone);
+		byte[] relabeled = war1.clone();
+		relabeled[3] = '2';
+		byte[] retiredContext = WebAuthnTestPayloads.frame(sealer, CREDENTIAL, tombstone, "WAR2", "revetsec/wa-record/v1:");
+		for (byte[] retired : List.of(war1, relabeled, retiredContext)) {
+			assertFalse(assertThrows(WebAuthnRecordException.class, () -> codec.open(CREDENTIAL, retired, CLOCK)).isExpired());
+			assertThrows(WebAuthnRecordException.class, () -> codec.openRecord(CREDENTIAL, retired, CLOCK));
+			assertThrows(WebAuthnRecordException.class, () -> records.openAdmitted(CREDENTIAL, retired, CLOCK));
+			assertThrows(WebAuthnRecordException.class, () -> records.resealAdmitted(CREDENTIAL, retired, CLOCK));
+			assertThrows(WebAuthnRecordException.class,
+					() -> new WebAuthnCredentialRecordCodec(NS, RP, records).decodeRecord(CREDENTIAL, retired, CLOCK));
 		}
+		String context = "revetsec/wa-record/v1:" + digest(CREDENTIAL) + ":record:1:1:0";
+		String chunk = SealedStateAccess.get().seal(sealer, SealedStateType.WEBAUTHN_RECORD, "AA", context, PERMANENT);
+		assertThrows(IllegalArgumentException.class,
+				() -> SealedStateAccess.get().openRecord(sealer, SealedStateType.WEBAUTHN_RECORD, chunk, context, CLOCK));
+
+		byte[] publicKey = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
+		byte[] versionOne = activeVersionOne(ID, HANDLE, publicKey, -8, 7, 0);
+		byte[] payload = ByteBuffer.allocate(12 + versionOne.length).putLong(NOW.getEpochSecond()).putInt(NOW.getNano())
+				.put(versionOne).array();
+		byte[] sealed = codec.seal(CREDENTIAL, payload, PERMANENT);
+		assertArrayEquals(payload, codec.open(CREDENTIAL, sealed, CLOCK));
+		assertThrows(WebAuthnRecordException.class, () -> codec.openRecord(CREDENTIAL, sealed, CLOCK));
+		assertThrows(WebAuthnRecordException.class, () -> records.openAdmitted(CREDENTIAL, sealed, CLOCK));
+		assertThrows(WebAuthnRecordException.class, () -> records.resealAdmitted(CREDENTIAL, sealed, CLOCK));
+		var credentials = new WebAuthnCredentialRecordCodec(NS, RP, records);
+		assertThrows(WebAuthnRecordException.class, () -> credentials.decodeRecord(CREDENTIAL, sealed, CLOCK));
+		assertThrows(WebAuthnRecordException.class, () -> credentials.decode(CREDENTIAL, sealed, CLOCK));
+		assertThrows(WebAuthnRecordException.class, () -> WebAuthnRecordPayloadV2.decode(
+				CREDENTIAL.getStorageKey(), payload, PERMANENT.getEpochSecond()));
+		assertThrows(IllegalArgumentException.class, () -> records.sealEntity(CREDENTIAL, versionOne, PERMANENT, NOW));
+		byte[] versionThree = active(ID, HANDLE, publicKey, -8, 7, 0);
+		assertEquals(7, credentials.decode(CREDENTIAL, records.sealEntity(CREDENTIAL, versionThree, PERMANENT, NOW), CLOCK).counter());
 	}
 
 	@Test void fullJavaInstantFloorsIncludingNegativeAndSentinelRemainExact() throws Exception {
-		StateSealer sealer = sealer("k", 3_800);
+		var codec = new WebAuthnRecordCodecV2(sealer("k", 3_800));
 		for (Instant value : List.of(Instant.MIN, Instant.EPOCH.minusNanos(1), PERMANENT, Instant.MAX)) {
-			byte[] rootBytes = new LegacyWebAuthnNamespaceClock(NS, RP, new WebAuthnRecordCodec(sealer)).encode(value);
-			var migration = new WebAuthnRecordMigration(sealer);
-			var root = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), rootBytes);
-			var prepared = migration.prepare(intent(1), root, ROOT.getStorageKey(), new byte[] {1}, rootBytes);
-			try (var decoded = new WebAuthnRecordCodecV2(sealer).openRecord(ROOT, prepared.sealedBytes(), CLOCK)) {
+			byte[] root = codec.seal(ROOT, WebAuthnRecordPayloadV2.namespace(ROOT, identifier(1), value), PERMANENT);
+			try (var decoded = codec.openRecord(ROOT, root, CLOCK)) {
+				assertEquals(value, decoded.floor());
+			}
+			byte[] entity = codec.seal(CREDENTIAL, WebAuthnRecordPayloadV2.entity(CREDENTIAL, value, revoked(ID, HANDLE)), PERMANENT);
+			try (var decoded = codec.openRecord(CREDENTIAL, entity, CLOCK)) {
 				assertEquals(value, decoded.floor());
 			}
 		}
 		// Representability is deliberately separate from the engine's narrower timed-admission range.
 	}
 
-	@Test void expiredCeremonyOpensOnlyUnderClosedIntentAndRemainsExactlyExpired() throws Exception {
+	@Test void consumedCeremonyRemainsExactlyExpired() throws Exception {
 		StateSealer sealer = sealer("k", 3_800);
-		WebAuthnRecordCodec old = new WebAuthnRecordCodec(sealer);
 		Instant issued = NOW.minusSeconds(60);
 		Instant expires = issued.plusSeconds(30);
 		var state = WebAuthnCeremonyState.discoverableAuthentication(bytes(1), bytes(2), bytes(3),
 				Set.of("https://login.example.com"), issued, expires).consume();
-		var legacy = new LegacyWebAuthnCeremonyRecordCodec(NS, RP, old).encode(state);
-		assertThrows(WebAuthnRecordException.class, () -> old.open(legacy.key(), legacy.sealedBytes(), CLOCK));
-		var migration = new WebAuthnRecordMigration(sealer);
-		byte[] rootBytes = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(issued.minusSeconds(1));
-		var root = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), rootBytes);
-		var prepared = migration.prepare(intent(1), root, legacy.key().getStorageKey(), new byte[] {1}, legacy.sealedBytes());
-		assertEquals(issued, prepared.floor());
-		assertEquals(expires, prepared.expiresAt());
-		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).openRecord(legacy.key(), prepared.sealedBytes(), CLOCK));
+		var ceremony = new WebAuthnCeremonyRecordCodec(NS, RP, new WebAuthnRecordCodec(sealer)).encode(state, issued);
+		assertEquals(expires, ceremony.expiresAt());
+		var codec = new WebAuthnRecordCodecV2(sealer);
+		assertThrows(WebAuthnRecordException.class, () -> codec.openRecord(ceremony.key(), ceremony.sealedBytes(), CLOCK));
 		Clock justBefore = Clock.fixed(expires.minusNanos(1), ZoneOffset.UTC);
-		try (var decoded = new WebAuthnRecordCodecV2(sealer).openRecord(legacy.key(), prepared.sealedBytes(), justBefore)) {
+		try (var decoded = codec.openRecord(ceremony.key(), ceremony.sealedBytes(), justBefore)) {
 			assertEquals(1, decoded.innerPayload()[1]);
+			assertEquals(issued, decoded.floor());
 			assertEquals(expires, decoded.expiresAt());
 		}
-		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).openRecord(
-				legacy.key(), prepared.sealedBytes(), Clock.fixed(expires, ZoneOffset.UTC)));
-		assertThrows(IllegalArgumentException.class, () -> migration.authenticateRoot(
-				ClosedMigrationIntent.fromExternalIntent(identifier(1), admission(), Set.of(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)),
-				ROOT.getStorageKey(), rootBytes));
+		assertThrows(WebAuthnRecordException.class, () -> codec.openRecord(
+				ceremony.key(), ceremony.sealedBytes(), Clock.fixed(expires, ZoneOffset.UTC)));
 	}
 
-
-	@Test void genuineLegacyCeremonyAtInstantMaximumPreservesUnrepresentableCeilingSeconds() throws Exception {
+	@Test void ceremonyAtInstantMaximumPreservesUnrepresentableCeilingSeconds() throws Exception {
 		StateSealer sealer = sealer("k", 3_800);
-		WebAuthnRecordCodec old = new WebAuthnRecordCodec(sealer);
 		Instant issued = Instant.MAX.minusSeconds(60);
 		WebAuthnCeremonyState state = WebAuthnCeremonyState.discoverableAuthentication(bytes(1), bytes(2), bytes(3),
 				Set.of("https://login.example.com"), issued, Instant.MAX);
-		var ceremony = new LegacyWebAuthnCeremonyRecordCodec(NS, RP, old).encode(state);
-		assertEquals(Instant.MAX, new LegacyWebAuthnCeremonyRecordCodec(NS, RP, old)
-				.decode(ceremony.key(), ceremony.sealedBytes(), CLOCK).expiresAt());
-		byte[] expectedInner = old.open(ceremony.key(), ceremony.sealedBytes(), CLOCK);
-		byte[] rootBytes = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW);
-		var migration = new WebAuthnRecordMigration(sealer);
-		var root = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), rootBytes);
-		var prepared = migration.prepare(intent(1), root, ceremony.key().getStorageKey(), new byte[] {1}, ceremony.sealedBytes());
-		assertEquals(issued, prepared.floor());
-		assertEquals(Instant.MAX, prepared.expiresAt());
+		var ceremony = new WebAuthnCeremonyRecordCodec(NS, RP, new WebAuthnRecordCodec(sealer)).encode(state, issued);
 		var next = new WebAuthnRecordCodecV2(sealer);
-		try (var opened = next.openWithMetadata(ceremony.key(), prepared.sealedBytes(), CLOCK)) {
+		try (var opened = next.openWithMetadata(ceremony.key(), ceremony.sealedBytes(), CLOCK)) {
 			assertEquals(Instant.MAX.getEpochSecond() + 1, opened.notAfter());
 		}
-		try (var decoded = next.openRecord(ceremony.key(), prepared.sealedBytes(), CLOCK)) {
-			assertArrayEquals(expectedInner, decoded.innerPayload());
+		try (var decoded = next.openRecord(ceremony.key(), ceremony.sealedBytes(), CLOCK)) {
 			assertEquals(issued, decoded.floor());
 			assertEquals(Instant.MAX, decoded.expiresAt());
 		}
-		assertThrows(WebAuthnRecordException.class, () -> next.openRecord(ceremony.key(), prepared.sealedBytes(),
+		assertThrows(WebAuthnRecordException.class, () -> next.openRecord(ceremony.key(), ceremony.sealedBytes(),
 				Clock.fixed(Instant.MAX, ZoneOffset.UTC)));
 	}
 
-	@Test void exactRetentionBindingsRejectAuthenticatedButMisboundLegacyAndNewRecords() throws Exception {
+	@Test void exactRetentionBindingsRejectAuthenticatedButMisboundRecords() throws Exception {
 		StateSealer sealer = sealer("k", 3_800);
-		var old = new WebAuthnRecordCodec(sealer);
-		var migration = new WebAuthnRecordMigration(sealer);
-		byte[] root = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW);
-		var anchor = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), root);
-		byte[] revoked = revoked(ID, HANDLE);
-		byte[] wrongOld = old.seal(CREDENTIAL, revoked, NOW.plusSeconds(100));
-		assertThrows(WebAuthnRecordException.class, () -> migration.prepare(intent(1), anchor, CREDENTIAL.getStorageKey(), new byte[] {1}, wrongOld));
-		byte[] payload = WebAuthnRecordPayloadV2.entity(CREDENTIAL, NOW, revoked);
+		byte[] payload = WebAuthnRecordPayloadV2.entity(CREDENTIAL, NOW, revoked(ID, HANDLE));
 		byte[] wrongNew = new WebAuthnRecordCodecV2(sealer).seal(CREDENTIAL, payload, NOW.plusSeconds(100));
 		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).openRecord(CREDENTIAL, wrongNew, CLOCK));
-		byte[] wrongRoot = old.seal(ROOT, ByteBuffer.allocate(13).put((byte) 1).putLong(NOW.getEpochSecond()).putInt(NOW.getNano()).array(), NOW.plusSeconds(100));
-		assertThrows(WebAuthnRecordException.class, () -> migration.authenticateRoot(intent(1), ROOT.getStorageKey(), wrongRoot));
-	}
-
-	@Test void minimumSeedsCeremonyFloorWithoutInventingFutureExpiryAsObservation() throws Exception {
-		StateSealer sealer = sealer("k", 3_800);
-		WebAuthnRecordCodec old = new WebAuthnRecordCodec(sealer);
-		var ceremony = new LegacyWebAuthnCeremonyRecordCodec(NS, RP, old).encode(WebAuthnCeremonyState.discoverableAuthentication(
-				bytes(1), bytes(2), bytes(3), Set.of("https://login.example.com"), NOW, NOW.plusSeconds(30)));
-		for (Instant minimum : List.of(NOW.minusNanos(1), NOW.plusNanos(1), NOW.plusSeconds(5))) {
-			var migration = new WebAuthnRecordMigration(sealer);
-			byte[] root = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(minimum);
-			var anchor = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), root);
-			var prepared = migration.prepare(intent(1), anchor, ceremony.key().getStorageKey(), new byte[] {1}, ceremony.sealedBytes());
-			assertEquals(minimum.isAfter(NOW) ? minimum : NOW, prepared.floor());
-			assertEquals(NOW.plusSeconds(30), prepared.expiresAt());
-		}
+		byte[] wrongVersion = WebAuthnRecordPayloadV2.namespace(ROOT, identifier(1), NOW);
+		wrongVersion[0] = 1;
+		byte[] wrongRoot = new WebAuthnRecordCodecV2(sealer).seal(ROOT, wrongVersion, PERMANENT);
+		assertThrows(WebAuthnRecordException.class, () -> new WebAuthnRecordCodecV2(sealer).openRecord(ROOT, wrongRoot, CLOCK));
 	}
 
 	@Test void addressReconstructionIsBoundedCanonicalAndRechecksRecoveredIdentifier() throws Exception {
-		StateSealer sealer = sealer("k", 3_800);
-		var old = new WebAuthnRecordCodec(sealer);
-		var migration = new WebAuthnRecordMigration(sealer);
-		byte[] root = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW);
+		var codec = new WebAuthnRecordCodecV2(sealer("k", 3_800));
 		for (String invalid : List.of(ROOT.getStorageKey() + ":extra", "x".repeat(584),
 				ROOT.getStorageKey().replace("wa1:", "wa2:"), ROOT.getStorageKey().replace(":NAMESPACE_CLOCK:", ":OTHER:"),
 				ROOT.getStorageKey().substring(0, ROOT.getStorageKey().length() - 1) + "B"))
-			assertThrows(WebAuthnRecordException.class, () -> migration.authenticateRoot(intent(1), invalid, root));
-		var anchor = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), root);
-		byte[] misbound = old.seal(CREDENTIAL, revoked(new byte[] {9}, HANDLE), PERMANENT);
-		assertThrows(WebAuthnRecordException.class, () -> migration.prepare(intent(1), anchor, CREDENTIAL.getStorageKey(), new byte[] {1}, misbound));
+			assertThrows(WebAuthnRecordException.class, () -> WebAuthnRecordPayloadV2.namespaceKeyForAddress(invalid));
+		assertEquals(ROOT, WebAuthnRecordPayloadV2.namespaceKeyForAddress(CREDENTIAL.getStorageKey()));
+		byte[] foreign = revoked(new byte[] {9}, HANDLE);
+		byte[] misbound = codec.seal(CREDENTIAL, ByteBuffer.allocate(12 + foreign.length).putLong(NOW.getEpochSecond())
+				.putInt(NOW.getNano()).put(foreign).array(), PERMANENT);
+		assertThrows(WebAuthnRecordException.class, () -> codec.openRecord(CREDENTIAL, misbound, CLOCK));
 		WebAuthnStoreKey other = WebAuthnStoreKey.forCredential("other", RP, ID);
-		assertThrows(WebAuthnRecordException.class, () -> migration.prepare(intent(1), anchor, other.getStorageKey(), new byte[] {1}, misbound));
-		assertThrows(IllegalArgumentException.class, () -> migration.prepare(intent(2), anchor, CREDENTIAL.getStorageKey(), new byte[] {1}, misbound));
-	}
-
-	@Test void legacyRootAnchorCannotBeReplacedWithinOnePreparedPlan() throws Exception {
-		StateSealer sealer = sealer("k", 3_800);
-		var old = new WebAuthnRecordCodec(sealer);
-		var migration = new WebAuthnRecordMigration(sealer);
-		byte[] root = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW);
-		var anchor = migration.authenticateRoot(intent(1), ROOT.getStorageKey(), root);
-		byte[] independentlyResealedRoot = new LegacyWebAuthnNamespaceClock(NS, RP, old).encode(NOW);
-		assertThrows(WebAuthnRecordException.class, () -> migration.prepare(intent(1), anchor, ROOT.getStorageKey(), new byte[] {1}, independentlyResealedRoot));
-		assertThrows(IllegalArgumentException.class, () -> migration.prepare(intent(1), anchor, ROOT.getStorageKey(), new byte[0], root));
-		assertThrows(IllegalArgumentException.class, () -> migration.prepare(intent(1), anchor, ROOT.getStorageKey(), new byte[129], root));
+		assertThrows(WebAuthnRecordException.class, () -> codec.openRecord(other, misbound, CLOCK));
 	}
 
 	@Test void strictPayloadDecodersRejectUnknownVersionsInvalidNanosBooleansAndTrailingData() throws Exception {
@@ -284,17 +241,23 @@ final class WebAuthnRecordCodecV2Tests {
 			assertThrows(WebAuthnRecordException.class, () -> WebAuthnRecordPayloadV2.entity(index, NOW, invalid));
 		byte[] publicKey = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
 		for (byte[] invalid : List.of(active(ID, HANDLE, publicKey, -7, 1, 0),
-				active(ID, HANDLE, publicKey, -8, 1, 2), active(ID, HANDLE, publicKey, -8, 1, 4),
+				active(ID, HANDLE, publicKey, -8, 1, 2), active(ID, HANDLE, publicKey, -8, 1, 8),
 				active(ID, HANDLE, new byte[] {0}, -8, 1, 0)))
 			assertThrows(WebAuthnRecordException.class, () -> WebAuthnRecordPayloadV2.entity(CREDENTIAL, NOW, invalid));
+		for (int flags = 0; flags < 8; flags++) {
+			if (flags == 2 || flags == 6) continue;
+			byte[] valid = active(ID, HANDLE, publicKey, -8, 1, flags);
+			assertEquals(12 + valid.length, WebAuthnRecordPayloadV2.entity(CREDENTIAL, NOW, valid).length);
+		}
 	}
 
 	@Test void malformedCeremonyKindOriginPurposeAndExpiryNeverAcquireANewFloor() throws Exception {
 		StateSealer sealer = sealer("k", 3_800);
-		var old = new WebAuthnRecordCodec(sealer);
-		var ceremony = new LegacyWebAuthnCeremonyRecordCodec(NS, RP, old).encode(WebAuthnCeremonyState.discoverableAuthentication(
-				bytes(1), bytes(2), bytes(3), Set.of("https://login.example.com"), NOW, NOW.plusSeconds(30)));
-		byte[] valid = old.open(ceremony.key(), ceremony.sealedBytes(), CLOCK);
+		var records = new WebAuthnRecordCodec(sealer);
+		var ceremony = new WebAuthnCeremonyRecordCodec(NS, RP, records).encode(WebAuthnCeremonyState.discoverableAuthentication(
+				bytes(1), bytes(2), bytes(3), Set.of("https://login.example.com"), NOW, NOW.plusSeconds(30)), NOW);
+		byte[] valid = records.openAdmitted(ceremony.key(), ceremony.sealedBytes(), CLOCK);
+		WebAuthnRecordPayloadV2.entity(ceremony.key(), NOW, valid);
 		for (byte[] invalid : List.of(changed(valid, 0, 2), changed(valid, 1, 2), changed(valid, 2, 0),
 				changedInt(valid, 107, 1_000_000_000), Arrays.copyOf(valid, valid.length + 1), changed(valid, valid.length - 1, ' ')))
 			assertThrows(WebAuthnRecordException.class, () -> WebAuthnRecordPayloadV2.entity(ceremony.key(), NOW, invalid));
@@ -364,38 +327,6 @@ final class WebAuthnRecordCodecV2Tests {
 		assertArrayEquals(new byte[revoked(ID, HANDLE).length], decoded.innerPayload());
 	}
 
-	private static @NonNull List<@NonNull Fixture> fixtures(@NonNull WebAuthnRecordCodec old) throws Exception {
-		List<Fixture> fixtures = new ArrayList<>();
-		byte[] cose = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
-		var credentials = new LegacyWebAuthnCredentialRecordCodec(NS, RP, old);
-		var active = credentials.encode(WebAuthnCredentialState.checked(ID, HANDLE, cose, -8, 0xffff_ffffL, true, true));
-		assertEquals(0xffff_ffffL, credentials.decode(active.key(), active.sealedBytes(), CLOCK).counter());
-		fixtures.add(new Fixture(active.key(), active.sealedBytes(), PERMANENT));
-		var revoked = credentials.encodeRevoked(ID, HANDLE);
-		assertTrue(credentials.decodeRecord(revoked.key(), revoked.sealedBytes(), CLOCK).isRevoked());
-		fixtures.add(new Fixture(revoked.key(), revoked.sealedBytes(), PERMANENT));
-		var indexes = new LegacyWebAuthnCredentialIndex(NS, RP, old);
-		var index = indexes.encode(indexes.empty(HANDLE).withAdded(ID));
-		assertEquals(1, indexes.decode(index.key(), index.sealedBytes(), CLOCK).size());
-		fixtures.add(new Fixture(index.key(), index.sealedBytes(), PERMANENT));
-		var empty = indexes.encode(indexes.empty(HANDLE));
-		fixtures.add(new Fixture(empty.key(), empty.sealedBytes(), PERMANENT));
-		var fences = new LegacyWebAuthnAccountFence(NS, RP, old);
-		var fence = fences.encode(HANDLE, false);
-		assertFalse(fences.decode(fence.key(), fence.sealedBytes(), CLOCK).isActive());
-		fixtures.add(new Fixture(fence.key(), fence.sealedBytes(), PERMANENT));
-		var ceremonies = new LegacyWebAuthnCeremonyRecordCodec(NS, RP, old);
-		var ceremony = ceremonies.encode(WebAuthnCeremonyState.accountReauthentication(bytes(1), bytes(2), bytes(3),
-				Set.of("https://login.example.com"), HANDLE, "remove credential", NOW, NOW.plusSeconds(30)).consume());
-		assertTrue(ceremonies.decode(ceremony.key(), ceremony.sealedBytes(), CLOCK).isConsumed());
-		fixtures.add(new Fixture(ceremony.key(), ceremony.sealedBytes(), NOW.plusSeconds(30)));
-		return fixtures;
-	}
-
-	private static @NonNull ClosedMigrationIntent intent(int value) {
-		return ClosedMigrationIntent.fromExternalIntent(identifier(value), admission(), Set.of(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));
-	}
-	private static @NonNull StoreAdmission admission() { return StoreAdmission.fromIdentifiers(identifier(3), identifier(4)); }
 	private static @NonNull String identifier(int value) { return Base64Url.encode(bytes(value)); }
 	private static byte @NonNull [] bytes(int value) { byte[] b = new byte[32]; for (int i = 0; i < b.length; i++) b[i] = (byte) (value + i); return b; }
 	private static @NonNull StateSealer sealer(@NonNull String id, int cap) {
@@ -408,6 +339,12 @@ final class WebAuthnRecordCodecV2Tests {
 	private static int unsignedShort(byte @NonNull [] bytes, int offset) { return ((bytes[offset] & 0xff) << 8) | (bytes[offset + 1] & 0xff); }
 	private static byte @NonNull [] revoked(byte @NonNull [] id, byte @NonNull [] handle) { return ByteBuffer.allocate(4 + id.length + handle.length).put((byte) 2).putShort((short) id.length).put((byte) handle.length).put(id).put(handle).array(); }
 	private static byte @NonNull [] active(byte @NonNull [] id, byte @NonNull [] handle, byte @NonNull [] key, int algorithm, long counter, int flags) {
+		return ByteBuffer.allocate(29 + id.length + handle.length + key.length).put((byte) 3).putShort((short) algorithm)
+				.putInt((int) counter).put((byte) flags).put(new byte[16]).putShort((short) id.length).put((byte) handle.length)
+				.putShort((short) key.length).put(id).put(handle).put(key).array();
+	}
+	/** The retired, never-released active-credential layout: version 1 without AAGUID. */
+	private static byte @NonNull [] activeVersionOne(byte @NonNull [] id, byte @NonNull [] handle, byte @NonNull [] key, int algorithm, long counter, int flags) {
 		return ByteBuffer.allocate(13 + id.length + handle.length + key.length).put((byte) 1).putShort((short) algorithm)
 				.putInt((int) counter).put((byte) flags).putShort((short) id.length).put((byte) handle.length).putShort((short) key.length).put(id).put(handle).put(key).array();
 	}
@@ -422,12 +359,7 @@ final class WebAuthnRecordCodecV2Tests {
 		for (int value : new int[] {0xa4, 1, 1, 3, 0x27, 0x20, 6, 0x21, 0x58, 32}) out.write(value);
 		out.write(spki, spki.length - 32, 32); return out.toByteArray();
 	}
-	private static final class Fixture {
-		private final @NonNull WebAuthnStoreKey key;
-		private final byte @NonNull [] sealed;
-		private final @NonNull Instant expiresAt;
-		private Fixture(@NonNull WebAuthnStoreKey key, byte @NonNull [] sealed, @NonNull Instant expiresAt) {
-			this.key = key; this.sealed = sealed; this.expiresAt = expiresAt;
-		}
+	private static @NonNull String digest(@NonNull WebAuthnStoreKey key) throws Exception {
+		return Base64Url.encode(MessageDigest.getInstance("SHA-256").digest(key.getStorageKey().getBytes(StandardCharsets.US_ASCII)));
 	}
 }

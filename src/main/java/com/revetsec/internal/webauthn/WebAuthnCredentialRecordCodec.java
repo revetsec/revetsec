@@ -29,14 +29,14 @@ import java.util.Arrays;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Key-bound credential payload. Active version-one records recheck their COSE key and state;
+ * Key-bound credential payload. Active version-three records recheck their COSE key and state;
  * compact version-two tombstones retain ID ownership indefinitely without the public key.
  * Neither authentic bytes nor a reconstructed active record are an assertion proof.
  */
 @Immutable
 final class WebAuthnCredentialRecordCodec {
-    private static final int ACTIVE_VERSION = 1;
-    private static final int ACTIVE_HEADER_BYTES = 13;
+    private static final int ACTIVE_VERSION = 3;
+    private static final int ACTIVE_HEADER_BYTES = 29;
     private static final int REVOKED_VERSION = 2;
     private static final int REVOKED_HEADER_BYTES = 4;
     private static final @NonNull Instant PERMANENT = Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
@@ -59,6 +59,7 @@ final class WebAuthnCredentialRecordCodec {
         requireNonNull(state);
         byte[] id = state.credentialId();
         byte[] handle = state.userHandle();
+        byte[] aaguid = state.aaguid();
         byte[] publicKey = state.keyCbor();
         byte[] payload = new byte[ACTIVE_HEADER_BYTES + id.length + handle.length + publicKey.length];
         try {
@@ -66,8 +67,10 @@ final class WebAuthnCredentialRecordCodec {
             writer.put((byte) ACTIVE_VERSION);
             writer.putShort((short) state.algorithm());
             writer.putInt((int) state.counter());
-            int flags = (state.backupEligible() ? 1 : 0) | (state.backedUp() ? 2 : 0);
+            int flags = (state.backupEligible() ? 1 : 0) | (state.backedUp() ? 2 : 0)
+                    | (state.userVerifiedAtRegistration() ? 4 : 0);
             writer.put((byte) flags);
+            writer.put(aaguid);
             writer.putShort((short) id.length);
             writer.put((byte) handle.length);
             writer.putShort((short) publicKey.length);
@@ -77,6 +80,7 @@ final class WebAuthnCredentialRecordCodec {
         } finally {
             Arrays.fill(id, (byte) 0);
             Arrays.fill(handle, (byte) 0);
+            Arrays.fill(aaguid, (byte) 0);
             Arrays.fill(publicKey, (byte) 0);
             Arrays.fill(payload, (byte) 0);
         }
@@ -127,10 +131,12 @@ final class WebAuthnCredentialRecordCodec {
             int algorithm = reader.getShort();
             long counter = Integer.toUnsignedLong(reader.getInt());
             int flags = reader.get() & 0xff;
+            byte[] aaguid = new byte[16];
+            reader.get(aaguid);
             int idLength = Short.toUnsignedInt(reader.getShort());
             int handleLength = reader.get() & 0xff;
             int keyLength = Short.toUnsignedInt(reader.getShort());
-            if (version != ACTIVE_VERSION || (flags & ~3) != 0 || idLength < 1 || idLength > 1_023
+            if (version != ACTIVE_VERSION || (flags & ~7) != 0 || idLength < 1 || idLength > 1_023
                     || handleLength < 1 || handleLength > 64 || keyLength < 1 || keyLength > 1_024
                     || idLength + handleLength + keyLength != reader.remaining())
                 throw new WebAuthnRecordException();
@@ -141,9 +147,10 @@ final class WebAuthnCredentialRecordCodec {
                 reader.get(id).get(handle).get(publicKey);
                 WebAuthnStoreKey encodedKey = WebAuthnStoreKey.forCredential(this.namespace, this.relyingPartyId, id);
                 if (!key.equals(encodedKey)) throw new WebAuthnRecordException();
-                return Decoded.active(WebAuthnCredentialState.checked(id, handle, publicKey,
-                        algorithm, counter, (flags & 1) != 0, (flags & 2) != 0));
+                return Decoded.active(WebAuthnCredentialState.checked(id, handle, aaguid, publicKey,
+                        algorithm, counter, (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0));
             } finally {
+                Arrays.fill(aaguid, (byte) 0);
                 Arrays.fill(id, (byte) 0);
                 Arrays.fill(handle, (byte) 0);
                 Arrays.fill(publicKey, (byte) 0);

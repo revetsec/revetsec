@@ -109,4 +109,18 @@
 		<Class name="com.revetsec.password.PasswordHasher"/>
 		<Method name="hashResult" signature="([C)Lcom/revetsec/password/PasswordHashResult;"/>
 	</Match>
+	<!-- Both in-memory stores call reanchor only from observe while their private ReentrantLock is
+	     held. Every read and write of these elapsed-time fields is under that same lock, so the
+	     64-bit values cannot race or tear. SpotBugs does not carry the caller-held lock into this
+	     private helper; keep the exclusion on the two exact methods rather than weakening the rule. -->
+	<Match>
+		<Bug pattern="AT_NONATOMIC_64BIT_PRIMITIVE"/>
+		<Class name="com.revetsec.totp.InMemoryTotpStore"/>
+		<Method name="reanchor" signature="(Lcom/revetsec/StoreAdmission;Ljava/time/Instant;J)Lcom/revetsec/StoreTimeObservation;"/>
+	</Match>
+	<Match>
+		<Bug pattern="AT_NONATOMIC_64BIT_PRIMITIVE"/>
+		<Class name="com.revetsec.webauthn.InMemoryWebAuthnStore"/>
+		<Method name="reanchor" signature="(Lcom/revetsec/StoreAdmission;Ljava/time/Instant;J)Lcom/revetsec/StoreTimeObservation;"/>
+	</Match>
 </FindBugsFilter>

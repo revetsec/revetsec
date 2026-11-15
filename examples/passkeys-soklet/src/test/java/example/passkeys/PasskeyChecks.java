@@ -118,6 +118,7 @@ public final class PasskeyChecks {
                 nextCsrf, ORIGIN, Map.of(), null));
         equal(200, listing.getStatusCode());
         check(body(listing).contains("\"credentialIds\":[]"));
+        check(body(listing).contains("\"credentials\":[]"));
         equal(403, app.removeCredential(post("/credentials/remove", nextCookie,
                 nextCsrf, ORIGIN, Map.of("X-Credential-Id", List.of("noncanonical=")), null)).getStatusCode());
         equal(403, app.sensitiveAction(post("/sensitive", nextCookie,
@@ -156,8 +157,14 @@ public final class PasskeyChecks {
                 accountCsrf, registrationId, creation)).getStatusCode());
         equal(400, app.finishRegistration(finish("/register/finish", accountCookie,
                 accountCsrf, registrationId, creation)).getStatusCode());
-        check(body(app.listCredentials(post("/credentials/list", accountCookie,
-                accountCsrf, ORIGIN, Map.of(), null))).contains(authenticator.credentialId()));
+        String credentialListing = body(app.listCredentials(post("/credentials/list", accountCookie,
+                accountCsrf, ORIGIN, Map.of(), null)));
+        check(credentialListing.contains(authenticator.credentialId()));
+        check(credentialListing.contains("\"metadataAvailable\":true"));
+        check(credentialListing.contains("\"aaguid\":null"));
+        check(credentialListing.contains("\"backupEligible\":false"));
+        check(credentialListing.contains("\"backedUp\":false"));
+        check(credentialListing.contains("\"userVerifiedAtRegistration\":true"));
 
         MarshaledResponse logout = app.logout(post("/logout", accountCookie,
                 accountCsrf, ORIGIN, Map.of(), null));
@@ -207,6 +214,8 @@ public final class PasskeyChecks {
                         "X-Demo-Access-Key", List.of(ACCESS_KEY)), null)).getStatusCode());
         check(body(app.listCredentials(post("/credentials/list", signedInCookie,
                 signedInCsrf, ORIGIN, Map.of(), null))).contains("\"credentialIds\":[]"));
+        check(body(app.listCredentials(post("/credentials/list", signedInCookie,
+                signedInCsrf, ORIGIN, Map.of(), null))).contains("\"credentials\":[]"));
         MarshaledResponse reuseStart = app.beginRegistration(post("/register/start", signedInCookie,
                 signedInCsrf, ORIGIN, Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null));
         equal(200, reuseStart.getStatusCode());

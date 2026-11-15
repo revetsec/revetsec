@@ -97,7 +97,7 @@ final class WebAuthnTombstoneResealTests {
         byte[] spki=KeyPairGenerator.getInstance("Ed25519").generateKeyPair().getPublic().getEncoded();ByteArrayOutputStream cose=new ByteArrayOutputStream();
         for(int n:new int[]{0xa4,1,1,3,0x27,0x20,6,0x21,0x58,32})cose.write(n);cose.write(spki,spki.length-32,32);
         var credentials=new WebAuthnCredentialRecordCodec(NS,RP,records);var indexes=new WebAuthnCredentialIndex(NS,RP,records);
-        var credential=credentials.encode(WebAuthnCredentialState.checked(ID,HANDLE,cose.toByteArray(),-8,7,false,false),BASE);
+        var credential=credentials.encode(WebAuthnCredentialState.checked(ID,HANDLE, new byte[16],cose.toByteArray(),-8,7,false,false, true),BASE);
         var index=indexes.encode(indexes.empty(HANDLE).withAdded(ID),BASE);var fence=new WebAuthnAccountFence(NS,RP,records).encode(HANDLE,true,BASE);
         var root=WebAuthnStoreKey.forNamespaceClock(NS,RP);
         source.seedClosedMigration(Map.of(credential.key(),present(1,credential.sealedBytes()),index.key(),present(2,index.sealedBytes()),fence.key(),present(3,fence.sealedBytes()),root,present(4,records.sealNamespace(root,source.admission().getAuthorityId(),BASE))));

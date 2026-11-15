@@ -36,48 +36,55 @@ final class WebAuthnCredentialState {
 
     private final byte @NonNull [] credentialId;
     private final byte @NonNull [] userHandle;
+    private final byte @NonNull [] aaguid;
     private final byte @NonNull [] keyCbor;
     private final int algorithm;
     private final long counter;
     private final boolean backupEligible;
     private final boolean backedUp;
+    private final boolean userVerifiedAtRegistration;
 
     private WebAuthnCredentialState(byte @NonNull [] credentialId, byte @NonNull [] userHandle,
-            byte @NonNull [] keyCbor, int algorithm, long counter, boolean backupEligible, boolean backedUp) {
+            byte @NonNull [] aaguid, byte @NonNull [] keyCbor, int algorithm, long counter,
+            boolean backupEligible, boolean backedUp, boolean userVerifiedAtRegistration) {
         this.credentialId = credentialId.clone();
         this.userHandle = userHandle.clone();
+        this.aaguid = aaguid.clone();
         this.keyCbor = keyCbor.clone();
         this.algorithm = algorithm;
         this.counter = counter;
         this.backupEligible = backupEligible;
         this.backedUp = backedUp;
+        this.userVerifiedAtRegistration = userVerifiedAtRegistration;
     }
 
     static @NonNull WebAuthnCredentialState fromRegistration(
             WebAuthnAuthenticatorData.@NonNull Registration registration, byte @NonNull [] approvedUserHandle)
             throws WebAuthnCborException {
         requireNonNull(registration);
-        return checked(registration.credentialId(), approvedUserHandle, registration.keyCbor(),
+        return checked(registration.credentialId(), approvedUserHandle, registration.aaguid(), registration.keyCbor(),
                 registration.algorithm(), registration.counter(), registration.backupEligible(),
-                registration.backedUp());
+                registration.backedUp(), true);
     }
 
-    /** Rechecks untrusted reconstructed state before it is used for a signature decision. */
+    /** Rechecks untrusted reconstructed state, with its released metadata, before a signature decision. */
     static @NonNull WebAuthnCredentialState checked(byte @NonNull [] credentialId,
-            byte @NonNull [] userHandle, byte @NonNull [] keyCbor, int algorithm, long counter,
-            boolean backupEligible, boolean backedUp) throws WebAuthnCborException {
+            byte @NonNull [] userHandle, byte @NonNull [] aaguid, byte @NonNull [] keyCbor,
+            int algorithm, long counter, boolean backupEligible, boolean backedUp,
+            boolean userVerifiedAtRegistration) throws WebAuthnCborException {
         requireNonNull(credentialId);
         requireNonNull(userHandle);
+        requireNonNull(aaguid);
         requireNonNull(keyCbor);
         if (credentialId.length < 1 || credentialId.length > 1_023 || userHandle.length < 1
-                || userHandle.length > 64 || counter < 0 || counter > MAXIMUM_COUNTER
+                || userHandle.length > 64 || aaguid.length != 16 || counter < 0 || counter > MAXIMUM_COUNTER
                 || (backedUp && !backupEligible))
             throw new WebAuthnCborException();
         WebAuthnCoseKey.Parsed key = WebAuthnCoseKey.parse(keyCbor);
         if (algorithm != key.algorithm())
             throw new WebAuthnCborException();
-        return new WebAuthnCredentialState(credentialId, userHandle, keyCbor, algorithm, counter,
-                backupEligible, backedUp);
+        return new WebAuthnCredentialState(credentialId, userHandle, aaguid, keyCbor, algorithm, counter,
+                backupEligible, backedUp, userVerifiedAtRegistration);
     }
 
     @NonNull Assessment assess(WebAuthnResponseJson.@NonNull Assertion assertion,
@@ -113,16 +120,19 @@ final class WebAuthnCredentialState {
         // An authenticator that has established a counter cannot return to zero or repeat a value.
         long highWaterCounter = Math.max(this.counter, newCounter);
         return Assessment.candidate(new WebAuthnCredentialState(this.credentialId, this.userHandle,
-                this.keyCbor, this.algorithm, highWaterCounter, this.backupEligible, flags.backedUp()));
+                this.aaguid, this.keyCbor, this.algorithm, highWaterCounter, this.backupEligible,
+                flags.backedUp(), this.userVerifiedAtRegistration));
     }
 
     byte @NonNull [] credentialId() { return this.credentialId.clone(); }
     byte @NonNull [] userHandle() { return this.userHandle.clone(); }
+    byte @NonNull [] aaguid() { return this.aaguid.clone(); }
     byte @NonNull [] keyCbor() { return this.keyCbor.clone(); }
     int algorithm() { return this.algorithm; }
     long counter() { return this.counter; }
     boolean backupEligible() { return this.backupEligible; }
     boolean backedUp() { return this.backedUp; }
+    boolean userVerifiedAtRegistration() { return this.userVerifiedAtRegistration; }
 
     @Override public @NonNull String toString() {
         return "WebAuthnCredentialState{<unverified>}";

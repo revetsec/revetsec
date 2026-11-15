@@ -239,8 +239,8 @@ final class WebAuthnCloseoutBoundaryTests {
                 rsaKey(new byte[256], new byte[] {1,0,1}),
                 { (byte)0xa5, 1, 2, 3, 0x26, 0x20, 2, 0x21, 0x40, 0x22, 0x40 }})
             assertThrows(WebAuthnCborException.class, () -> WebAuthnCoseKey.parse(invalid));
-        assertThrows(WebAuthnCborException.class, () -> WebAuthnCredentialState.checked(ID,HANDLE,key,-8,-1,false,false));
-        var state = WebAuthnCredentialState.checked(ID,HANDLE,key,-8,0,false,false);
+        assertThrows(WebAuthnCborException.class, () -> WebAuthnCredentialState.checked(ID,HANDLE, new byte[16],key,-8,-1,false,false, true));
+        var state = WebAuthnCredentialState.checked(ID,HANDLE, new byte[16],key,-8,0,false,false, true);
         assertEquals(0, state.counter());
     }
 

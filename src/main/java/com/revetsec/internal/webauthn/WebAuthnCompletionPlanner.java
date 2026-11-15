@@ -319,6 +319,9 @@ final class WebAuthnCompletionPlanner {
         @NonNull Instant expiresAt() { return this.pending.expiresAt(); }
         byte @NonNull [] approvedHandle() { return requireNonNull(this.pending.expectedHandle()); }
         byte @NonNull [] credentialId() { return this.registration.credentialId(); }
+        byte @NonNull [] aaguid() { return this.registration.aaguid(); }
+        boolean backupEligible() { return this.registration.backupEligible(); }
+        boolean backedUp() { return this.registration.backedUp(); }
         @Override public @NonNull String toString() { return "RegistrationInspection{<unverified>}"; }
     }
 
@@ -339,6 +342,8 @@ final class WebAuthnCompletionPlanner {
         @NonNull Instant expiresAt() { return this.pending.expiresAt(); }
         byte @NonNull [] userHandle() { return this.assertion.userHandle(); }
         byte @NonNull [] credentialId() { return this.assertion.credentialId(); }
+        boolean backupEligible() { return this.assertion.flags().backupEligible(); }
+        boolean backedUp() { return this.assertion.flags().backedUp(); }
         WebAuthnCeremonyState.@NonNull Kind kind() { return this.pending.kind(); }
         @Nullable String actionPurpose() { return this.pending.actionPurpose(); }
         @Override public @NonNull String toString() { return "AuthenticationInspection{<unverified>}"; }

@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** Generic WAR2 envelope round trips, bindings, framing and key rotation, independent of payload meaning. */
 final class WebAuthnRecordCodecTests {
     private static final Instant NOW = Instant.parse("2026-10-09T12:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -45,13 +46,13 @@ final class WebAuthnRecordCodecTests {
 
     @Test void allSupportedSealerCapsRoundTripLargeBinaryState() throws Exception {
         for (int cap : List.of(1_024, 3_800, 16_384)) {
-            WebAuthnRecordCodec codec = new WebAuthnRecordCodec(sealer("k".repeat(64), cap));
+            WebAuthnRecordCodecV2 codec = new WebAuthnRecordCodecV2(sealer("k".repeat(64), cap));
             byte[] payload = pattern(90_000);
             byte[] original = payload.clone();
             byte[] record = codec.seal(CREDENTIAL, payload, NOW.plusSeconds(300));
             assertArrayEquals(original, payload);
             assertTrue(record.length > 16_384);
-            assertTrue(record.length <= WebAuthnRecordCodec.MAXIMUM_RECORD_BYTES);
+            assertTrue(record.length <= WebAuthnRecordCodecV2.MAXIMUM_RECORD_BYTES);
             assertArrayEquals(payload, codec.open(CREDENTIAL, record, CLOCK));
             assertArrayEquals(payload, codec.open(CREDENTIAL, record, CLOCK));
             assertThrows(WebAuthnRecordException.class,
@@ -60,22 +61,22 @@ final class WebAuthnRecordCodecTests {
     }
 
     @Test void smallestAndLargestSupportedPayloadsRemainBounded() throws Exception {
-        WebAuthnRecordCodec codec = new WebAuthnRecordCodec(sealer("k", 1_024));
+        WebAuthnRecordCodecV2 codec = new WebAuthnRecordCodecV2(sealer("k", 1_024));
         assertArrayEquals(new byte[] {7}, codec.open(CREDENTIAL,
                 codec.seal(CREDENTIAL, new byte[] {7}, NOW.plusSeconds(300)), CLOCK));
-        byte[] largest = pattern(WebAuthnRecordCodec.MAXIMUM_PLAINTEXT_BYTES);
+        byte[] largest = pattern(WebAuthnRecordCodecV2.MAXIMUM_PLAINTEXT_BYTES);
         byte[] record = codec.seal(CREDENTIAL, largest, NOW.plusSeconds(300));
-        assertTrue(record.length <= WebAuthnRecordCodec.MAXIMUM_RECORD_BYTES);
+        assertTrue(record.length <= WebAuthnRecordCodecV2.MAXIMUM_RECORD_BYTES);
         assertArrayEquals(largest, codec.open(CREDENTIAL, record, CLOCK));
         assertThrows(IllegalArgumentException.class,
-                () -> codec.seal(CREDENTIAL, new byte[WebAuthnRecordCodec.MAXIMUM_PLAINTEXT_BYTES + 1],
+                () -> codec.seal(CREDENTIAL, new byte[WebAuthnRecordCodecV2.MAXIMUM_PLAINTEXT_BYTES + 1],
                         NOW.plusSeconds(300)));
         assertThrows(IllegalArgumentException.class, () -> codec.seal(CREDENTIAL, new byte[0], NOW.plusSeconds(300)));
     }
 
     @Test void keyKindNamespaceAndSealingKeyBindEveryChunk() throws Exception {
         StateSealer sealer = sealer("k", 3_800);
-        WebAuthnRecordCodec codec = new WebAuthnRecordCodec(sealer);
+        WebAuthnRecordCodecV2 codec = new WebAuthnRecordCodecV2(sealer);
         byte[] record = codec.seal(CREDENTIAL, pattern(5_000), NOW.plusSeconds(300));
         for (WebAuthnStoreKey other : List.of(OTHER_CREDENTIAL,
                 WebAuthnStoreKey.forCredential("other-tenant", "login.example.com", new byte[] {1, 2, 3}),
@@ -83,7 +84,7 @@ final class WebAuthnRecordCodecTests {
                 WebAuthnStoreKey.forAccountFence("tenant", "login.example.com", new byte[] {1, 2, 3})))
             assertThrows(WebAuthnRecordException.class, () -> codec.open(other, record, CLOCK));
         assertThrows(WebAuthnRecordException.class,
-                () -> new WebAuthnRecordCodec(sealer("other", 3_800)).open(CREDENTIAL, record, CLOCK));
+                () -> new WebAuthnRecordCodecV2(sealer("other", 3_800)).open(CREDENTIAL, record, CLOCK));
 
         byte[] second = codec.seal(CREDENTIAL, pattern(5_000), NOW.plusSeconds(300));
         assertFalse(Arrays.equals(record, second));
@@ -91,7 +92,7 @@ final class WebAuthnRecordCodecTests {
     }
 
     @Test void framingRejectsTruncationExtensionTamperingAndReordering() throws Exception {
-        WebAuthnRecordCodec codec = new WebAuthnRecordCodec(sealer("k", 3_800));
+        WebAuthnRecordCodecV2 codec = new WebAuthnRecordCodecV2(sealer("k", 3_800));
         byte[] payload = pattern(5_000);
         byte[] record = codec.seal(CREDENTIAL, payload, NOW.plusSeconds(300));
         byte[] unchanged = record.clone();
@@ -105,7 +106,7 @@ final class WebAuthnRecordCodecTests {
         assertThrows(WebAuthnRecordException.class,
                 () -> codec.open(CREDENTIAL, Arrays.copyOf(record, record.length + 1), CLOCK));
         assertThrows(WebAuthnRecordException.class,
-                () -> codec.open(CREDENTIAL, new byte[WebAuthnRecordCodec.MAXIMUM_RECORD_BYTES + 1], CLOCK));
+                () -> codec.open(CREDENTIAL, new byte[WebAuthnRecordCodecV2.MAXIMUM_RECORD_BYTES + 1], CLOCK));
         assertArrayEquals(unchanged, record);
 
         int firstLength = unsignedShort(record, 24);
@@ -127,13 +128,13 @@ final class WebAuthnRecordCodecTests {
     @Test void keyRotationOpensExistingRecordWithVerificationKey() throws Exception {
         SealingKey oldKey = key("old");
         SealingKey newKey = key("new");
-        WebAuthnRecordCodec oldCodec = new WebAuthnRecordCodec(StateSealer.withActiveKey(oldKey)
+        WebAuthnRecordCodecV2 oldCodec = new WebAuthnRecordCodecV2(StateSealer.withActiveKey(oldKey)
                 .maximumSealedLength(3_800).clock(CLOCK).build());
         byte[] payload = pattern(8_000);
         byte[] record = oldCodec.seal(CREDENTIAL, payload, NOW.plusSeconds(300));
         StateSealer rotated = StateSealer.withActiveKey(newKey).verificationKeys(List.of(oldKey))
                 .maximumSealedLength(3_800).clock(CLOCK).build();
-        assertArrayEquals(payload, new WebAuthnRecordCodec(rotated).open(CREDENTIAL, record, CLOCK));
+        assertArrayEquals(payload, new WebAuthnRecordCodecV2(rotated).open(CREDENTIAL, record, CLOCK));
     }
 
     private static @NonNull StateSealer sealer(@NonNull String id, int cap) {

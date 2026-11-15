@@ -1,6 +1,8 @@
 /* Copyright 2026 Revetware LLC. Licensed under Apache-2.0. */
 package example.provider;
 
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -73,6 +75,7 @@ public final class BackendApplication {
         @Override public @NonNull String toString(){return "Reply{status="+status+", values=<redacted>}";}
     }
     private final @NonNull Configuration config;
+    private final @NonNull BrowserRequestOriginPolicy browserOriginPolicy;
     private final @NonNull Accounts accounts;
     private final @NonNull Admission admission;
     private final @NonNull Clock clock;
@@ -90,7 +93,7 @@ public final class BackendApplication {
     BackendApplication(@NonNull Configuration config,@NonNull Accounts accounts,@NonNull Admission admission,@NonNull Clock clock,
             @NonNull LongSupplier nanoTime,@NonNull ProviderTokens tokens){this(config,accounts,admission,clock,nanoTime,tokens,new SecureRandom());}
     BackendApplication(@NonNull Configuration config,@NonNull Accounts accounts,@NonNull Admission admission,@NonNull Clock clock,
-            @NonNull LongSupplier nanoTime,@NonNull ProviderTokens tokens,@NonNull SecureRandom random){this.config=requireNonNull(config);this.accounts=requireNonNull(accounts);this.admission=requireNonNull(admission);this.clock=requireNonNull(clock);this.nanoTime=requireNonNull(nanoTime);this.tokens=requireNonNull(tokens);this.random=requireNonNull(random);}
+            @NonNull LongSupplier nanoTime,@NonNull ProviderTokens tokens,@NonNull SecureRandom random){this.config=requireNonNull(config);this.browserOriginPolicy=BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(config.origin())).build();this.accounts=requireNonNull(accounts);this.admission=requireNonNull(admission);this.clock=requireNonNull(clock);this.nanoTime=requireNonNull(nanoTime);this.tokens=requireNonNull(tokens);this.random=requireNonNull(random);}
     /** Invoke once per bounded request; failures do not retry provider or application operations. */
     public @NonNull Reply handle(@NonNull Request request){
         Budget budget=new Budget(this.nanoTime);boolean googleCompletion=request.path().equals("/google/complete");
@@ -133,6 +136,7 @@ public final class BackendApplication {
         if(nativeFlow){nativeRequest(request);id=field(form,"request_id",43);binding=field(form,"request_binding",43);compact=field(form,"identity_token",8192);}
         else{
             if(!values(request,"authorization").isEmpty())throw new Denied(400);
+            // Google's form POST callback is cross-site by design; its double-submit token and pending attempt bind it.
             List<String> origin=values(request,"origin");if(!origin.isEmpty()&&!origin.equals(List.of(this.config.origin().toString()))&&!origin.equals(List.of(ProviderTokens.GOOGLE)))throw new Denied(403);
             String csrfCookie=cookieValue(request,"g_csrf_token"),csrfBody=field(form,"g_csrf_token",512);
             if(csrfCookie==null||!ProviderTokens.same(csrfCookie,csrfBody))throw new Denied(403);
@@ -228,7 +232,7 @@ public final class BackendApplication {
     private static void checked(@NonNull String value,int maximum){if(value.isEmpty()||value.length()>maximum||!value.chars().allMatch(c->c>=0x21&&c<=0x7e))throw new IllegalArgumentException("Bounded ASCII configuration required");}
     private static void post(@NonNull Request request){if(!request.method().equals("POST"))throw new Denied(405);String type=header(request,"content-type").replace(" ","");if(!type.equalsIgnoreCase("application/x-www-form-urlencoded")&&!type.equalsIgnoreCase("application/x-www-form-urlencoded;charset=UTF-8"))throw new Denied(415);}
     private static void get(@NonNull Request request){if(!request.method().equals("GET")||request.body.length!=0)throw new Denied(405);}
-    private void sameOrigin(@NonNull Request request){if(!values(request,"origin").equals(List.of(this.config.origin().toString())))throw new Denied(403);}
+    private void sameOrigin(@NonNull Request request){if(!(this.browserOriginPolicy.checkResult(request.method(),values(request,"sec-fetch-site"),values(request,"origin")) instanceof BrowserRequestOriginResult.Allowed))throw new Denied(403);}
     private static void nativeRequest(@NonNull Request request){if(!values(request,"origin").isEmpty()||!values(request,"cookie").isEmpty())throw new Denied(403);}
     private static @NonNull List<@NonNull String> values(@NonNull Request request,@NonNull String name){return request.headers().getOrDefault(name,List.of());}
     private static @NonNull String header(@NonNull Request request,@NonNull String name){List<String> values=values(request,name);if(values.size()!=1)throw new Denied(400);return values.get(0);}

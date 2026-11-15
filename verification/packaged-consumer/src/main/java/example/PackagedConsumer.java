@@ -19,6 +19,8 @@ package example;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.BrowserBinding;
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import com.revetsec.ConfigurationDiagnostic;
 import com.revetsec.KeyImportException;
 import com.revetsec.KeyImports;
@@ -434,6 +436,27 @@ public final class PackagedConsumer {
 	}
 
 	public static void main(@NonNull String @NonNull [] arguments) throws Exception {
+  BrowserRequestOriginPolicy.Builder browserOriginBuilder = BrowserRequestOriginPolicy
+    .withAllowedOrigins(Set.of(URI.create("https://consumer.example.com")));
+  BrowserRequestOriginPolicy browserOriginPolicy = browserOriginBuilder.allowMissingMetadata(false).build();
+  BrowserRequestOriginResult browserOriginAllowed = browserOriginPolicy.checkResult("POST",
+    List.of("same-origin"), List.of("null"));
+  BrowserRequestOriginResult browserOriginRejected = browserOriginPolicy.checkResult("POST",
+    List.of("cross-site"), List.of());
+  require(browserOriginAllowed instanceof BrowserRequestOriginResult.Allowed allowed
+    && allowed.getBasis() == BrowserRequestOriginResult.Basis.SAME_ORIGIN
+    && browserOriginRejected instanceof BrowserRequestOriginResult.Rejected rejected
+    && rejected.getReason() == BrowserRequestOriginResult.Reason.CROSS_SITE,
+    "browser request-origin result contract");
+  require(WebAuthnRegistration.class.getDeclaredMethod("getAaguid").getReturnType() == Optional.class
+    && WebAuthnRegistration.class.getDeclaredMethod("isBackupEligible").getReturnType() == Boolean.class
+    && WebAuthnRegistration.class.getDeclaredMethod("isBackedUp").getReturnType() == Boolean.class
+    && WebAuthnRegistration.class.getDeclaredMethod("isUserVerifiedAtRegistration").getReturnType() == Boolean.class
+    && WebAuthnAuthentication.class.getDeclaredMethod("isBackupEligible").getReturnType() == Boolean.class
+    && WebAuthnAuthentication.class.getDeclaredMethod("isBackedUp").getReturnType() == Boolean.class
+    && WebAuthnReauthentication.class.getDeclaredMethod("isBackupEligible").getReturnType() == Boolean.class
+    && WebAuthnReauthentication.class.getDeclaredMethod("isBackedUp").getReturnType() == Boolean.class,
+    "WebAuthn metadata annotation-free signatures");
   require(OAuthServerResponse.class.getConstructors().length == 0, "server response restricted construction");
   require(OAuthServerResponse.class.getDeclaredMethod("getStatusCode").getReturnType() == Integer.class
     && OAuthServerResponse.class.getDeclaredMethod("getHeaders").getReturnType() == Map.class
@@ -754,7 +777,11 @@ public final class PackagedConsumer {
 		require(invalidLogoutHint instanceof OidcLogoutHintParseResult.Rejected,
 				"packaged logout hint parser rejects a value-free malformed envelope");
 		exerciseExportedTypes("com.revetsec", new Class<?>[] {
-			BrowserBinding.class, KeyImportException.class, KeyImportException.Reason.class, KeyImports.class,
+			BrowserBinding.class, BrowserRequestOriginPolicy.class, BrowserRequestOriginPolicy.Builder.class,
+			BrowserRequestOriginResult.class, BrowserRequestOriginResult.Allowed.class,
+			BrowserRequestOriginResult.Basis.class, BrowserRequestOriginResult.Reason.class,
+			BrowserRequestOriginResult.Rejected.class, KeyImportException.class,
+			KeyImportException.Reason.class, KeyImports.class,
 			OperationBinding.class, InvalidSealedStateException.class, StoreAdmission.class,
 			StoreTimeObservation.class, StoreTimeObservation.Healthy.class,
 			StoreTimeObservation.Unavailable.class, StoreTemporalCondition.class,

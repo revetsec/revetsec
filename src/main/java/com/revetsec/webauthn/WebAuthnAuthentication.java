@@ -33,15 +33,22 @@ public final class WebAuthnAuthentication {
     private final @NonNull String relyingPartyId;
     private final byte @NonNull [] userHandle;
     private final byte @NonNull [] credentialId;
+    private final boolean backupEligible;
+    private final boolean backedUp;
     private final @NonNull Kind kind;
     private final @Nullable String actionPurpose;
     WebAuthnAuthentication(@NonNull String credentialNamespace, @NonNull String relyingPartyId,
             byte @NonNull [] userHandle, byte @NonNull [] credentialId,
-            @NonNull Kind kind, @Nullable String actionPurpose) {
+            boolean backupEligible, boolean backedUp, @NonNull Kind kind,
+            @Nullable String actionPurpose) {
         this.credentialNamespace = requireNonNull(credentialNamespace);
         this.relyingPartyId = requireNonNull(relyingPartyId);
         this.userHandle = requireNonNull(userHandle).clone();
         this.credentialId = requireNonNull(credentialId).clone();
+        if (backedUp && !backupEligible)
+            throw new IllegalArgumentException("Invalid WebAuthn backup state");
+        this.backupEligible = backupEligible;
+        this.backedUp = backedUp;
         this.kind = requireNonNull(kind);
         this.actionPurpose = actionPurpose;
     }
@@ -61,6 +68,14 @@ public final class WebAuthnAuthentication {
      * @return defensive ID copy
      * @since 1.0.0 */
     public byte @NonNull [] getCredentialId() { return this.credentialId.clone(); }
+    /** Returns the credential's permanent backup eligibility.
+     * @return backup eligibility
+     * @since 1.0.0 */
+    public @NonNull Boolean isBackupEligible() { return Boolean.valueOf(this.backupEligible); }
+    /** Returns the backup state stored by this successful authentication.
+     * @return current backed-up state
+     * @since 1.0.0 */
+    public @NonNull Boolean isBackedUp() { return Boolean.valueOf(this.backedUp); }
     /** Returns whether this proof satisfied discoverable sign-in or account-pinned reauthentication.
      * @return ceremony kind
      * @since 1.0.0 */

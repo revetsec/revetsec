@@ -86,13 +86,19 @@ document.getElementById("logout").addEventListener("click", () => action(async (
   window.location.reload();
 }));
 document.getElementById("list").addEventListener("click", () => action(async () => {
-  const ids = (await (await call("/credentials/list")).json()).credentialIds;
+  const credentials = (await (await call("/credentials/list")).json()).credentials;
   const list = document.getElementById("credentials");
   list.replaceChildren();
-  for (const id of ids) {
+  for (const credential of credentials) {
+    const id = credential.credentialId;
     const item = document.createElement("li");
     const label = document.createElement("span");
-    label.textContent = `${id.slice(0, 12)}… `;
+    const provider = credential.metadataAvailable
+      ? (credential.aaguid || "provider not reported") : "display metadata unavailable";
+    const sync = !credential.metadataAvailable ? "unknown sync state"
+      : !credential.backupEligible ? "device-bound"
+      : credential.backedUp ? "synced/backed up" : "backup eligible, not backed up";
+    label.textContent = `${id.slice(0, 12)}… — ${provider}; ${sync} `;
     const remove = document.createElement("button");
     remove.textContent = "Remove";
     remove.addEventListener("click", () => action(async () => {
@@ -112,5 +118,5 @@ document.getElementById("list").addEventListener("click", () => action(async () 
     item.append(label, remove, recoveryRemove);
     list.append(item);
   }
-  if (ids.length === 0) report("No passkeys registered.");
+  if (credentials.length === 0) report("No passkeys registered.");
 }));

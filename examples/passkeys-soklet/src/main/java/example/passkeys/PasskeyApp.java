@@ -15,8 +15,15 @@
  */
 package example.passkeys;
 
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
+import com.revetsec.json.JsonArray;
+import com.revetsec.json.JsonObject;
+import com.revetsec.json.JsonString;
+import com.revetsec.json.JsonValue;
+import com.revetsec.soklet.SokletBrowserRequestOrigins;
 import com.revetsec.webauthn.InMemoryWebAuthnStore;
 import com.revetsec.webauthn.WebAuthnAuthentication;
 import com.revetsec.webauthn.WebAuthnAuthenticationRequestResult;
@@ -26,6 +33,7 @@ import com.revetsec.webauthn.WebAuthnCredentialListResult;
 import com.revetsec.webauthn.WebAuthnCredentialRemovalResult;
 import com.revetsec.webauthn.WebAuthnRecoveryGate;
 import com.revetsec.webauthn.WebAuthnRegistrationOptions;
+import com.revetsec.webauthn.WebAuthnRegistration;
 import com.revetsec.webauthn.WebAuthnRegistrationRequestResult;
 import com.revetsec.webauthn.WebAuthnRegistrationResult;
 import com.revetsec.webauthn.WebAuthnRelyingParty;
@@ -46,8 +54,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -56,10 +67,12 @@ import org.jspecify.annotations.Nullable;
 public final class PasskeyApp {
     private static final String CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; "
             + "form-action 'none'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'";
-    private final @NonNull String origin;
+    private final @NonNull BrowserRequestOriginPolicy browserOriginPolicy;
     private final @NonNull String authority;
     private final @NonNull String accessKey;
     private final byte @NonNull [] accountHandle;
+    private final @NonNull ConcurrentMap<@NonNull String, @NonNull CredentialMetadata> credentialMetadata =
+            new ConcurrentHashMap<>();
     private final @NonNull PasskeySessions sessions;
     private final @NonNull String namespace;
     private final @NonNull String relyingPartyId;
@@ -107,7 +120,7 @@ public final class PasskeyApp {
                 || parsed.getPort() == 0 || parsed.getPort() > 65535
                 || !origin.equals(parsed.toString())) throw new IllegalArgumentException("Invalid passkey origin");
         if (!accessKey.matches("[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException("Invalid access key");
-        this.origin = origin;
+        this.browserOriginPolicy = BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(parsed)).build();
         this.authority = parsed.getRawAuthority();
         this.accessKey = accessKey;
         if (setup.accountHandle.length < 1 || setup.accountHandle.length > 64)
@@ -158,6 +171,37 @@ public final class PasskeyApp {
             @NonNull WebAuthnRelyingParty relyingParty,
             @NonNull WebAuthnRecoveryGate admissionGate, @NonNull AtomicBoolean admissionOpen,
             @NonNull String storageNotice) { }
+
+    /** Application-owned display data; none of these fields authorizes a credential or session. */
+    private record CredentialMetadata(@NonNull String credentialId, @Nullable UUID aaguid,
+            boolean backupEligible, boolean backedUp, boolean userVerifiedAtRegistration) {
+        private static @NonNull CredentialMetadata from(@NonNull WebAuthnRegistration registration) {
+            byte[] id = registration.getCredentialId();
+            try {
+                return new CredentialMetadata(Base64.getUrlEncoder().withoutPadding().encodeToString(id),
+                        registration.getAaguid().orElse(null), registration.isBackupEligible(),
+                        registration.isBackedUp(), registration.isUserVerifiedAtRegistration());
+            } finally {
+                java.util.Arrays.fill(id, (byte) 0);
+            }
+        }
+
+        private @NonNull CredentialMetadata withBackupState(boolean eligible, boolean backedUp) {
+            return new CredentialMetadata(this.credentialId, this.aaguid, eligible, backedUp,
+                    this.userVerifiedAtRegistration);
+        }
+
+        private @NonNull JsonObject json() {
+            JsonObject.Builder value = JsonObject.builder().put("credentialId", this.credentialId)
+                    .put("metadataAvailable", true)
+                    .put("backupEligible", this.backupEligible)
+                    .put("backedUp", this.backedUp)
+                    .put("userVerifiedAtRegistration", this.userVerifiedAtRegistration);
+            if (this.aaguid == null) value.putNull("aaguid");
+            else value.put("aaguid", this.aaguid.toString());
+            return value.build();
+        }
+    }
 
     @GET("/") public @NonNull MarshaledResponse index(@NonNull Request request) {
         return admittedResponse(() -> indexRoute(request));
@@ -244,9 +288,22 @@ public final class PasskeyApp {
         String ceremony = ceremonyId(request);
         if (session == null || body == null || ceremony == null) return text(403, "Request denied.");
         WebAuthnRegistrationResult result = this.relyingParty.completeRegistrationResult(ceremony, body, session.binding);
-        if (result instanceof WebAuthnRegistrationResult.Succeeded success
-                && MessageDigest.isEqual(this.accountHandle, success.getRegistration().getUserHandle()))
-            return text(200, "Passkey registered.");
+        if (result instanceof WebAuthnRegistrationResult.Succeeded success) {
+            WebAuthnRegistration registration = success.getRegistration();
+            byte[] handle = registration.getUserHandle();
+            boolean approved;
+            try {
+                approved = MessageDigest.isEqual(this.accountHandle, handle)
+                        && this.namespace.equals(registration.getCredentialNamespace())
+                        && this.relyingPartyId.equals(registration.getRelyingPartyId());
+            } finally {
+                java.util.Arrays.fill(handle, (byte) 0);
+            }
+            if (!approved) return text(403, "Request denied.");
+            CredentialMetadata metadata = CredentialMetadata.from(registration);
+            this.credentialMetadata.put(metadata.credentialId(), metadata);
+            return text(200, "Passkey registered. Provider and sync metadata saved by the application.");
+        }
         if (result instanceof WebAuthnRegistrationResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnRegistrationResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnRegistrationResult.Unavailable
@@ -280,6 +337,7 @@ public final class PasskeyApp {
                     || !this.namespace.equals(proof.getCredentialNamespace())
                     || !this.relyingPartyId.equals(proof.getRelyingPartyId()))
                 return text(403, "Request denied.");
+            updateBackupState(proof.getCredentialId(), proof.isBackupEligible(), proof.isBackedUp());
             return rotated(session, true);
         }
         return authenticationFailure(result);
@@ -341,6 +399,9 @@ public final class PasskeyApp {
         WebAuthnReauthenticationResult result = this.relyingParty.completeReauthenticationResult(
                 this.accountHandle, action.purpose, pending.ceremonyId, body, session.binding);
         if (result instanceof WebAuthnReauthenticationResult.Succeeded success) {
+            updateBackupState(success.getReauthentication().getCredentialId(),
+                    success.getReauthentication().isBackupEligible(),
+                    success.getReauthentication().isBackedUp());
             MarshaledResponse response = text(200, action == PasskeySessions.Action.SENSITIVE
                     ? "Sensitive action approved for one use." : "Credential removal approved for one use.");
             var grant = this.sessions.completeAction(session, pending, success.getReauthentication(), request.getId());
@@ -435,10 +496,18 @@ public final class PasskeyApp {
         WebAuthnCredentialListResult result = this.relyingParty.listCredentialsResult(this.accountHandle);
         if (!(result instanceof WebAuthnCredentialListResult.Listed listed))
             return text(503, "Local demo unavailable.");
-        List<String> encoded = new ArrayList<>();
-        for (byte[] id : listed.getCredentialIds())
-            encoded.add("\"" + Base64.getUrlEncoder().withoutPadding().encodeToString(id) + "\"");
-        return json(200, "{\"credentialIds\":[" + String.join(",", encoded) + "]}");
+        List<JsonValue> ids = new ArrayList<>();
+        List<JsonValue> credentials = new ArrayList<>();
+        for (byte[] id : listed.getCredentialIds()) {
+            String value = Base64.getUrlEncoder().withoutPadding().encodeToString(id);
+            ids.add(JsonString.fromValue(value));
+            CredentialMetadata metadata = this.credentialMetadata.get(value);
+            credentials.add(metadata == null
+                    ? JsonObject.builder().put("credentialId", value).put("metadataAvailable", false).build()
+                    : metadata.json());
+        }
+        return json(200, JsonObject.builder().put("credentialIds", JsonArray.fromElements(ids))
+                .put("credentials", JsonArray.fromElements(credentials)).build().toJson());
     }
 
     @POST("/credentials/self-remove") public @NonNull MarshaledResponse selfRemoveCredential(@NonNull Request request) {
@@ -448,7 +517,7 @@ public final class PasskeyApp {
             if (session == null || target == null || !emptyBody(request)
                     || !this.sessions.consumeAction(session, PasskeySessions.Action.SELF_REMOVAL, target))
                 return text(403, "Request denied.");
-            return removalResponse(this.relyingParty.removeCredentialResult(this.accountHandle, target));
+            return removalResponse(this.relyingParty.removeCredentialResult(this.accountHandle, target), target);
         });
     }
 
@@ -469,15 +538,27 @@ public final class PasskeyApp {
         if (values.size() != 1) return text(403, "Request denied.");
         byte[] id = decodeId(values.get(0));
         if (id == null) return text(403, "Request denied.");
-        return removalResponse(this.relyingParty.removeCredentialResult(this.accountHandle, id));
+        return removalResponse(this.relyingParty.removeCredentialResult(this.accountHandle, id), id);
     }
 
-    private @NonNull MarshaledResponse removalResponse(@NonNull WebAuthnCredentialRemovalResult result) {
-        if (result instanceof WebAuthnCredentialRemovalResult.Removed) return text(200, "Passkey removed.");
+    private @NonNull MarshaledResponse removalResponse(@NonNull WebAuthnCredentialRemovalResult result,
+            byte @NonNull [] credentialId) {
+        if (result instanceof WebAuthnCredentialRemovalResult.Removed) {
+            this.credentialMetadata.remove(Base64.getUrlEncoder().withoutPadding().encodeToString(credentialId));
+            return text(200, "Passkey removed.");
+        }
         if (result instanceof WebAuthnCredentialRemovalResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnCredentialRemovalResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnCredentialRemovalResult.Unavailable
                 ? text(503, "Local demo unavailable.") : text(404, "Passkey not found.");
+    }
+
+    private void updateBackupState(byte @NonNull [] credentialId, boolean backupEligible,
+            boolean backedUp) {
+        String encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(credentialId);
+        java.util.Arrays.fill(credentialId, (byte) 0);
+        this.credentialMetadata.computeIfPresent(encoded,
+                (key, current) -> current.withBackupState(backupEligible, backedUp));
     }
 
     @POST("/logout") public @NonNull MarshaledResponse logout(@NonNull Request request) {
@@ -571,7 +652,8 @@ public final class PasskeyApp {
     }
 
     private boolean sameOrigin(@NonNull Request request) {
-        return host(request) && headers(request, "Origin").equals(List.of(this.origin));
+        return host(request) && SokletBrowserRequestOrigins.browserRequestOriginResultFor(
+                this.browserOriginPolicy, request) instanceof BrowserRequestOriginResult.Allowed;
     }
 
     private static boolean emptyBody(@NonNull Request request) {

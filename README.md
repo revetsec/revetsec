@@ -242,6 +242,15 @@ var passkeys = WebAuthnRelyingParty.withRelyingPartyId("app.example.com")
 
 Begin account-approved enrollment with `beginRegistrationResult`, or discoverable sign-in with `beginAuthenticationResult`. Bind each ceremony to the browser session and return options only from `Prepared`. Complete using the saved ceremony ID, raw browser credential JSON and the same binding. Only successful completion releases proof; uncertain or reconciliation outcomes require deliberate recovery handling. For a sensitive action, call `completeReauthenticationResult` with the application-approved account handle and exact action purpose. Only its `Succeeded` leaf carries the restricted `WebAuthnReauthentication` proof; match its ceremony ID to the original one-use pending action, recheck the current session/account/scope, and atomically consume that action before applying it. A checked-context rejection can follow a known ceremony commitment, so it does not by itself authorize a blind retry. The general authentication result remains appropriate for sign-in, not sensitive-action authorization. Keep recovery admission through the application's session/action transition. The application owns enrollment approval, credential-management authorization, CSRF and sessions.
 
+Registration also releases display-only AAGUID and backup metadata; successful sign-in and reauthentication release
+the committed backup flags. Keep these in the application's credential-management rows. Under none attestation the
+AAGUID is self-reported and must never drive authorization or authenticator policy. See the
+[browser/extension profile](docs/webauthn-browser-compatibility.md#credential-display-metadata).
+
+For browser state-changing routes, the protocol-neutral [`BrowserRequestOriginPolicy`](docs/browser-request-origin-policy.md)
+combines raw `Sec-Fetch-Site` and `Origin` occurrences into a fixed, redacted result. It complements rather than
+replaces application session, action-token and CSRF controls.
+
 The [runnable passkey example](examples/passkeys-soklet/README.md) and its [application handlers](examples/passkeys-soklet/src/main/java/example/passkeys/PasskeyApp.java) show the complete browser flow, reauthentication and removal. Its default store and keys are disposable and vanish at restart. For an established service, follow the [store/time/recovery contract](docs/shared-clock-stores.md) and [durable storage recipe](examples/postgresql-pending-store/README.md). Check the [browser/extension policy](docs/webauthn-browser-compatibility.md) for accepted JSON shapes and compatibility limits; a local or virtual-authenticator example does not establish physical-key or synced-credential compatibility.
 
 ### RSA signing

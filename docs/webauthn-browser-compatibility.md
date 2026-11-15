@@ -6,6 +6,23 @@ browser/authenticator/provider combination. The application submits native
 `PublicKeyCredential.toJSON()` output without deleting extension results or rewriting signed
 client/authenticator data to make a response fit.
 
+## Credential display metadata
+
+Successful registration exposes the credential ID, the authenticator-data AAGUID, backup eligibility, current
+backup state and whether user verification was observed at registration. A zero AAGUID is returned as empty. Under
+the selected `none` attestation profile, the AAGUID is self-reported display metadata: it must not authorize a user,
+select policy or establish an authenticator model. Revetsec persists these facts in its authoritative credential
+record so later authentication updates preserve them.
+
+Successful sign-in and reauthentication expose the credential's backup eligibility and the backup state committed
+by that authentication. Applications should keep their own credential-management row, populate its display fields
+from `WebAuthnRegistration`, refresh backup state from successful authentication/reauthentication, and own labels,
+creation time and last-used time. The bounded authoritative listing remains a credential-ID operation; it does not
+perform an unbounded per-credential metadata fan-out.
+
+The active credential payload uses the unreleased version-3 format. Unreleased version 1 is rejected rather than
+silently inferred; version 2 remains the permanent tombstone. No released 1.0 data migration is required.
+
 ## Accepted and rejected outputs
 
 | Surface | Current profile |

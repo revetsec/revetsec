@@ -54,7 +54,7 @@ final class WebAuthnCredentialStateTests {
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         byte[] storedKey = edKey(pair);
         var response = parsed(pair.getPrivate(), CREDENTIAL_ID, USER_HANDLE, 0x05, 8);
-        var stored = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, storedKey, -8, 7, false, false);
+        var stored = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], storedKey, -8, 7, false, false, true);
 
         var assessment = stored.assess(response, USER_HANDLE);
         assertEquals(CANDIDATE, assessment.status());
@@ -62,14 +62,14 @@ final class WebAuthnCredentialStateTests {
         assertArrayEquals(CREDENTIAL_ID, assessment.candidate().orElseThrow().credentialId());
         assertEquals("WebAuthnCredentialState.Assessment{CANDIDATE, <no proof>}", assessment.toString());
 
-        assertRejected(WebAuthnCredentialState.checked(new byte[] {9}, USER_HANDLE, storedKey, -8, 7,
-                false, false).assess(response, null));
-        assertRejected(WebAuthnCredentialState.checked(CREDENTIAL_ID, new byte[] {9}, storedKey, -8, 7,
-                false, false).assess(response, null));
+        assertRejected(WebAuthnCredentialState.checked(new byte[] {9}, USER_HANDLE, new byte[16], storedKey, -8, 7,
+                false, false, true).assess(response, null));
+        assertRejected(WebAuthnCredentialState.checked(CREDENTIAL_ID, new byte[] {9}, new byte[16], storedKey, -8, 7,
+                false, false, true).assess(response, null));
         assertRejected(stored.assess(response, new byte[] {9}));
         KeyPair otherPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
-        assertRejected(WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, edKey(otherPair), -8, 7,
-                false, false).assess(response, null));
+        assertRejected(WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], edKey(otherPair), -8, 7,
+                false, false, true).assess(response, null));
         assertRejected(stored.assess(parsed(otherPair.getPrivate(), CREDENTIAL_ID, USER_HANDLE, 0x05, 8), null));
     }
 
@@ -77,8 +77,8 @@ final class WebAuthnCredentialStateTests {
     void appliesCounterHighWaterAndBackupTransitionsOnlyAfterValidSignature() throws Exception {
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         byte[] key = edKey(pair);
-        var zero = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -8, 0, true, false);
-        var five = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -8, 5, true, false);
+        var zero = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -8, 0, true, false, true);
+        var five = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -8, 5, true, false, true);
 
         var stillZero = zero.assess(parsed(pair.getPrivate(), CREDENTIAL_ID, USER_HANDLE, 0x0d, 0), null);
         assertEquals(CANDIDATE, stillZero.status());
@@ -104,8 +104,8 @@ final class WebAuthnCredentialStateTests {
     void reconstructsOnlyBoundedConsistentCredentialState() throws Exception {
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         byte[] key = edKey(pair);
-        var state = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -8, 0xffff_ffffL,
-                true, true);
+        var state = WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -8, 0xffff_ffffL,
+                true, true, true);
         assertEquals(-8, state.algorithm());
         assertEquals(0xffff_ffffL, state.counter());
         assertTrue(state.backupEligible());
@@ -116,21 +116,21 @@ final class WebAuthnCredentialStateTests {
 
         for (byte[] badId : new byte[][]{new byte[0], new byte[1_024]})
             assertThrows(WebAuthnCborException.class,
-                    () -> WebAuthnCredentialState.checked(badId, USER_HANDLE, key, -8, 0, false, false));
+                    () -> WebAuthnCredentialState.checked(badId, USER_HANDLE, new byte[16], key, -8, 0, false, false, true));
         assertThrows(WebAuthnCborException.class,
-                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, new byte[65], key, -8, 0, false, false));
+                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, new byte[65], new byte[16], key, -8, 0, false, false, true));
         assertThrows(WebAuthnCborException.class,
-                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -7, 0, false, false));
+                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -7, 0, false, false, true));
         assertThrows(WebAuthnCborException.class,
-                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -8, -1, false, false));
+                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -8, -1, false, false, true));
         assertThrows(WebAuthnCborException.class,
-                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -8, 0x1_0000_0000L,
-                        false, false));
+                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -8, 0x1_0000_0000L,
+                        false, false, true));
         assertThrows(WebAuthnCborException.class,
-                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, key, -8, 0, false, true));
+                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], key, -8, 0, false, true, true));
         assertThrows(WebAuthnCborException.class,
-                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[]{(byte) 0xa0},
-                        -8, 0, false, false));
+                () -> WebAuthnCredentialState.checked(CREDENTIAL_ID, USER_HANDLE, new byte[16], new byte[]{(byte) 0xa0},
+                        -8, 0, false, false, true));
     }
 
     @Test

@@ -15,12 +15,15 @@
  */
 package example.issuer;
 
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.oauth.server.*;
 import com.revetsec.oauth.ProtectedResourceMetadata;
 import com.revetsec.soklet.SokletOAuthAuthorizationServer;
 import com.revetsec.soklet.SokletRequestResult;
+import com.revetsec.soklet.SokletBrowserRequestOrigins;
 import com.soklet.*;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
@@ -45,6 +48,8 @@ public final class IssuerResources {
     final IssuerConfig config;
     final OAuthAuthorizationServer server;
     final BrowserSessionStore sessions;
+    final BrowserRequestOriginPolicy browserOriginPolicy;
+    final BrowserRequestOriginPolicy nonBrowserCompatibleOriginPolicy;
     final StartupMode startupMode;
     final byte @NonNull [] admissionPartitionKey;
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock) throws java.security.GeneralSecurityException {
@@ -67,6 +72,10 @@ public final class IssuerResources {
             @NonNull OAuthIssuerKeyProvider keys,@NonNull StateSealer sealer,@NonNull StartupMode startupMode,
             byte @NonNull [] admissionPartitionKey,@NonNull BrowserSessionStore sessions) {
         this.config=java.util.Objects.requireNonNull(config);
+        this.browserOriginPolicy=BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(config.origin))
+                .allowInsecureLoopback(config.loopback).build();
+        this.nonBrowserCompatibleOriginPolicy=BrowserRequestOriginPolicy.withAllowedOrigins(Set.of(config.origin))
+                .allowInsecureLoopback(config.loopback).allowMissingMetadata(true).build();
         this.startupMode=java.util.Objects.requireNonNull(startupMode);
         java.util.Objects.requireNonNull(store);java.util.Objects.requireNonNull(keys);java.util.Objects.requireNonNull(sealer);
         if(java.util.Objects.requireNonNull(admissionPartitionKey).length!=32) throw new IllegalArgumentException("Admission partition key must be 32 bytes.");
@@ -302,7 +311,8 @@ public final class IssuerResources {
     }
     private @NonNull MarshaledResponse failure(@NonNull OAuthServerException failure) {return SokletOAuthAuthorizationServer.responseFor(server.responseForFailure(failure));}
     private boolean issuerHost(@NonNull Request request) {return LocalInputs.headers(request,"Host").equals(List.of(config.origin.getRawAuthority()));}
-    private boolean sameOrigin(@NonNull Request request) {return issuerHost(request) && LocalInputs.headers(request,"Origin").equals(List.of(config.origin.toString()));}
+    private boolean sameOrigin(@NonNull Request request) {return issuerHost(request) && SokletBrowserRequestOrigins.browserRequestOriginResultFor(browserOriginPolicy,request) instanceof BrowserRequestOriginResult.Allowed;}
+    boolean browserOriginCompatible(@NonNull Request request) {return SokletBrowserRequestOrigins.browserRequestOriginResultFor(nonBrowserCompatibleOriginPolicy,request) instanceof BrowserRequestOriginResult.Allowed;}
     private static @NonNull MarshaledResponse localRedirect(@NonNull String path) {
         return MarshaledResponse.withStatusCode(303).headers(Map.of("Location",List.of(path),"Cache-Control",List.of("no-store"),"Referrer-Policy",List.of("no-referrer"))).build();
     }

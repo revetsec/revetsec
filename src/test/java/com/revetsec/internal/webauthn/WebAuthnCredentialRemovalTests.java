@@ -131,9 +131,9 @@ final class WebAuthnCredentialRemovalTests {
 
         byte[] otherHandle = {9};
         byte[] otherCredential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records())
-                .encode(WebAuthnCredentialState.checked(ID, otherHandle,
+                .encode(WebAuthnCredentialState.checked(ID, otherHandle, new byte[16],
                         edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair()),
-                        -8, 0, false, false), NOW).sealedBytes();
+                        -8, 0, false, false, true), NOW).sealedBytes();
         entries = new HashMap<>(fixture.snapshot.getEntries());
         entries.put(keys.credential(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                 new byte[] {10}, otherCredential));
@@ -154,7 +154,7 @@ final class WebAuthnCredentialRemovalTests {
         var keys = planner.keys(handle, ID);
         byte[] publicKey = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
         var credential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records)
-                .encode(WebAuthnCredentialState.checked(ID, handle, publicKey, -8, 0, false, false), NOW);
+                .encode(WebAuthnCredentialState.checked(ID, handle, new byte[16], publicKey, -8, 0, false, false, true), NOW);
         var indexes = new WebAuthnCredentialIndex(NAMESPACE, RP, records);
         var index = indexes.encode(listed ? indexes.empty(handle).withAdded(ID) : indexes.empty(handle), NOW);
         var fence = new WebAuthnAccountFence(NAMESPACE, RP, records).encode(handle, active, NOW);

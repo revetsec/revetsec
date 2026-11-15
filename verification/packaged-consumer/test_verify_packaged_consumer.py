@@ -307,7 +307,7 @@ class ConsumerOutputTests(unittest.TestCase):
     """PackagedConsumer's public-api= line must come last and name every group of public API calls."""
 
     API_LINE = VERIFIER.PUBLIC_API_LINE_PREFIX + ",".join(VERIFIER.PUBLIC_API_CALLS)
-    EXPORTED_TYPE_INVENTORY_SHA256 = "10deab66575094a205e8894c2745f97e9389a3ed4902274cee6c252d540fd870"
+    EXPORTED_TYPE_INVENTORY_SHA256 = "f1f01b35ce922519bfc3ef380dcfea9952d2c06a68709ff54a419948fa89c4ae"
 
     def lines(self, *last):
         return ["jar=/repository/revetsec.jar", "automatic-module-name=com.revetsec", *last]
@@ -425,9 +425,11 @@ class ConsumerOutputTests(unittest.TestCase):
         self.assertEqual(types, sorted(set(types)))
         rows = "".join(f"{package}\t{relative_name}\n" for package, relative_name in types).encode("utf-8")
         self.assertEqual(hashlib.sha256(rows).hexdigest(), self.EXPORTED_TYPE_INVENTORY_SHA256)
-        self.assertEqual(len(types), 703)
-        self.assertEqual(sum("." not in relative_name for _, relative_name in types), 341)
-        self.assertEqual(sum("." in relative_name for _, relative_name in types), 362)
+        self.assertEqual(len(types), 710)
+        self.assertEqual(sum("." not in relative_name for _, relative_name in types), 343)
+        self.assertEqual(sum("." in relative_name for _, relative_name in types), 367)
+        self.assertIn(("com.revetsec", "BrowserRequestOriginPolicy"), types)
+        self.assertIn(("com.revetsec", "BrowserRequestOriginResult.Rejected"), types)
         self.assertIn(("com.revetsec", "ConfigurationDiagnostic"), types)
         self.assertIn(("com.revetsec", "StateSealer.Builder"), types)
         self.assertIn(("com.revetsec.json", "JsonObject.Builder"), types)

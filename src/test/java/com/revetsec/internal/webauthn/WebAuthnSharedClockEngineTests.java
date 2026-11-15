@@ -205,7 +205,7 @@ final class WebAuthnSharedClockEngineTests {
     }
     @Test void normalOperationsRejectLegacyWar1InsteadOfPromotingIt() {
         F f=new F();byte[] oldRoot=ByteBuffer.allocate(13).put((byte)1).putLong(BASE.getEpochSecond()).putInt(BASE.getNano()).array();
-        byte[] legacy=f.records.seal(f.root(),oldRoot,WebAuthnRecordPayloadV2.PERMANENT);
+        byte[] legacy=WebAuthnTestPayloads.removedWar1(f.sealer,f.root(),oldRoot);
         f.source.seedClosedMigration(Map.of(f.root(),WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[]{1},legacy)));
         assertEquals(WebAuthnEngine.Status.UNAVAILABLE,f.begin(HANDLE).status());assertEquals(0,f.store.writes.size());
     }

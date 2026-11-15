@@ -16,13 +16,15 @@
 package example.playground;
 import com.revetsec.json.JsonString;
 
+import com.revetsec.BrowserRequestOriginPolicy;
+import com.revetsec.BrowserRequestOriginResult;
 import com.revetsec.RevetsecException;
 import com.revetsec.oauth.*;
 import com.revetsec.soklet.SokletBearer;
+import com.revetsec.soklet.SokletBrowserRequestOrigins;
 import com.soklet.*;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import org.jspecify.annotations.NonNull;
@@ -97,13 +99,14 @@ final class PlaygroundAdmission implements McpAdmissionController {
         List<String> hosts = headerValues(request, "Host");
         if (hosts.size() != 1 || !(hosts.get(0).equals(config.origin.getRawAuthority())
                 || hosts.get(0).equals("127.0.0.1:" + config.mcpPort))) return false;
-        List<String> origins = headerValues(request, "Origin");
-        if (origins.isEmpty()) return true;
-        if (origins.size() != 1) return false;
-        if (origins.get(0).equals(config.origin.toString())) return true;
-        if (!providerOrigin) return false;
-        java.net.URI issuer = java.net.URI.create(config.issuer);
-        return origins.get(0).equals(issuer.getScheme() + "://" + issuer.getRawAuthority());
+        BrowserRequestOriginPolicy policy = providerOrigin ? config.providerReturnOriginPolicy : config.mcpOriginPolicy;
+        return SokletBrowserRequestOrigins.browserRequestOriginResultFor(policy, request)
+                instanceof BrowserRequestOriginResult.Allowed;
+    }
+
+    static boolean browserOriginAllowed(@NonNull Request request, @NonNull PlaygroundConfig config) {
+        return SokletBrowserRequestOrigins.browserRequestOriginResultFor(config.browserOriginPolicy, request)
+                instanceof BrowserRequestOriginResult.Allowed;
     }
 
     static @NonNull List<@NonNull String> headerValues(@NonNull Request request, @NonNull String name) {

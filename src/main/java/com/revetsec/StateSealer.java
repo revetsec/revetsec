@@ -452,8 +452,8 @@ public final class StateSealer {
 	 */
 	@ThreadSafe
 	private static final class SealedStateOperations implements SealedStateAccess.Operations {
-		// WAR1/WAR2 framing has always bounded authenticated chunks to 16,384 ASCII characters.
-		// Historical reads must not shrink with the independently configured future emission cap.
+		// WAR2 framing bounds authenticated chunks to 16,384 ASCII characters. Reads of retained
+		// records must not shrink with the independently configured future emission cap.
 		private static final int WEBAUTHN_RECORD_OPENING_LIMIT = 16_384;
 
 		private static int recordOpeningLimit(@NonNull StateSealer sealer, @NonNull SealedStateType type) {
