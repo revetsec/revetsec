@@ -17,6 +17,7 @@
 package com.revetsec;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.function.Executable;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -32,32 +33,38 @@ import java.security.SecureRandom;
 import java.security.Security;
 import java.security.spec.AlgorithmParameterSpec;
 
-/** Serialized test provider: authenticates existing rows, then interrupts only a new seal. */
-@SuppressWarnings("TypeParameterUnusedInFormals") // Test-only provider bridge preserves the SPI generic signature.
+/** Serialized test provider: authenticates existing rows, then raises the selected failure only on a new seal. */
+@SuppressWarnings({"StaticAssignmentOfThrowable", "TypeParameterUnusedInFormals"}) // Test provider preserves exact throwable identity and the SPI generic signature.
 public final class InterruptingSealingProvider extends Provider {
  private static final long serialVersionUID=1L;
  private static final @NonNull String NAME="RevetsecInterruptingSealing";
  private static final @NonNull Object LOCK=new Object();
+ private static @Nullable Throwable signal;
  private InterruptingSealingProvider() {
-  super(NAME,"1.0","Revetsec test provider that interrupts AES-GCM encryption.");
+  super(NAME,"1.0","Revetsec test provider that raises a selected failure during AES-GCM encryption.");
   put("Cipher.AES/GCM/NoPadding",InterruptingGcm.class.getName());
  }
  public static void around(@NonNull Executable operation) {
+  around(new InterruptedException("fixture"),operation);
+ }
+ public static void around(@NonNull Throwable selected,@NonNull Executable operation) {
   synchronized(LOCK) {
    if(Security.getProvider(NAME)!=null)throw new AssertionError("interrupting provider already installed");
-   if(Security.insertProviderAt(new InterruptingSealingProvider(),1)!=1)throw new AssertionError("interrupting provider was not first");
-   try {operation.execute();}
+   signal=selected;
+   try {
+    if(Security.insertProviderAt(new InterruptingSealingProvider(),1)!=1)throw new AssertionError("interrupting provider was not first");
+    operation.execute();
+   }
    catch(RuntimeException|Error failure){throw failure;}
    catch(Throwable failure){InterruptingSealingProvider.<RuntimeException>raise(failure);}
-   finally {Security.removeProvider(NAME);}
+   finally {Security.removeProvider(NAME);signal=null;}
   }
  }
  @SuppressWarnings("unchecked") private static <T extends Throwable> void raise(@NonNull Throwable failure) throws T {throw (T)failure;}
- @SuppressWarnings("unchecked") private static <T extends Throwable,R> @NonNull R interrupted() throws T {
-  throw (T)new InterruptedException("fixture");
- }
+ private static @NonNull Throwable selectedSignal(){Throwable selected=signal;if(selected==null)throw new AssertionError("no provider signal");return selected;}
+ @SuppressWarnings("unchecked") private static <T extends Throwable,R> @NonNull R raiseResult(@NonNull Throwable failure) throws T {throw (T)failure;}
 
- /** The normal JDK provider handles reads; the issuer's attempted write fails with a checked interruption. */
+ /** The normal JDK provider handles reads; the issuer's attempted write raises the selected failure. */
  public static final class InterruptingGcm extends StateSealerTests.DelegatingGcm {
   private boolean encrypt;
   public InterruptingGcm() throws GeneralSecurityException { }
@@ -74,11 +81,11 @@ public final class InterruptingSealingProvider extends Provider {
   }
   @Override protected byte @NonNull [] engineDoFinal(byte @NonNull [] input,int offset,int length)
     throws IllegalBlockSizeException,BadPaddingException {
-   return this.encrypt ? InterruptingSealingProvider.<RuntimeException,byte[]>interrupted() : super.engineDoFinal(input,offset,length);
+   return this.encrypt ? InterruptingSealingProvider.<RuntimeException,byte[]>raiseResult(selectedSignal()) : super.engineDoFinal(input,offset,length);
   }
   @Override protected int engineDoFinal(byte @NonNull [] input,int offset,int length,byte @NonNull [] output,int outputOffset)
     throws ShortBufferException,IllegalBlockSizeException,BadPaddingException {
-   return this.encrypt ? InterruptingSealingProvider.<RuntimeException,Integer>interrupted()
+   return this.encrypt ? InterruptingSealingProvider.<RuntimeException,Integer>raiseResult(selectedSignal())
     : super.engineDoFinal(input,offset,length,output,outputOffset);
   }
  }

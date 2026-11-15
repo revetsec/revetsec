@@ -16,8 +16,7 @@
 
 package com.revetsec.oauth.server;
 
-import com.revetsec.jose.JwksParseResult;
-
+import com.revetsec.InterruptingSealingProvider;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.FormUrlEncoding;
@@ -29,6 +28,7 @@ import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwksParseResult;
 import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -219,6 +219,14 @@ final class OAuthRefreshRotationTests {
  @Test void expiredUnusedRefreshNeverIssuesEvenWhenRetained() {
   String credential=refresh(issued());this.clock.time=refreshRecord(credential).expires(); this.store.authorityNow=this.clock.time;int commits=this.store.commits;invalid(()->rotate(credential));assertEquals(commits,this.store.commits);assertEquals("ACTIVE",refreshRecord(credential).text("status"));
  }
+ @Test void expiredRequiredGrantIsCorruptEvenWhenRefreshRetentionWasExtended() {
+  String credential=refresh(issued());var key=refreshKey(credential);var entry=requireNonNull(this.store.rows.get(key));
+  Instant grantRetention=record(OAuthStoreKey.Kind.GRANT).retention(),extended=grantRetention.plusSeconds(60);
+  JsonObject payload=changed(IssuerTestRecords.open(this.codec,entry,Clock.fixed(NOW,ZoneOffset.UTC)),"horizon",JsonNumber.fromValue(extended.getEpochSecond()));
+  this.store.rows.put(key,IssuerTestRecords.seal(this.codec,key,extended,payload.toJson()));
+  this.clock.time=grantRetention;this.store.authorityNow=grantRetention;
+  failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->rotate(credential));
+ }
  @Test void lastAccessDescendantSurvivesAbsoluteFamilyExpiryAndReuseThenRevokesIt() {
   String current=refresh(issued()),first=current;Instant absolute=record(OAuthStoreKey.Kind.GRANT).expires();
   while(this.clock.time.plusSeconds(43200).isBefore(absolute)){this.clock.time=this.clock.time.plusSeconds(43200); this.store.authorityNow=this.clock.time;current=refresh(rotate(current));}
@@ -296,6 +304,11 @@ final class OAuthRefreshRotationTests {
   assertSame(fatal,assertThrows(TestFatal.class,()->InterruptingSignatureProvider.around(fatal,()->
    rotation(true,Duration.ofMinutes(5),this.retention,signer(),3).rotate(refreshRequest(old,Map.of()),
     (id,b)->Optional.of(client()),resources(),allow(),deadline()))));
+  assertEquals(before,this.store.rows);assertNotNull(rotate(old));
+ }
+ @Test void preparedResealFatalPropagatesAndLeavesRefreshUsable() {
+  String old=refresh(issued());var before=Map.copyOf(this.store.rows);TestFatal fatal=new TestFatal();
+  assertSame(fatal,assertThrows(TestFatal.class,()->InterruptingSealingProvider.around(fatal,()->rotate(old))));
   assertEquals(before,this.store.rows);assertNotNull(rotate(old));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> epochAndIncarnationChangesPreventIssuanceAndDestructiveReuse() {

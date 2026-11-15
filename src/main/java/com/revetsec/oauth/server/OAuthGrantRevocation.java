@@ -196,7 +196,7 @@ final class OAuthGrantRevocation {
   OAuthStoreEntry entry;
   try { terminated = grant.terminated(this.limits, this.subjectLimit); entry = session.seal(key, terminated.retention(), terminated.toPayload()); }
   catch (VirtualMachineError fatal) { throw fatal; }
-  catch (Throwable failure) { if (failure instanceof InterruptedException) Thread.currentThread().interrupt(); throw new OAuthStoreFailure(CORRUPT_STATE); }
+  catch (Throwable failure) { OAuthStoreCoordinator.preserveInterrupt(failure); throw new OAuthStoreFailure(CORRUPT_STATE); }
   return session.commit(List.of(OAuthStoreTransaction.Mutation.fromPut(entry)));
  }
  @Override public @NonNull String toString() { return "OAuthGrantRevocation{<redacted>}"; }

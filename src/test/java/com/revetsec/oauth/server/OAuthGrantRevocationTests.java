@@ -435,6 +435,18 @@ final class OAuthGrantRevocationTests {
   } finally {Thread.interrupted();}
   assertEquals("ACTIVE",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
+ @Test void fatalGrantResealPropagatesWithoutCommittingRevocation() {
+  issued();String id=record(OAuthStoreKey.Kind.GRANT).text("id");int commits=this.store.commits;TestFatal fatal=new TestFatal();
+  assertSame(fatal,assertThrows(TestFatal.class,()->InterruptingSealingProvider.around(fatal,
+   ()->revocations(3).revokeGrant(id,deadline()))));
+  assertEquals(commits,this.store.commits);assertEquals("ACTIVE",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
+ @Test void uncheckedGrantResealFailureIsCorruptWithoutCommittingRevocation() {
+  issued();String id=record(OAuthStoreKey.Kind.GRANT).text("id");int commits=this.store.commits;
+  InterruptingSealingProvider.around(new IllegalStateException("fixture"),
+   ()->failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->revocations(3).revokeGrant(id,deadline())));
+  assertEquals(commits,this.store.commits);assertEquals("ACTIVE",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
  @Test void publicRevocationCannotReturnSuccessAfterCredentialRetentionExpiresDuringCommit() {
   var one=issued();OAuthAuthorizationRecord access=record(OAuthStoreKey.Kind.ACCESS_TOKEN);
   this.store.beforeCommit=()->{this.clock.time=access.retention(); this.store.authorityNow=this.clock.time;};

@@ -253,9 +253,9 @@ final class WebAuthnRelyingPartyTests {
         WebAuthnRegistration high = new WebAuthnRegistration("ns", "example.com", HANDLE, id,
                 highHalfOnly, true, false, false);
         assertEquals(new UUID(0x1000_0000_0000_0000L, 0L), high.getAaguid().orElseThrow());
-        assertEquals(Boolean.TRUE, high.isBackupEligible());
-        assertEquals(Boolean.FALSE, high.isBackedUp());
-        assertEquals(Boolean.FALSE, high.isUserVerifiedAtRegistration());
+        assertTrue(high.isBackupEligible().booleanValue());
+        assertFalse(high.isBackedUp().booleanValue());
+        assertFalse(high.isUserVerifiedAtRegistration().booleanValue());
     }
 
     @Test void configurationAndUncertainBeginDoNotReleaseBrowserOptions() {
