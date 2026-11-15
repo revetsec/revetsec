@@ -108,10 +108,11 @@ final class OidcLogoutHintTests {
 			assertInstanceOf(OidcLogoutHintParseResult.Rejected.class, OidcLogoutHint.fromSealedFormResult(sealed, sealer, "other-context"));
 			clock.set(OidcLogoutFixtures.NOW.plusSeconds(3).minusNanos(1)); assertInstanceOf(OidcLogoutHintParseResult.Parsed.class, OidcLogoutHint.fromSealedFormResult(sealed, sealer, "hint"));
 			clock.set(OidcLogoutFixtures.NOW.plusSeconds(3)); assertInstanceOf(OidcLogoutHintParseResult.Rejected.class, OidcLogoutHint.fromSealedFormResult(sealed, sealer, "hint"));
-			for (SealedStateType type : SealedStateType.values()) if (type != SealedStateType.OIDC_LOGOUT_HINT) {
+			for (SealedStateType type : SealedStateType.values())
+				if (type != SealedStateType.OIDC_LOGOUT_HINT && type != SealedStateType.OIDC_SESSION) {
 				assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().sealForLifetime(sealer, type, "test", "hint", Duration.ofSeconds(2)));
 				assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().unsealUsingConfiguredClock(sealer, type, sealed, "hint"));
-			}
+				}
 		}
 	}
 	@Test

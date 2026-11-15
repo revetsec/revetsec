@@ -108,8 +108,8 @@ final class WebAuthnCloseoutContractTests {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class, authentication);
             } else if (outcome == WebAuthnStoreCommitResult.TIME_EXPIRED) {
-                assertInstanceOf(WebAuthnRegistrationRequestResult.Rejected.class, registration);
-                assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class, authentication);
+				assertInstanceOf(WebAuthnRegistrationRequestResult.Unavailable.class, registration);
+				assertInstanceOf(WebAuthnAuthenticationRequestResult.Unavailable.class, authentication);
             } else if (outcome == WebAuthnStoreCommitResult.UNKNOWN) {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Indeterminate.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Indeterminate.class, authentication);

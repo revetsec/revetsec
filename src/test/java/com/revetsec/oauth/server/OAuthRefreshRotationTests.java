@@ -186,6 +186,14 @@ final class OAuthRefreshRotationTests {
   invalid(()->rotate(refresh(initial)));var won=requireNonNull(winner[0]);assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));inactive(()->validate(token(won)));invalid(()->rotate(refresh(won)));
   assertEquals(2,this.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).count());
  }
+ @Test void rotationBetweenRefreshAndGrantReadsIsRetriedInsteadOfReportedAsCorruption() {
+  var initial=issued();String old=refresh(initial);OAuthTokenResponse[] winner=new OAuthTokenResponse[1];int[] grantReads={0};
+  this.store.beforeReadKey=key->{
+   if(key.getKind()==OAuthStoreKey.Kind.GRANT && ++grantReads[0]==2){this.store.beforeReadKey=null;winner[0]=rotate(old);}
+  };
+  invalid(()->rotate(old));assertNotNull(winner[0]);assertTrue(grantReads[0]>=2);
+  assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));inactive(()->validate(token(requireNonNull(winner[0]))));
+ }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> wrongBindingCannotConsumeOrInvalidateActiveOrUsedCredential() {
   return Stream.of("client","version","resource","random","secret","auth").flatMap(mode->Stream.of(false,true).map(used->DynamicTest.dynamicTest(mode+" used="+used,()->{
    var t=new OAuthRefreshRotationTests();var initial=t.issued();String credential=refresh(initial);if(used)t.rotate(credential);

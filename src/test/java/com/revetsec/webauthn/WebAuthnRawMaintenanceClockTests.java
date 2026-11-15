@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Actual public raw acknowledgements retain known effect after late return; pre-call time is mandatory. */
 final class WebAuthnRawMaintenanceClockTests {
  private static final @NonNull Instant BASE=Instant.parse("2026-11-06T12:00:00Z");
- private static final @NonNull Duration ORIGINAL=Duration.ofMillis(100),HOLD=Duration.ofMillis(150);
+ private static final @NonNull Duration ORIGINAL=Duration.ofSeconds(1),HOLD=Duration.ofMillis(1_100);
  private static final @NonNull String NAMESPACE="raw-maintenance",RP="login.example.test",BINDING="A".repeat(43);
  @org.junit.jupiter.api.TestFactory
  @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scPub05PublicRawResealRetainsLateKnownCommitWithoutNormalReadmission(){

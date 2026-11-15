@@ -40,11 +40,11 @@ final class WebAuthnSettingsTests {
                 .maximumAuthenticatorDataBytes(32 * 1_024)
                 .maximumExcludedCredentials(1)
                 .ceremonyLifetime(Duration.ofSeconds(30))
-                .operationTimeout(Duration.ofMillis(100)).build();
+                .operationTimeout(Duration.ofSeconds(1)).build();
         assertEquals(256 * 1_024, changed.getMaximumResponseBodyBytes());
         assertEquals(32 * 1_024, changed.getMaximumAuthenticatorDataBytes());
         assertEquals(1, changed.getMaximumExcludedCredentials());
-        assertEquals(Duration.ofMillis(100), changed.getOperationTimeout());
+        assertEquals(Duration.ofSeconds(1), changed.getOperationTimeout());
         assertEquals(64 * 1_024, defaults.getMaximumResponseBodyBytes());
         var reset = builder.maximumResponseBodyBytes(null).maximumClientDataJsonBytes(null)
                 .maximumAttestationObjectBytes(null).maximumAuthenticatorDataBytes(null)
@@ -78,7 +78,7 @@ final class WebAuthnSettingsTests {
         assertThrows(IllegalArgumentException.class,
                 () -> WebAuthnSettings.builder().ceremonyLifetime(Duration.ofMinutes(11)));
         assertThrows(IllegalArgumentException.class,
-                () -> WebAuthnSettings.builder().operationTimeout(Duration.ofMillis(99)));
+                () -> WebAuthnSettings.builder().operationTimeout(Duration.ofMillis(999)));
         assertThrows(IllegalArgumentException.class,
                 () -> WebAuthnSettings.builder().operationTimeout(Duration.ofSeconds(31)));
     }

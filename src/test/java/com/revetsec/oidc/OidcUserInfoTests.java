@@ -293,13 +293,23 @@ final class OidcUserInfoTests {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 				server.script("/userinfo", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", "application/json").header("Retry-After", "10").header("WWW-Authenticate", "Bearer error_description=\"" + ACCESS + "\"").body("{\"secret\":" + JsonText.string(REFRESH) + "}").build()));
-				if (status == 429 || status == 503) {
+				if (status == 429) {
 					OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth));
 					assertEquals(status, failure.getStatus()); assertEquals(Optional.of(Duration.ofSeconds(10)), failure.getRetryAfter());
 					assertNull(failure.getCause()); assertRedacted(failure.toString());
 					respond(server, 200, "application/json", json());
-					assertSame(failure, assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth)));
+					OAuthErrorResponseException cached = assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth));
+					assertNotSame(failure, cached); assertEquals(failure.getStatus(), cached.getStatus());
 					assertEquals(1, server.getHitCount("/userinfo"));
+				} else if (status == 503) {
+					OAuthErrorResponseException failure = null;
+					for (int call = 0; call < 3; call++) {
+						failure = assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth));
+						assertEquals(status, failure.getStatus()); assertEquals(Optional.of(Duration.ofSeconds(10)), failure.getRetryAfter());
+					}
+					assertEquals(3, server.getHitCount("/userinfo")); respond(server, 200, "application/json", json());
+					OAuthErrorResponseException cached = assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth));
+					assertNotSame(failure, cached); assertEquals(status, cached.getStatus()); assertEquals(3, server.getHitCount("/userinfo"));
 				} else {
 					OidcUserInfoResult.RejectedEndpoint rejected = assertInstanceOf(OidcUserInfoResult.RejectedEndpoint.class, client.fetchUserInfoResult(auth));
 					assertEquals(status, rejected.getStatus()); assertEquals(OAuthEndpointError.UNRECOGNIZED, rejected.getError());
@@ -321,17 +331,20 @@ final class OidcUserInfoTests {
 					TestTls.httpClient(), com.revetsec.OutboundUriPolicy.defaultInstance(), false), Duration.ofSeconds(10), CLOCK,
 					OidcObserver.disabledInstance(), gate);
 			OidcProviderMetadata provider = metadata(server).build(); respond(server, 503, "application/json", "{}");
-			OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> endpoint.fetch(provider, keys(), auth,
+			OAuthErrorResponseException failure = null;
+			for (int call = 0; call < 3; call++)
+				failure = assertThrows(OAuthErrorResponseException.class, () -> endpoint.fetch(provider, keys(), auth,
+						"client", null, Duration.ZERO, Set.of(), com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15))));
+			OAuthErrorResponseException cached = assertThrows(OAuthErrorResponseException.class, () -> endpoint.fetch(provider, keys(), auth,
 					"client", null, Duration.ZERO, Set.of(), com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15))));
-			assertSame(failure, assertThrows(OAuthErrorResponseException.class, () -> endpoint.fetch(provider, keys(), auth,
-					"client", null, Duration.ZERO, Set.of(), com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15)))));
-			assertEquals(1, server.getHitCount("/userinfo")); nanos.addAndGet(Duration.ofSeconds(2).toNanos());
+			assertNotSame(failure, cached); assertEquals(Objects.requireNonNull(failure).getStatus(), cached.getStatus());
+			assertEquals(3, server.getHitCount("/userinfo")); nanos.addAndGet(Duration.ofSeconds(11).toNanos());
 			for (int call = 0; call < 2; call++) {
 				respond(server, 200, "application/json", json());
 				assertEquals(SUBJECT, endpoint.fetch(provider, keys(), auth, "client", null, Duration.ZERO, Set.of(),
 						com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15))).getSubject());
 			}
-			assertEquals(3, server.getHitCount("/userinfo"));
+			assertEquals(5, server.getHitCount("/userinfo"));
 		}
 	}
 
@@ -350,13 +363,15 @@ final class OidcUserInfoTests {
 	}
 
 	@Test
-	void timedOutUserInfoIsNotRetriedAndItsFailureBacksOffFurtherCalls() throws Exception {
+	void timedOutUserInfoIsNotRetriedAndDoesNotBackOffLaterCallers() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).build();
 			OidcAuthentication auth = authenticate(server, client, ACCESS, 300); server.script("/userinfo", TestHttpsServer.Script.fromTarpit());
 			OAuthException failure = assertThrows(OAuthException.class, () -> client.fetchUserInfoResult(auth)); assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason());
 			assertEquals(1, server.getHitCount("/userinfo")); respond(server, 200, "application/json", json());
-			assertSame(failure, assertThrows(OAuthException.class, () -> client.fetchUserInfoResult(auth))); assertEquals(1, server.getHitCount("/userinfo")); assertRedacted(failure.toString());
+			assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class,
+					client.fetchUserInfoResult(auth)).getUserInfo().getSubject());
+			assertEquals(2, server.getHitCount("/userinfo")); assertRedacted(failure.toString());
 		}
 	}
 	@Test

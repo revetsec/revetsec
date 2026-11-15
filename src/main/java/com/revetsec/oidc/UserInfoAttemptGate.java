@@ -41,20 +41,24 @@ final class UserInfoAttemptGate {
 	private @Nullable Attempt probe;
 	private long generation;
 	private int failures;
+	private int consecutiveServerFailures;
 	private long failedAtNanos;
 	private long backoffNanos;
 	UserInfoAttemptGate(@NonNull Duration cooldown, @NonNull LongSupplier nanoTime) { this.cooldown = cooldown; this.nanoTime = nanoTime; }
 	@NonNull Attempt acquire(@NonNull Deadline deadline, @NonNull Duration requestTimeout) {
+		requireActive(deadline);
 		this.lock.lock();
 		try {
+			requireActive(deadline);
 			long now = this.nanoTime.getAsLong();
-			if (this.failure != null && now - this.failedAtNanos < this.backoffNanos) throw this.failure;
+			if (this.failure != null && now - this.failedAtNanos < this.backoffNanos)
+				throw OidcTransactionAccess.get().copyEndpointFailure(this.failure);
 			if (this.probe != null && now - this.probe.startedNanos > this.probe.overdueAfterNanos) {
 				this.probe = null; this.generation++;
 			}
 			if (this.probe != null) throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.ATTEMPT_LIMIT);
 			long budget = Math.min(Math.max(0, deadline.remainingNanos()), requestTimeout.toNanos()) + requestTimeout.toNanos();
-			Attempt attempt = new Attempt(this.generation, now, budget);
+			Attempt attempt = new Attempt(this.generation, now, budget, deadline);
 			if (this.failure != null) this.probe = attempt;
 			return attempt;
 		} finally { this.lock.unlock(); }
@@ -63,21 +67,32 @@ final class UserInfoAttemptGate {
 		this.lock.lock();
 		try {
 			if (attempt.generation == this.generation && this.failure != null) {
-				this.failure = null; this.failures = 0; this.generation++;
+				this.failure = null; this.failures = 0; this.consecutiveServerFailures = 0; this.generation++;
 			}
+			else if (attempt.generation == this.generation) this.consecutiveServerFailures = 0;
 			if (this.probe == attempt) this.probe = null;
 		} finally { this.lock.unlock(); }
 	}
 	void failed(@NonNull Attempt attempt, @NonNull OAuthException failure) {
+		boolean interrupted = failure.getReason() == OAuthException.Reason.INTERRUPTED
+				|| Thread.currentThread().isInterrupted();
+		boolean callerLocal = interrupted || attempt.deadline.isExpired();
+		if (interrupted) Thread.currentThread().interrupt();
 		this.lock.lock();
 		try {
-			if (attempt.generation == this.generation && failure.isTemporaryCondition()
-					&& failure.getReason() != OAuthException.Reason.INTERRUPTED) {
-				this.failure = failure; this.failedAtNanos = this.nanoTime.getAsLong(); this.generation++;
-				this.failures = Math.min(5, this.failures + 1);
-				this.backoffNanos = Math.min(this.cooldown.toNanos() << (this.failures - 1),
-						Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
-				if (failure instanceof OAuthErrorResponseException error) {
+			if (attempt.generation == this.generation && failure.isTemporaryCondition() && !callerLocal) {
+				boolean serverFailure = failure instanceof OAuthErrorResponseException error
+						&& error.getStatus() >= 500 && error.getStatus() < 600;
+				boolean record = !serverFailure || ++this.consecutiveServerFailures >= 3;
+				if (record) {
+					this.consecutiveServerFailures = 0;
+					this.failure = OidcTransactionAccess.get().copyEndpointFailure(failure);
+					this.failedAtNanos = this.nanoTime.getAsLong(); this.generation++;
+					this.failures = Math.min(5, this.failures + 1);
+					this.backoffNanos = Math.min(this.cooldown.toNanos() << (this.failures - 1),
+							Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
+				}
+				if (record && failure instanceof OAuthErrorResponseException error) {
 					Duration delay = error.getRetryAfter().orElse(Duration.ZERO);
 					long nanos = delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
 					this.backoffNanos = Math.max(this.backoffNanos, nanos);
@@ -91,8 +106,16 @@ final class UserInfoAttemptGate {
 		final long generation;
 		final long startedNanos;
 		final long overdueAfterNanos;
-		Attempt(long generation, long startedNanos, long overdueAfterNanos) {
+		final @NonNull Deadline deadline;
+		Attempt(long generation, long startedNanos, long overdueAfterNanos, @NonNull Deadline deadline) {
 			this.generation = generation; this.startedNanos = startedNanos; this.overdueAfterNanos = overdueAfterNanos;
+			this.deadline = deadline;
 		}
+	}
+	private static void requireActive(@NonNull Deadline deadline) {
+		if (Thread.currentThread().isInterrupted())
+			throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.INTERRUPTED);
+		if (deadline.isExpired())
+			throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.NETWORK_FAILURE);
 	}
 }

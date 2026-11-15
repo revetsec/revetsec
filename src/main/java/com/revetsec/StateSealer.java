@@ -523,7 +523,8 @@ public final class StateSealer {
 		public @NonNull String sealForLifetime(@NonNull StateSealer sealer, @NonNull SealedStateType type,
 				@NonNull String plaintext, @NonNull String context, @NonNull Duration lifetime) {
 			requireNonNull(sealer); requireNonNull(type);
-			if (type != SealedStateType.OIDC_LOGOUT_HINT) throw new IllegalArgumentException("The lifetime operation requires a logout hint type.");
+			if (type != SealedStateType.OIDC_LOGOUT_HINT && type != SealedStateType.OIDC_SESSION)
+				throw new IllegalArgumentException("The lifetime operation requires an OIDC application-storage type.");
 			return sealer.sealForLifetime(type, plaintext, context, lifetime);
 		}
 
@@ -531,7 +532,8 @@ public final class StateSealer {
 		public @NonNull String unsealUsingConfiguredClock(@NonNull StateSealer sealer, @NonNull SealedStateType type,
 				@NonNull String sealed, @NonNull String context) throws UnsealException {
 			requireNonNull(sealer); requireNonNull(type);
-			if (type != SealedStateType.OIDC_LOGOUT_HINT) throw new IllegalArgumentException("The configured-clock operation requires a logout hint type.");
+			if (type != SealedStateType.OIDC_LOGOUT_HINT && type != SealedStateType.OIDC_SESSION)
+				throw new IllegalArgumentException("The configured-clock operation requires an OIDC application-storage type.");
 			return unseal(sealer, type, sealed, context, sealer.clock);
 		}
 

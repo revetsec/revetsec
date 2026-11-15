@@ -35,7 +35,7 @@ final class UserInfoAttemptGateTests {
 		AtomicLong time = new AtomicLong(); UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);
 		UserInfoAttemptGate.Attempt first = gate.acquire(deadline(), REQUEST), second = gate.acquire(deadline(), REQUEST), third = gate.acquire(deadline(), REQUEST);
 		gate.healthy(first); OAuthException failed = failure(); gate.failed(second, failed); gate.healthy(third);
-		assertSame(failed, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)));
+		assertNotSame(failed, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)));
 		time.set(Duration.ofSeconds(1).toNanos()); UserInfoAttemptGate.Attempt recovery = gate.acquire(deadline(), REQUEST);
 		assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)).getReason());
 		gate.healthy(recovery); gate.failed(third, failure()); gate.healthy(gate.acquire(deadline(), REQUEST));
@@ -47,14 +47,14 @@ final class UserInfoAttemptGateTests {
 		UserInfoAttemptGate.Attempt old = gate.acquire(deadline(), REQUEST); time.addAndGet(Duration.ofSeconds(3).toNanos());
 		UserInfoAttemptGate.Attempt replacement = gate.acquire(deadline(), REQUEST); gate.healthy(old); gate.failed(old, failure());
 		assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)).getReason());
-		OAuthException newest = failure(); gate.failed(replacement, newest); assertSame(newest, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)));
+		OAuthException newest = failure(); gate.failed(replacement, newest); assertNotSame(newest, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)));
 	}
 	@Test
 	void exponentialBackoffIsMonotonicAndCappedAndRecoveryResetsIt() {
 		AtomicLong time = new AtomicLong(); UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);
 		for (int seconds : new int[]{1, 2, 4, 8, 10, 10, 10}) {
 			OAuthException failed = failure(); gate.failed(gate.acquire(deadline(), REQUEST), failed);
-			time.addAndGet(Duration.ofSeconds(seconds).toNanos() - 1); assertSame(failed, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST))); time.incrementAndGet();
+			time.addAndGet(Duration.ofSeconds(seconds).toNanos() - 1); assertNotSame(failed, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST))); time.incrementAndGet();
 		}
 		gate.healthy(gate.acquire(deadline(), REQUEST)); gate.failed(gate.acquire(deadline(), REQUEST), failure());
 		time.addAndGet(Duration.ofSeconds(1).toNanos()); gate.healthy(gate.acquire(deadline(), REQUEST));
@@ -65,14 +65,37 @@ final class UserInfoAttemptGateTests {
 			AtomicLong time = new AtomicLong(); UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);
 			OAuthException failed = OidcTransactionAccess.get().endpointStatusFailure(429, retry); gate.failed(gate.acquire(deadline(), REQUEST), failed);
 			long delay = (retry.isZero() ? Duration.ofSeconds(1) : Duration.ofMinutes(10)).toNanos();
-			time.set(delay - 1); assertSame(failed, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST))); time.incrementAndGet(); gate.healthy(gate.acquire(deadline(), REQUEST));
+			time.set(delay - 1); assertNotSame(failed, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST))); time.incrementAndGet(); gate.healthy(gate.acquire(deadline(), REQUEST));
 		}
+	}
+	@Test
+	void oneServerErrorDoesNotOpenEndpointWideBackoffButThreeConsecutiveErrorsDo() {
+		AtomicLong time = new AtomicLong(); UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);
+		OAuthException first = OidcTransactionAccess.get().endpointStatusFailure(503, null);
+		gate.failed(gate.acquire(deadline(), REQUEST), first);
+		UserInfoAttemptGate.Attempt secondAttempt = gate.acquire(deadline(), REQUEST);
+		gate.failed(secondAttempt, OidcTransactionAccess.get().endpointStatusFailure(503, null));
+		UserInfoAttemptGate.Attempt thirdAttempt = gate.acquire(deadline(), REQUEST);
+		OAuthException third = OidcTransactionAccess.get().endpointStatusFailure(503, null);
+		gate.failed(thirdAttempt, third);
+		assertNotSame(third, assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)));
+		time.set(Duration.ofSeconds(1).toNanos());
+		gate.healthy(gate.acquire(deadline(), REQUEST));
 	}
 	@Test
 	void interruptionsAndNonTransientErrorsDoNotPoisonOtherCredentials() {
 		AtomicLong time = new AtomicLong(); UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);
 		gate.failed(gate.acquire(deadline(), REQUEST), OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.INTERRUPTED));
+		assertTrue(Thread.interrupted());
 		gate.failed(gate.acquire(deadline(), REQUEST), OidcTransactionAccess.get().endpointStatusFailure(401, null));
+		gate.healthy(gate.acquire(deadline(), REQUEST));
+	}
+	@Test
+	void expiredCallerIsRefusedWithoutPoisoningTheEndpoint() {
+		UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), System::nanoTime);
+		OAuthException failure = assertThrows(OAuthException.class,
+				() -> gate.acquire(Deadline.fromNow(Duration.ZERO), REQUEST));
+		assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason());
 		gate.healthy(gate.acquire(deadline(), REQUEST));
 	}
 }

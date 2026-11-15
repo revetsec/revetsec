@@ -377,6 +377,10 @@ final class KeyImportsTests {
 	@Test
 	void exposedPrivateProfilesAndCrossCurveMismatchesFailWithoutPrivateExport() throws Exception {
 		PublicKey rsa = KeyImports.publicKeyFromPem(fixture(MATERIALS.get(0).publicKey));
+		KeyPairGenerator largerRsa = KeyPairGenerator.getInstance("RSA"); largerRsa.initialize(3072);
+		PrivateKey differentSize = largerRsa.generateKeyPair().getPrivate();
+		reason(KeyImportException.Reason.KEY_PAIR_MISMATCH,
+				() -> KeyImports.checkKeyPair(differentSize, rsa, BUDGET));
 		reason(KeyImportException.Reason.KEY_REJECTED, () -> KeyImports.checkKeyPair(Pem.parsePrivateKey(fixture("keys/negative-rsa-1024-key.pem")), rsa, BUDGET));
 		reason(KeyImportException.Reason.UNSUPPORTED_KEY, () -> KeyImports.checkKeyPair(Pem.parsePrivateKey(fixture("keys/idp-signing-ec-p521-key.pem")), rsa, BUDGET));
 		reason(KeyImportException.Reason.UNSUPPORTED_KEY, () -> KeyImports.checkKeyPair(KeyPairGenerator.getInstance("Ed448").generateKeyPair().getPrivate(), rsa, BUDGET));

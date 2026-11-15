@@ -235,7 +235,9 @@ public final class InMemoryTotpStore implements TotpStore {
 			long after = System.nanoTime();
 			Optional<Duration> bracket = StoreTimeRules.elapsed(before, after);
 			if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured)) {
-				this.authorityContinuityLost = true;
+				// A transient pause during the first sample is not a continuity failure: there is no
+				// established authority clock yet. Keep the anchor unset so a later call can retry.
+				return StoreTimeObservation.Unavailable.fromAdmission(current);
 			} else {
 				this.authorityAnchor = captured;
 				this.authorityStartedNanos = after;

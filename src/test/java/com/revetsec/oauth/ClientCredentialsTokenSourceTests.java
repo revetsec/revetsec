@@ -45,6 +45,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ClientCredentialsTokenSourceTests {
 	@Test
+	void interruptedCallerDoesNotStartOrPoisonTokenRenewal() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			server.script("/token", TestHttpsServer.Script.fromResponse(json("token")));
+			OAuthClient client = OAuthClient.withAuthorizationServerMetadata(
+					AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
+							.authorizationEndpoint(server.uri("/auth")).tokenEndpoint(server.uri("/token")).build())
+					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
+					.httpClient(TestTls.httpClient()).build();
+			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
+			try {
+				Thread.currentThread().interrupt();
+				OAuthException failure = assertThrows(OAuthException.class, source::getAccessTokenResult);
+				assertEquals(OAuthException.Reason.INTERRUPTED, failure.getReason());
+				assertTrue(Thread.currentThread().isInterrupted());
+				assertEquals(0, server.getHitCount("/token"));
+			} finally { Thread.interrupted(); }
+			assertEquals("token", assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class,
+					source.getAccessTokenResult()).getAccessToken().getValue());
+			assertEquals(1, server.getHitCount("/token"));
+		}
+	}
+
+	@Test
 	void clockRollbackInvalidatesCachedClientCredentialsToken() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			server.script("/token", TestHttpsServer.Script.fromSequence(List.of(json("first"), json("replacement"))));

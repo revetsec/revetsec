@@ -102,7 +102,15 @@ final class OAuthGrantRevocation {
    OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, credential.text("grantId"));
    OAuthAuthorizationRecord grant = this.status.read(session, grantKey);
    if (grant == null) { if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) return response; else continue; }
-   if (refresh) checkRefresh(credential, grant, id); else this.status.checkAccessGrant(credential, grant);
+   if (refresh) {
+    try { checkRefresh(credential, grant, id); }
+    catch (OAuthStoreFailure failure) {
+     // The refresh and grant rows are separate reads; a concurrent rotation is a retryable
+     // conflict unless a barrier confirms the contradictory pair at one linearization point.
+     if (session.barrier() != OAuthStoreCommitStatus.COMMITTED) continue;
+     throw failure;
+    }
+   } else this.status.checkAccessGrant(credential, grant);
    OAuthStoreFence subject = session.subject(grant.text("subject"));
    String resource = request.value("resource");
    boolean owned = grant.text("clientId").equals(client.getClientId())

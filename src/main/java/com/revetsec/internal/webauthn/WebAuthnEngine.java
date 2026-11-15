@@ -410,7 +410,8 @@ public final class WebAuthnEngine {
             if (committed == WebAuthnStoreCoordinator.Commit.INDETERMINATE)
                 return Start.failure(Status.INDETERMINATE);
             if (committed == WebAuthnStoreCoordinator.Commit.RECONCILIATION_REQUIRED) return Start.failure(Status.RECONCILIATION_REQUIRED);
-            if (committed == WebAuthnStoreCoordinator.Commit.TIME_EXPIRED) return Start.failure(Status.REJECTED);
+            if (committed == WebAuthnStoreCoordinator.Commit.TIME_EXPIRED)
+                return Start.failure(expiresAt.isAfter(action) ? Status.UNAVAILABLE : Status.REJECTED);
             if (committed != WebAuthnStoreCoordinator.Commit.COMMITTED)
                 return Start.failure(Status.UNAVAILABLE);
             return Start.prepared(new Request(id, challenge, excluded));

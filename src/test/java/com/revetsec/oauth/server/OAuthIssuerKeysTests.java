@@ -126,6 +126,33 @@ final class OAuthIssuerKeysTests {
    for(Future<?> call:calls)call.get(20,TimeUnit.SECONDS);
   } finally {start.countDown();pool.shutdownNow();}
  }
+ @Test void authorityReadsRunOutsideTheLifecycleConsistencyLock() throws Exception {
+  OAuthIssuerKeySnapshot keys=initial();
+  OAuthIssuerKeyLifecycle lifecycle=lifecycle(keys);
+  CountDownLatch entered=new CountDownLatch(2),release=new CountDownLatch(1);
+  ExecutorService pool=Executors.newFixedThreadPool(2);
+  try {
+   List<Future<?>> calls=new ArrayList<>();
+   for(int worker=0;worker<2;worker++)calls.add(pool.submit(()->lifecycle.verificationKeys(
+    Deadline.fromNow(Duration.ofSeconds(3)),()->{
+     entered.countDown();
+     try{if(!release.await(2,TimeUnit.SECONDS))throw new IllegalStateException("authority read timed out");}
+     catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IllegalStateException(interrupted);}
+     return NOW;
+    })));
+   assertTrue(entered.await(1,TimeUnit.SECONDS));
+   release.countDown();
+   for(Future<?> call:calls)assertNotNull(call.get(3,TimeUnit.SECONDS));
+  } finally {release.countDown();pool.shutdownNow();}
+ }
+ @Test void smallAuthorityRollbackUsesTheAcceptedHighWaterMark() {
+  MutableClock clock=new MutableClock(NOW);
+  OAuthIssuerKeySnapshot keys=initial();
+  OAuthIssuerKeyLifecycle lifecycle=lifecycle(OAuthIssuerKeyProvider.fromSnapshot(keys),clock);
+  assertSame(keys,lifecycle.snapshot(deadline()));
+  clock.now=NOW.minusMillis(1);
+  assertSame(keys,lifecycle.snapshot(deadline()));
+ }
  @Test void resetAndMutationIsolationApplyToEveryBuilderProperty() {
   Map<String,PublicKey> keys=new LinkedHashMap<>(Map.of("b",B.getPublicKey()));Map<String,Instant> retirement=new LinkedHashMap<>(Map.of("b",NOW.plusSeconds(1000)));
   var builder=OAuthIssuerKeySnapshot.withActiveKey(key("a",A)).generation("g").publishedAt(NOW.minusSeconds(120)).verificationKeys(keys).retirementNotBefore(retirement);
@@ -277,12 +304,12 @@ final class OAuthIssuerKeysTests {
   }));
   return tests.stream();
  }
- @Test void earlyRetirementAndBackwardClockFailWithoutReplacingLastGoodSnapshot() {
+ @Test void earlyRetirementFailsWithoutReplacingLastGoodSnapshotAndRollbackUsesHighWater() {
   MutableClock clock=new MutableClock(NOW);var first=snapshot(key("a",A),"g1",NOW.minusSeconds(120),Map.of(),Map.of("a",NOW.plusSeconds(500)));
   AtomicReference<OAuthIssuerKeySnapshot> ref=new AtomicReference<>(first);var life=lifecycle(budget->requireNonNull(ref.get()),clock);assertNotNull(life.sign(claims(),NOW.plusSeconds(300),deadline()));
   ref.set(snapshot(key("a",A),"g2",NOW.minusSeconds(60),Map.of(),Map.of("a",NOW.plusSeconds(400))));unavailable(()->life.snapshot(deadline()));
   ref.set(snapshot(key("b",B),"g2",NOW.minusSeconds(60),Map.of("a",A.getPublicKey()),Map.of("a",NOW.plusSeconds(399))));unavailable(()->life.snapshot(deadline()));
-  ref.set(first);clock.now=NOW.minusNanos(1);unavailable(()->life.snapshot(deadline()));clock.now=NOW;assertSame(first,life.snapshot(deadline()));
+  ref.set(first);clock.now=NOW.minusNanos(1);assertSame(first,life.snapshot(deadline()));clock.now=NOW;assertSame(first,life.snapshot(deadline()));
  }
  @Test void rotationDuringPreparedSigningIsRechecked() {
   AtomicInteger calls=new AtomicInteger();var before=initial();var missing=snapshot(key("b",B),"g2",NOW.minusSeconds(60),Map.of(),Map.of());

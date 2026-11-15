@@ -17,9 +17,11 @@
 package com.revetsec.oidc;
 
 import com.revetsec.StateSealer;
-import com.revetsec.StateUnsealResult;
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.crypto.ConstantTime;
+import com.revetsec.internal.crypto.SealedStateAccess;
+import com.revetsec.internal.crypto.SealedStateType;
+import com.revetsec.internal.crypto.UnsealException;
 import com.revetsec.internal.encoding.StrictUtf8;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.encoding.EncodingException;
@@ -192,7 +194,7 @@ public final class OidcSessionReference {
 		finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
 	}
 	/**
-	 * Seals a reference under an application-specific context and explicit lifetime. The sealer's lifetime and size
+	 * Seals a reference under the OIDC-session type, an application-specific context and explicit lifetime. The sealer's lifetime and size
 	 * bounds apply. The application owns session lifetime and refresh-token storage.
 	 * @param sealer application sealer
 	 * @param context application-specific OIDC session context
@@ -201,7 +203,8 @@ public final class OidcSessionReference {
 	 * @since 1.0.0
 	 */
 	public @NonNull String toSealedForm(@NonNull StateSealer sealer, @NonNull String context, @NonNull Duration lifetime) {
-		return requireNonNull(sealer).seal(toSerializedForm(), requireNonNull(context), requireNonNull(lifetime));
+		return SealedStateAccess.get().sealForLifetime(requireNonNull(sealer), SealedStateType.OIDC_SESSION,
+				toSerializedForm(), requireNonNull(context), requireNonNull(lifetime));
 	}
 	/**
 	 * Opens a sealed reference under its original context. Invalid sealed state and invalid reference structure
@@ -215,10 +218,11 @@ public final class OidcSessionReference {
 	@CheckReturnValue
 	public static @NonNull OidcSessionReferenceParseResult fromSealedFormResult(@NonNull String sealedForm,
 			@NonNull StateSealer sealer, @NonNull String context) {
-		StateUnsealResult opened = requireNonNull(sealer).unsealResult(requireNonNull(sealedForm), requireNonNull(context));
-		if (!(opened instanceof StateUnsealResult.Succeeded success))
-			return OidcSessionReferenceParseResult.fromRejection();
-		return fromSerializedFormResult(success.getValue());
+		try {
+			String opened = SealedStateAccess.get().unsealUsingConfiguredClock(requireNonNull(sealer),
+					SealedStateType.OIDC_SESSION, requireNonNull(sealedForm), requireNonNull(context));
+			return fromSerializedFormResult(opened);
+		} catch (UnsealException invalid) { return OidcSessionReferenceParseResult.fromRejection(); }
 	}
 
 	private static @NonNull Optional<@NonNull Long> referenceLong(@NonNull JsonObject object, @NonNull String name) {

@@ -213,31 +213,29 @@ final class OidcRc1MutationTests {
         }
     }
 
-    @TestFactory
-    @NonNull Stream<@NonNull DynamicTest> recoveryProbesAreReplacedOnlyAfterTheirExactAllowance() {
-        return Stream.of(false, true).map(expiredDeadline -> DynamicTest.dynamicTest(
-                expiredDeadline ? "expired caller allowance" : "normal caller allowance", () -> {
-                    AtomicLong nanos = new AtomicLong();
-                    Duration request = Duration.ofSeconds(1);
-                    UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), nanos::get);
-                    OAuthException failed = OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.NETWORK_FAILURE);
-                    gate.failed(gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request), failed);
-                    nanos.set(request.toNanos());
-                    UserInfoAttemptGate.Attempt first = gate.acquire(
-                            Deadline.fromNow(expiredDeadline ? Duration.ZERO : Duration.ofSeconds(5)), request);
-                    nanos.set(Duration.ofSeconds(expiredDeadline ? 2 : 3).toNanos());
-                    assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthException.class,
-                            () -> gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request)).getReason());
-                    nanos.incrementAndGet();
-                    UserInfoAttemptGate.Attempt replacement = gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request);
-                    gate.healthy(first);
-                    gate.failed(first, failed);
-                    assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthException.class,
-                            () -> gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request)).getReason());
-                    gate.healthy(replacement);
-                    gate.failed(first, failed);
-                    assertNotNull(gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request));
-                }));
+    @Test
+    void recoveryProbesAreReplacedOnlyAfterTheirExactAllowance() {
+        AtomicLong nanos = new AtomicLong();
+        Duration request = Duration.ofSeconds(1);
+        UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), nanos::get);
+        OAuthException failed = OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.NETWORK_FAILURE);
+        gate.failed(gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request), failed);
+        nanos.set(request.toNanos());
+        assertEquals(OAuthException.Reason.NETWORK_FAILURE, assertThrows(OAuthException.class,
+                () -> gate.acquire(Deadline.fromNow(Duration.ZERO), request)).getReason());
+        UserInfoAttemptGate.Attempt first = gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request);
+        nanos.set(Duration.ofSeconds(3).toNanos());
+        assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthException.class,
+                () -> gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request)).getReason());
+        nanos.incrementAndGet();
+        UserInfoAttemptGate.Attempt replacement = gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request);
+        gate.healthy(first);
+        gate.failed(first, failed);
+        assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthException.class,
+                () -> gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request)).getReason());
+        gate.healthy(replacement);
+        gate.failed(first, failed);
+        assertNotNull(gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request));
     }
 
     @Test
@@ -251,8 +249,10 @@ final class OidcRc1MutationTests {
         OAuthException failed = OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.NETWORK_FAILURE);
         onFreshCaller(() -> { gate.failed(second, failed); return true; });
         onFreshCaller(() -> {
-            assertSame(failed, assertThrows(OAuthException.class,
-                    () -> gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request)));
+            OAuthException cached = assertThrows(OAuthException.class,
+                    () -> gate.acquire(Deadline.fromNow(Duration.ofSeconds(5)), request));
+            assertNotSame(failed, cached);
+            assertEquals(failed.getReason(), cached.getReason());
             return true;
         });
         nanos.set(request.toNanos());

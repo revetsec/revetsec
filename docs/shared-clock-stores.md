@@ -84,9 +84,11 @@ committed enrollment remains effective. The API does not reopen disabled account
 fences, indexes, credentials and revoked-ID tombstones are never expired or evicted by this change.
 
 Abandoned begins retain only their finite ceremonies plus any shared namespace root. Reads and
-no-effect refusals do not reclaim them. The application must rate-limit enrollment and supply
-explicit admitted ceremony maintenance where supported by its backend; retained ceremonies can
-still exhaust capacity. The volatile in-memory example has no automatic maintenance. Completion
+no-effect refusals do not reclaim them. A `WebAuthnStore` must reclaim expired ceremonies, either
+atomically within successful mutating commits using the same fresh admitted time, as
+`InMemoryWebAuthnStore` does, or through explicit admitted maintenance such as the PostgreSQL
+example's `reclaimExpiredCeremonies`. Until reclaimed, retained ceremonies count against capacity,
+so the application must still rate-limit enrollment and sign-in begins. Completion
 needs capacity for the additional permanent records and can refuse atomically while leaving the
 pending ceremony unconsumed. Reconcile unknown or late committed outcomes before retrying or
 releasing proof, under the existing recovery contract.

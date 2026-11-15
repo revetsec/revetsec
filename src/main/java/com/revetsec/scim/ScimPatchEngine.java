@@ -326,6 +326,13 @@ final class ScimPatchEngine {
             @Nullable JsonValue incoming,@NonNull ScimPatchOperationType kind,@NonNull ScimAttributePath target) {
         if (!spend(1)) return null;
         if (definition.getMutability() == ScimMutability.READ_ONLY) { error=ScimError.mutabilityInstance(); return null; }
+        // A never-returned immutable value cannot safely acknowledge a correct echo: success
+        // would turn mutability handling into a stored-secret equality oracle.
+        if (definition.getMutability() == ScimMutability.IMMUTABLE
+                && definition.getReturned() == ScimReturned.NEVER
+                && ScimResourceValidation.assigned(old)) {
+            error=ScimError.mutabilityInstance(); return null;
+        }
         JsonValue result;
         if (kind == ScimPatchOperationType.REMOVE || incoming instanceof JsonNull) {
             if (old != null && !groupMembers(target)

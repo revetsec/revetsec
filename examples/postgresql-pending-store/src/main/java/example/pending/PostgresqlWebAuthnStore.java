@@ -29,6 +29,7 @@ import com.revetsec.webauthn.WebAuthnStoreSnapshot;
 import com.revetsec.webauthn.WebAuthnStoreWrite;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -46,6 +47,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
 import static java.util.Objects.requireNonNull;
@@ -55,8 +57,11 @@ import static java.util.Objects.requireNonNull;
  * supplies an independent trusted authority and separately owns writer fencing and closed migration.
  * Normal callbacks use shared admission, sorted logical entity locks, then changed entry escrow
  * buckets. New namespace-root insertion takes exclusive admission first. Time is sampled after
- * all waits. Reads and failed writes perform no pruning or data/quota/floor writes. Constructors
- * perform no I/O. This one-primary fixture does not qualify UTC, a witness owner or a deployment.
+ * all waits. Reads, ordinary commits and failed writes perform no pruning or data/quota/floor
+ * writes; expired ceremonies are reclaimed only by the explicit bounded
+ * {@link #reclaimExpiredCeremonies(int, Duration)} maintenance call, which the application schedules.
+ * Constructors perform no I/O. This one-primary fixture does not qualify UTC, a witness owner or a
+ * deployment.
  */
 @ThreadSafe
 public final class PostgresqlWebAuthnStore implements WebAuthnStore {
@@ -138,6 +143,100 @@ public final class PostgresqlWebAuthnStore implements WebAuthnStore {
 		});
 		if(outcome.status()==WebAuthnPgTransactions.Status.COMMITTED)return WebAuthnStoreCommitReceipt.fromCommittedTiming(outcome.value().orElseThrow());
 		return outcome.status()==WebAuthnPgTransactions.Status.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():refusal(WebAuthnStoreCommitResult.valueOf(outcome.refusal().orElse(WebAuthnPgTransactions.Refusal.UNAVAILABLE).name()));
+	}
+	/** Physical ceremony-cleanup outcomes, never ordinary protocol admission or deployment-readiness proofs. */
+	public enum CleanupStatus { COMMITTED, CONFLICT, TIME_BEFORE_EXPIRY, TIME_UNAVAILABLE, FENCED, UNAVAILABLE, UNKNOWN }
+	/** Factual batch outcome; UNKNOWN carries no guessed removed count and permits no automatic retry. */
+	@Immutable
+	public static final class CleanupResult {
+		private final @NonNull CleanupStatus status;
+		private final int removed;
+		private final boolean acknowledgedWithinBudget;
+		private CleanupResult(@NonNull CleanupStatus status,int removed,boolean acknowledgedWithinBudget){this.status=status;this.removed=removed;this.acknowledgedWithinBudget=acknowledgedWithinBudget;}
+		public @NonNull CleanupStatus getStatus(){return this.status;}
+		public @NonNull OptionalInt getRemovedCount(){return this.status==CleanupStatus.COMMITTED?OptionalInt.of(this.removed):OptionalInt.empty();}
+		/** Only acknowledgement timing; this does not assert current health or authorize ordinary service. */
+		public boolean isAcknowledgedWithinBudget(){return this.acknowledgedWithinBudget;}
+		@Override public @NonNull String toString(){return "WebAuthnCleanupResult{<redacted>}";}
+	}
+	/**
+	 * Explicit application-scheduled reclamation of at most sixteen expired ceremony rows, oldest expiry first.
+	 * Ordinary reads and commits never call it. Candidates are selected at one healthy admitted time, locked in
+	 * sorted order, rechecked for exact version and expiry, and deleted only after a fresh admitted time taken after
+	 * every wait still covers their expiry. Their capacity buckets are released in the same transaction. Permanent
+	 * credentials, indexes, account fences and namespace roots are never candidates. This trusts the integrity/ACL
+	 * protection of engine-written SQL expiry metadata; tampering, backup restore and closed migration need separate
+	 * admission/recovery procedures. A known committed count stays factual after late acknowledgement; UNKNOWN has
+	 * no count and is never retried automatically. Repeat while a full batch is removed.
+	 * @param maximumRows bounded batch size, from one through sixteen
+	 * @param remainingBudget original remaining budget; nonpositive refuses without lookup, above thirty seconds caps
+	 * @return physical outcome, never a readiness or protocol-success proof
+	 */
+	public @NonNull CleanupResult reclaimExpiredCeremonies(int maximumRows,@NonNull Duration remainingBudget){
+		if(maximumRows<1 || maximumRows>16)throw new IllegalArgumentException("Invalid WebAuthn cleanup batch");
+		Duration budget=capped(remainingBudget);
+		if(budget.isZero() || Thread.currentThread().isInterrupted())return cleanupRefusal(CleanupStatus.UNAVAILABLE);
+		long deadline=System.nanoTime()+budget.toNanos();
+		WebAuthnPgTransactions.Outcome<Integer> outcome=WebAuthnPgTransactions.execute(this.source::open,left(deadline),context->{
+			Connection connection=context.connection();WebAuthnPgLocks.sharedAdmission(connection,this.scope,context.deadlineNanos());
+			Namespace admitted=namespace(context);StoreTimeObservation first;
+			try{first=observe(context,admitted);}catch(AdmissionChanged fenced){return WebAuthnPgTransactions.Decision.refuse(WebAuthnPgTransactions.Refusal.FENCED);}
+			if(!(first instanceof StoreTimeObservation.Healthy initial))return WebAuthnPgTransactions.Decision.refuse(WebAuthnPgTransactions.Refusal.TIME_UNAVAILABLE);
+			List<ExpiredCeremony> candidates=new ArrayList<>();
+			try(PreparedStatement statement=connection.prepareStatement("SELECT storage_key,version,expires_seconds,expires_nanos FROM webauthn_store_entry WHERE namespace=? AND kind='CEREMONY' AND (expires_seconds,expires_nanos)<=(?,?) ORDER BY expires_seconds,expires_nanos,storage_key LIMIT ?")){
+				context.bound(statement);statement.setString(1,this.namespace);statement.setLong(2,initial.getObservedAt().getEpochSecond());statement.setInt(3,initial.getObservedAt().getNano());statement.setInt(4,maximumRows);
+				try(ResultSet result=statement.executeQuery()){
+					while(result.next()){
+						if(candidates.size()>=maximumRows)throw new SQLException("WebAuthn cleanup batch exceeded bound");
+						String storageKey=requireNonNull(result.getString(1));
+						if(!storageKey.startsWith(this.keyPrefix))throw new SQLException("WebAuthn cleanup address outside namespace");
+						long version=result.getLong(2);versionBytes(version);
+						candidates.add(new ExpiredCeremony(storageKey,version,Instant.ofEpochSecond(result.getLong(3),result.getInt(4))));
+					}
+				}
+			}
+			if(candidates.isEmpty())return WebAuthnPgTransactions.Decision.commit(0);
+			Map<String,Boolean> locks=new TreeMap<>();for(ExpiredCeremony candidate:candidates)if(locks.put(candidate.storageKey,true)!=null)throw new SQLException("WebAuthn cleanup duplicate address");
+			WebAuthnPgLocks.entities(connection,WebAuthnPgLocks.entitySet(this.scope,locks),context.deadlineNanos());
+			List<WebAuthnPgCapacity.Delta> deltas=new ArrayList<>();
+			for(ExpiredCeremony candidate:candidates){
+				if(!candidate.matches(context,this.namespace))return WebAuthnPgTransactions.Decision.refuse(WebAuthnPgTransactions.Refusal.CONFLICT);
+				deltas.add(WebAuthnPgCapacity.Delta.from(WebAuthnPgCapacity.bucket(candidate.storageKey),-1,0));
+			}
+			WebAuthnPgCapacity.LockedPlan capacity=WebAuthnPgCapacity.lockForValidation(connection,this.scope,admitted.allocation,deltas,context.deadlineNanos());
+			StoreTimeObservation finalPoint;
+			try{finalPoint=observe(context,admitted);}catch(AdmissionChanged fenced){return WebAuthnPgTransactions.Decision.refuse(WebAuthnPgTransactions.Refusal.FENCED);}
+			if(!(finalPoint instanceof StoreTimeObservation.Healthy healthy) || healthy.getObservedAt().isBefore(initial.getObservedAt()))
+				return WebAuthnPgTransactions.Decision.refuse(WebAuthnPgTransactions.Refusal.TIME_UNAVAILABLE);
+			for(ExpiredCeremony candidate:candidates)if(healthy.getObservedAt().isBefore(candidate.expiresAt))return WebAuthnPgTransactions.Decision.refuse(WebAuthnPgTransactions.Refusal.TIME_BEFORE_FLOOR);
+			capacity.checkCapacity();
+			for(ExpiredCeremony candidate:candidates){
+				try(PreparedStatement statement=connection.prepareStatement("DELETE FROM webauthn_store_entry WHERE namespace=? AND storage_key=? AND kind='CEREMONY' AND version=? AND expires_seconds=? AND expires_nanos=?")){
+					context.bound(statement);statement.setString(1,this.namespace);statement.setString(2,candidate.storageKey);statement.setLong(3,candidate.version);statement.setLong(4,candidate.expiresAt.getEpochSecond());statement.setInt(5,candidate.expiresAt.getNano());context.markPossibleMutation();
+					if(statement.executeUpdate()!=1)throw new SQLException("WebAuthn cleanup exact predicate changed");
+				}
+			}
+			context.markPossibleMutation();capacity.apply(connection,context.deadlineNanos());
+			return WebAuthnPgTransactions.Decision.commit(candidates.size());
+		});
+		if(outcome.status()==WebAuthnPgTransactions.Status.COMMITTED)return new CleanupResult(CleanupStatus.COMMITTED,outcome.value().orElseThrow(),!expired(deadline));
+		if(outcome.status()==WebAuthnPgTransactions.Status.UNKNOWN)return cleanupRefusal(CleanupStatus.UNKNOWN);
+		WebAuthnPgTransactions.Refusal refusal=outcome.refusal().orElse(WebAuthnPgTransactions.Refusal.UNAVAILABLE);
+		return cleanupRefusal(switch(refusal){case CONFLICT->CleanupStatus.CONFLICT;case FENCED->CleanupStatus.FENCED;case TIME_UNAVAILABLE->CleanupStatus.TIME_UNAVAILABLE;case TIME_BEFORE_FLOOR->CleanupStatus.TIME_BEFORE_EXPIRY;default->CleanupStatus.UNAVAILABLE;});
+	}
+	private static @NonNull CleanupResult cleanupRefusal(@NonNull CleanupStatus status){return new CleanupResult(status,-1,false);}
+	private static final class ExpiredCeremony {
+		final @NonNull String storageKey;final long version;final @NonNull Instant expiresAt;
+		ExpiredCeremony(@NonNull String storageKey,long version,@NonNull Instant expiresAt){this.storageKey=storageKey;this.version=version;this.expiresAt=expiresAt;}
+		boolean matches(WebAuthnPgTransactions.@NonNull Context context,@NonNull String namespace)throws SQLException{
+			try(PreparedStatement statement=context.connection().prepareStatement("SELECT kind,version,expires_seconds,expires_nanos FROM webauthn_store_entry WHERE namespace=? AND storage_key=?")){
+				context.bound(statement);statement.setString(1,namespace);statement.setString(2,this.storageKey);
+				try(ResultSet result=statement.executeQuery()){
+					return result.next() && "CEREMONY".equals(result.getString(1)) && result.getLong(2)==this.version
+							&& result.getLong(3)==this.expiresAt.getEpochSecond() && result.getInt(4)==this.expiresAt.getNano();
+				}
+			}
+		}
 	}
 	private @NonNull Namespace namespace(WebAuthnPgTransactions.@NonNull Context context)throws SQLException{
 		try(PreparedStatement statement=context.connection().prepareStatement("SELECT physical_namespace,authority_id,recovery_generation,clock_generation,maximum_utc_error_nanos,allocation_generation,format_version,maximum_entries,admission_open FROM webauthn_store_namespace WHERE namespace=?")){

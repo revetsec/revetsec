@@ -424,6 +424,23 @@ final class TotpAuthenticatorTests {
         assertEquals(enrolled.factor.getFactorId(), fixture.status().getActiveFactor().orElseThrow().getFactorId());
     }
 
+    @Test void cancellationOfAnAbsentAccountReportsEnrollmentNotFound() {
+        Fixture fixture = new Fixture();
+        TotpEnrollmentCancellationResult.Rejected rejected = assertInstanceOf(
+                TotpEnrollmentCancellationResult.Rejected.class,
+                fixture.totp.cancelEnrollmentResult(ACCOUNT, "missing-enrollment", BROWSER));
+        assertEquals(TotpRejectionReason.ENROLLMENT_NOT_FOUND, rejected.getReason());
+    }
+
+    @Test void impossibleTimeExpiredRefusalOnAnUnboundedWriteIsUnavailable() {
+        Fixture fixture = new Fixture(false);
+        fixture.store.timeExpireNextCommit.set(true);
+        TotpNamespaceInitializationResult.Unavailable unavailable = assertInstanceOf(
+                TotpNamespaceInitializationResult.Unavailable.class,
+                fixture.totp.initializeNamespaceResult());
+        assertEquals(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE, unavailable.getReason());
+    }
+
     @Test void observingEnrollmentExpiryThroughStatusSurvivesASmallClockRollback()
             throws GeneralSecurityException {
         Fixture fixture = new Fixture();
@@ -482,6 +499,19 @@ final class TotpAuthenticatorTests {
         fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         assertInstanceOf(TotpEnrollmentRequestResult.Prepared.class,
                 fixture.totp.beginEnrollmentResult(options(null), BROWSER));
+    }
+
+    @Test void throttledVerificationDoesNotEvaluateOrShortenForACorrectPreviousStepCode()
+            throws GeneralSecurityException {
+        Fixture fixture = new Fixture();
+        Enrollment enrolled = fixture.enroll();
+        for (int attempt = 0; attempt < 5; attempt++)
+            assertInstanceOf(TotpVerificationResult.Rejected.class,
+                    fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
+        fixture.advance(Duration.ofSeconds(29));
+        fixture.store.beforeNextCommit.set(() -> fixture.advance(Duration.ofSeconds(2)));
+        assertInstanceOf(TotpVerificationResult.Throttled.class,
+                fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending, -1), LOGIN));
     }
 
     @Test void factorRemovalAndReenrollmentDoNotEraseDailyFailures() throws GeneralSecurityException {
@@ -755,6 +785,19 @@ final class TotpAuthenticatorTests {
         assertEquals(0, fixture.store.commits.get());
     }
 
+    @Test void aPermitIsClosedWhenTheFinalCurrentnessCheckFails() {
+        Fixture baseline = new Fixture(false);
+        assertInstanceOf(TotpNamespaceInitializationResult.Initialized.class,
+                baseline.totp.initializeNamespaceResult());
+        int finalCheck = baseline.gate.currentChecks.get();
+
+        Fixture fixture = new Fixture(false);
+        fixture.gate.failCurrentCheck.set(finalCheck);
+        assertInstanceOf(TotpNamespaceInitializationResult.ReconciliationRequired.class,
+                fixture.totp.initializeNamespaceResult());
+        assertEquals(1, fixture.gate.closedPermits.get());
+    }
+
     @Test void aPermitCloseFailureAfterCommitPreventsProvisioningRelease() {
         Fixture fixture = new Fixture();
         fixture.gate.onNextClose.set(() -> { throw new IllegalStateException("Close failed"); });
@@ -770,7 +813,7 @@ final class TotpAuthenticatorTests {
         TotpAuthenticator shortBudget = TotpAuthenticator.withIssuer("Example Security")
                 .credentialNamespace(NAMESPACE).recoveryEpoch(EPOCH).store(fixture.store)
                 .clock(fixture.clock).stateSealer(fixture.sealer).recoveryGate(fixture.gate)
-                .operationTimeout(Duration.ofMillis(100)).build();
+                .operationTimeout(Duration.ofSeconds(1)).build();
         fixture.gate.onNextClose.set(TotpAuthenticatorTests::delayPastShortDeadline);
         int before = fixture.store.commits.get();
         assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
@@ -784,7 +827,7 @@ final class TotpAuthenticatorTests {
         TotpAuthenticator shortBudget = TotpAuthenticator.withIssuer("Example Security")
                 .credentialNamespace(NAMESPACE).recoveryEpoch(EPOCH).store(fixture.store)
                 .clock(fixture.clock).stateSealer(fixture.sealer).recoveryGate(fixture.gate)
-                .operationTimeout(Duration.ofMillis(100)).build();
+                .operationTimeout(Duration.ofSeconds(1)).build();
         fixture.store.afterNextCommit.set(TotpAuthenticatorTests::delayPastShortDeadline);
         assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
                 shortBudget.beginEnrollmentResult(options(null), BROWSER));
@@ -1113,10 +1156,10 @@ final class TotpAuthenticatorTests {
         TotpAuthenticator.Builder builder = TotpAuthenticator.withIssuer("Example Security");
         assertSame(builder, builder.recoveryEpoch(null).clock(null).operationTimeout(null));
         assertThrows(IllegalArgumentException.class,
-                () -> builder.operationTimeout(Duration.ofMillis(99)));
+                () -> builder.operationTimeout(Duration.ofMillis(999)));
         assertThrows(IllegalArgumentException.class,
                 () -> builder.operationTimeout(Duration.ofSeconds(30).plusNanos(1)));
-        assertSame(builder, builder.operationTimeout(Duration.ofMillis(100)));
+        assertSame(builder, builder.operationTimeout(Duration.ofSeconds(1)));
         assertSame(builder, builder.operationTimeout(Duration.ofSeconds(30)));
     }
 
@@ -1224,7 +1267,7 @@ final class TotpAuthenticatorTests {
     }
 
     private static void delayPastShortDeadline() {
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(150);
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(1_100);
         long remaining;
         while ((remaining = deadline - System.nanoTime()) > 0) LockSupport.parkNanos(remaining);
     }
@@ -1249,6 +1292,8 @@ final class TotpAuthenticatorTests {
         final @NonNull AtomicBoolean open = new AtomicBoolean(true);
         final @NonNull AtomicBoolean initiallyStale = new AtomicBoolean();
         final @NonNull AtomicInteger closedPermits = new AtomicInteger();
+        final @NonNull AtomicInteger currentChecks = new AtomicInteger();
+        final @NonNull AtomicInteger failCurrentCheck = new AtomicInteger(-1);
         final @NonNull AtomicReference<@Nullable Runnable> onNextAcquire = new AtomicReference<>();
         final @NonNull AtomicReference<@Nullable Runnable> onNextClose = new AtomicReference<>();
         final @NonNull List<@NonNull TotpRecoveryContext> contexts = new CopyOnWriteArrayList<>();
@@ -1272,6 +1317,8 @@ final class TotpAuthenticatorTests {
         private boolean closed;
         TestPermit(@NonNull Gate gate, long deadline) { this.gate = gate; this.deadline = deadline; }
         @Override public @NonNull Boolean isCurrent() {
+            if (this.gate.currentChecks.incrementAndGet() == this.gate.failCurrentCheck.get())
+                throw new IllegalStateException("Currentness failed");
             return !this.closed && !this.gate.initiallyStale.get() && this.gate.open.get()
                     && this.deadline - System.nanoTime() > 0;
         }
@@ -1292,6 +1339,7 @@ final class TotpAuthenticatorTests {
         final @NonNull AtomicInteger commits = new AtomicInteger();
         final @NonNull AtomicBoolean unknownAfterCommit = new AtomicBoolean();
         final @NonNull AtomicBoolean unknownWithoutMutation = new AtomicBoolean();
+        final @NonNull AtomicBoolean timeExpireNextCommit = new AtomicBoolean();
         final @NonNull AtomicInteger unknownCommitCountdown = new AtomicInteger();
         final @NonNull AtomicReference<@Nullable Runnable> beforeNextRead = new AtomicReference<>();
         final @NonNull AtomicReference<@Nullable Runnable> beforeNextCommit = new AtomicReference<>();
@@ -1318,6 +1366,8 @@ final class TotpAuthenticatorTests {
                 @NonNull Duration remainingBudget) {
             this.commits.incrementAndGet();
             if (this.unknownWithoutMutation.getAndSet(false)) return TotpStoreCommitReceipt.unknownInstance();
+            if (this.timeExpireNextCommit.getAndSet(false))
+                return TotpStoreCommitReceipt.fromRefusal(TotpStoreCommitResult.TIME_EXPIRED);
             Runnable before = this.beforeNextCommit.getAndSet(null);
             if (before != null) before.run();
             TotpStoreCommitReceipt result = this.delegate.compareAndCommit(write, remainingBudget);

@@ -191,9 +191,9 @@ public final class WebAuthnStoreWrite {
   }
 
   /** Returns the ceremony reclamation deadline, if supplied. It is an exact projection of the
-   * authenticated expiry, not authority to delete during reads or a no-effect refusal. Explicit
-   * maintenance must recheck expiry/version under current healthy admitted time. Other record
-   * kinds are never reclaimed by this hint; capacity may refuse while retained ceremonies remain.
+   * authenticated expiry, not authority to delete during reads or a no-effect refusal. A successful
+   * mutating commit may reclaim an expired ceremony outside its predicate set after rechecking it
+   * against current healthy admitted time. Other record kinds are never reclaimed by this hint.
    * @return the optional maintenance deadline
    * @since 1.0.0 */
   public @NonNull Optional<@NonNull Instant> getExpiresAt() { return Optional.ofNullable(this.expiresAt); }

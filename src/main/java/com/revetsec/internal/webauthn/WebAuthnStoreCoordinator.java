@@ -35,6 +35,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -87,7 +88,7 @@ final class WebAuthnStoreCoordinator {
         private @Nullable Set<@NonNull WebAuthnStoreKey> firstKeys;
         private StoreTimeObservation.@Nullable Healthy profile;
         private StoreTimeObservation.@Nullable Healthy finalObservation;
-        private @Nullable Instant latestTime,minimum,actionUpper,lastUpper;
+        private @Nullable Instant latestTime,minimum,actionUpper,lastUpper,lastCommitUpper;
         private @Nullable Duration firstObservationBudget;
         private @Nullable WebAuthnCeremonyState pinnedCeremony;
         private long finalCallStart;
@@ -184,7 +185,7 @@ final class WebAuthnStoreCoordinator {
                 StoreTimeObservation.Healthy validated=timing.getValidatedTime();
                 if(!StoreTimeRules.sameProfile(original,validated)
                         || validated.getObservedAt().isBefore(original.getObservedAt())
-                        || (upper!=null && !validated.getObservedAt().isBefore(upper)))return failed();
+                        || (this.lastCommitUpper!=null && !validated.getObservedAt().isBefore(this.lastCommitUpper)))return failed();
                 if(!accept(validated,callStart,workerClock.instant(),nanoTime.getAsLong()))return failed();
                 if(timing.getCompletedTime().isPresent()){
                     var completed=timing.getCompletedTime().orElseThrow();
@@ -210,10 +211,11 @@ final class WebAuthnStoreCoordinator {
             WebAuthnStoreSnapshot current=this.snapshot;
             StoreTimeObservation.Healthy original=(StoreTimeObservation.Healthy)current.getTimeObservation();
             Duration budget=remaining();this.finished=true;this.lastCommitConflicted=false;this.lastUpper=upper;
+            this.lastCommitUpper=commitUpper(original,upper);
             if(budget==null)return rememberReceipt(WebAuthnStoreCommitReceipt.fromRefusal(WebAuthnStoreCommitResult.UNAVAILABLE));
-            if(upper!=null && !original.getObservedAt().isBefore(upper))
+            if(this.lastCommitUpper!=null && !original.getObservedAt().isBefore(this.lastCommitUpper))
                 return rememberReceipt(WebAuthnStoreCommitReceipt.fromRefusal(WebAuthnStoreCommitResult.TIME_EXPIRED));
-            StoreTemporalCondition condition=StoreTimeAccess.get().fromObservation(original,original.getObservedAt(),upper);
+            StoreTemporalCondition condition=StoreTimeAccess.get().fromObservation(original,original.getObservedAt(),this.lastCommitUpper);
             WebAuthnStoreWrite write=WebAuthnStoreWrite.fromSnapshotAndMutations(current,mutations,condition);
             if(!admitted())return rememberReceipt(WebAuthnStoreCommitReceipt.fromRefusal(WebAuthnStoreCommitResult.UNAVAILABLE));
             budget=remaining();if(budget==null)return rememberReceipt(WebAuthnStoreCommitReceipt.fromRefusal(WebAuthnStoreCommitResult.UNAVAILABLE));
@@ -233,6 +235,12 @@ final class WebAuthnStoreCoordinator {
             }
             this.lastCommitConflicted=receipt.getStatus()==WebAuthnStoreCommitResult.CONFLICT;
             return receipt;
+        }
+        private static @Nullable Instant commitUpper(StoreTimeObservation.@NonNull Healthy observation,
+                @Nullable Instant releaseUpper) {
+            if(releaseUpper==null)return null;
+            try{return releaseUpper.minus(observation.getMaximumUtcError());}
+            catch(DateTimeException | ArithmeticException invalid){return Instant.MIN;}
         }
         private @NonNull WebAuthnStoreCommitReceipt rememberReceipt(@NonNull WebAuthnStoreCommitReceipt receipt){this.lastReceipt=receipt;return receipt;}
         @NonNull WebAuthnStoreCommitReceipt lastReceipt(){return this.lastReceipt;}

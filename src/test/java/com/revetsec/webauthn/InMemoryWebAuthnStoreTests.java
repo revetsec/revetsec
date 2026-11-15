@@ -57,20 +57,21 @@ final class InMemoryWebAuthnStoreTests {
  private static final WebAuthnStoreKey CEREMONY = WebAuthnStoreKey.forCeremony(
    "tenant", "login.example.com", new byte[32]);
 
- @Test void expiredCeremoniesRemainRetainedThroughQueriesBarriersAndCapacityRefusal() {
+ @Test void successfulMutationReclaimsExpiredCeremoniesButQueriesAndBarriersDoNot() {
   InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100L);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(CEREMONY));
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
     write(empty, List.of(WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
-  WebAuthnStoreSnapshot before = snapshot(store, Set.of(CEREMONY, FIRST));
+  WebAuthnStoreSnapshot before = snapshot(store, Set.of(CEREMONY));
   byte[] version = present(before, CEREMONY).getVersion();
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(before, List.of()), BUDGET).getStatus());
-  assertEquals(WebAuthnStoreCommitResult.CAPACITY, store.compareAndCommit(write(before,
+  assertArrayEquals(version, present(snapshot(store, Set.of(CEREMONY)), CEREMONY).getVersion());
+  WebAuthnStoreSnapshot insertion = snapshot(store, Set.of(FIRST));
+  assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(insertion,
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {2}))), BUDGET).getStatus());
   WebAuthnStoreSnapshot after = snapshot(store, Set.of(CEREMONY, FIRST));
-  assertArrayEquals(version, present(after, CEREMONY).getVersion());
-  assertArrayEquals(new byte[] {1}, present(after, CEREMONY).getSealedBytes());
-  assertInstanceOf(WebAuthnStoreEntry.Absent.class, after.getEntry(FIRST));
+  assertInstanceOf(WebAuthnStoreEntry.Absent.class, after.getEntry(CEREMONY));
+  assertArrayEquals(new byte[] {2}, present(after, FIRST).getSealedBytes());
  }
 
  @Test void repeatedCeremonyReplacementRemainsWithinTheDeclaredRecordCapacity() {

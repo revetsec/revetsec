@@ -272,9 +272,9 @@ final class TotpSharedClockReceiptTests {
 
 	@Test void lateKnownAcknowledgementRetainsCommitAndWithholdsArtifact() {
 		F f = new F();
-		TotpAuthenticator shortBudget = f.auth(Duration.ofMillis(100));
+		TotpAuthenticator shortBudget = f.auth(Duration.ofSeconds(1));
 		f.store.after = (number, write, receipt) -> {
-			try { assertFalse(new CountDownLatch(1).await(200, TimeUnit.MILLISECONDS)); }
+			try { assertFalse(new CountDownLatch(1).await(1_100, TimeUnit.MILLISECONDS)); }
 			catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new AssertionError(interrupted); }
 			return receipt;
 		};

@@ -40,14 +40,15 @@ final class ScimReplacementMemberIndex {
 
     static @Nullable ScimReplacementMemberIndex fromValues(@NonNull List<@NonNull JsonValue> values, @NonNull ScimWork work) {
         List<JsonValue> ids = new ArrayList<>();
-        NavigableMap<String, ArrayDeque<JsonObject>> anonymous = new TreeMap<>();
+        NavigableMap<String, ArrayDeque<JsonObject>> anonymous = new TreeMap<>(new ScimChargedStringComparator(work));
         for (JsonValue value : values) {
             if (!work.spend(1) || !(value instanceof JsonObject object)) return null;
             if (hasId(object)) ids.add(object);
             else {
                 String key = anonymousKey(object, work);
-                if (key == null || !reserve(key, anonymous.size(), work)) return null;
+                if (key == null) return null;
                 anonymous.computeIfAbsent(key, ignored -> new ArrayDeque<>()).addLast(object);
+                if (work.wasExceeded()) return null;
             }
         }
         ScimMemberIndex assigned = ScimMemberIndex.fromValues(ids, work);
@@ -57,8 +58,9 @@ final class ScimReplacementMemberIndex {
     @Nullable JsonObject find(@NonNull JsonObject value) {
         if (hasId(value)) return assigned.find(value);
         String key = anonymousKey(value, work);
-        if (key == null || !reserve(key, anonymous.size(), work)) return null;
+        if (key == null) return null;
         ArrayDeque<JsonObject> matches = anonymous.get(key);
+        if (work.wasExceeded()) return null;
         return matches == null ? null : matches.pollFirst();
     }
 
@@ -83,8 +85,4 @@ final class ScimReplacementMemberIndex {
         else key.append(value.length()).append(':').append(value).append(';');
     }
 
-    private static boolean reserve(@NonNull String key, int size, @NonNull ScimWork work) {
-        int bits = Integer.SIZE - Integer.numberOfLeadingZeros(size);
-        return work.spend(4L * (key.length() + 1L) * (bits + 1L));
-    }
 }

@@ -443,6 +443,14 @@ final class OAuthGrantRevocationTests {
  @Test void falseRefreshHeadAfterRacingRotationCannotLoseWinnerRevocation() {
   var one=issued();OAuthTokenResponse[] winner={one};this.store.beforeCommit=()->winner[0]=rotate(refresh(one));ordinary(revoke(refresh(one)));invalid(()->validate(token(winner[0])));admission(OAuthServerAdmissionFailure.Reason.INVALID_GRANT,()->rotate(refresh(winner[0])));
  }
+ @Test void rotationBetweenRevocationRefreshAndGrantReadsIsRetriedInsteadOfReportedAsCorruption() {
+  var one=issued();String old=refresh(one);OAuthTokenResponse[] winner={one};int[] grantReads={0};
+  this.store.beforeReadKey=key->{
+   if(key.getKind()==OAuthStoreKey.Kind.GRANT && ++grantReads[0]==2){this.store.beforeReadKey=null;winner[0]=rotate(old);}
+  };
+  ordinary(revoke(old));assertTrue(grantReads[0]>=2);invalid(()->validate(token(winner[0])));
+  admission(OAuthServerAdmissionFailure.Reason.INVALID_GRANT,()->rotate(refresh(winner[0])));
+ }
  @SuppressWarnings("unchecked") private static <T extends Throwable> void raise(@NonNull Throwable error)throws T{throw(T)error;}
  private static final class TestFatal extends VirtualMachineError {private static final long serialVersionUID=1L;TestFatal(){super("fixture");}}
  private static final class MutableClock extends Clock {

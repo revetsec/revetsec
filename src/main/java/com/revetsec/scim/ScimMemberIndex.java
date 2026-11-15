@@ -26,9 +26,11 @@ import java.util.TreeMap;
 
 /** Operation-local exact assigned-ID lookup; output sequence always belongs to the caller. */
 final class ScimMemberIndex {
-    private final @NonNull NavigableMap<@NonNull String, @NonNull JsonObject> members = new TreeMap<>();
+    private final @NonNull NavigableMap<@NonNull String, @NonNull JsonObject> members;
     private final @NonNull ScimWork work;
-    private ScimMemberIndex(@NonNull ScimWork work) { this.work = work; }
+    private ScimMemberIndex(@NonNull ScimWork work) {
+        this.work = work; this.members = new TreeMap<>(new ScimChargedStringComparator(work));
+    }
 
     static @Nullable ScimMemberIndex fromValues(@NonNull List<@NonNull JsonValue> values, @NonNull ScimWork work) {
         ScimMemberIndex index = new ScimMemberIndex(work);
@@ -50,21 +52,16 @@ final class ScimMemberIndex {
 
     @Nullable JsonObject find(@NonNull JsonValue value) {
         String id = id(value);
-        if (id == null || !charge(id)) return null;
-        return members.get(id);
+        if (id == null) return null;
+        JsonObject found = members.get(id);
+        return work.wasExceeded() ? null : found;
     }
 
     boolean add(@NonNull JsonObject value) {
         String id = id(value);
-        if (id == null || !charge(id)) return false;
-        return members.putIfAbsent(id, value) == null;
-    }
-
-    private boolean charge(@NonNull String id) {
-        // Red-black height is at most twice log2(n+1). Charge both strings in comparisons,
-        // plus per-level bookkeeping, before a lookup/insertion; avoid hash-collision scans.
-        int bits = Integer.SIZE - Integer.numberOfLeadingZeros(members.size());
-        return work.spend(4L * (id.length() + 1L) * (bits + 1L));
+        if (id == null) return false;
+        boolean added = members.putIfAbsent(id, value) == null;
+        return !work.wasExceeded() && added;
     }
 
     private static @Nullable String id(@NonNull JsonValue value) {

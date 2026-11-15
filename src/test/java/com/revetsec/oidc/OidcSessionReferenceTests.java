@@ -62,6 +62,9 @@ final class OidcSessionReferenceTests {
 			}
 			clock.advance(Duration.ofSeconds(2));assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class,
 					OidcSessionReference.fromSealedFormResult(sealed,sealer,"oidc-session"));
+			String applicationTyped=sealer.seal(reference.toSerializedForm(),"oidc-session",Duration.ofSeconds(2));
+			assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class,
+					OidcSessionReference.fromSealedFormResult(applicationTyped,sealer,"oidc-session"));
 			String wrongSchema=sealer.seal("{\"access_token\":\"TEST-ONLY-secret\"}","oidc-session",Duration.ofSeconds(2));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class, OidcSessionReference.fromSealedFormResult(wrongSchema,sealer,"oidc-session")).getReason());
 			assertThrows(IllegalArgumentException.class,()->reference.toSealedForm(sealer,"oidc-session",Duration.ZERO));assertThrows(IllegalArgumentException.class,()->reference.toSealedForm(sealer,"oidc-session",Duration.ofDays(401)));
 		}

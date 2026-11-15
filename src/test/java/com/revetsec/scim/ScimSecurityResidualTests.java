@@ -180,6 +180,29 @@ final class ScimSecurityResidualTests {
             assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,p.applyPatchResult(old,req)).getError());
         }
     }
+    @Test void immutableHiddenReplaceAndPutNeverConfirmASecretGuess() {
+        String urn="urn:test:immutable-hidden-scalar";
+        var hidden=ScimAttributeDefinition.withName("secret").returned(ScimReturned.NEVER)
+            .mutability(ScimMutability.IMMUTABLE).build();
+        var type=ScimResourceType.withName("Fixture").endpoint("/Fixtures")
+            .schema(ScimSchema.withId(urn).name("Fixture").attributes(List.of(hidden,
+                ScimAttributeDefinition.withName("label").build())).build()).build();
+        var p=provider(type,ScimCompatibility.strictInstance());
+        var old=resource(type,JsonObject.builder().put("secret","stored-secret").put("label","old").build());
+        for(String supplied:List.of("stored-secret","guess")) {
+            var patch=request(parse(p,type,"replace","secret",JsonString.fromValue(supplied)));
+            assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,
+                p.applyPatchResult(old,patch)).getError());
+            String body="{\"schemas\":[\""+urn+"\"],\"secret\":\""+supplied+"\",\"label\":\"new\"}";
+            assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimResourceParseResult.Rejected.class,
+                p.parseReplacementResult(type,old,body.getBytes(StandardCharsets.UTF_8))).getError());
+        }
+        String omitted="{\"schemas\":[\""+urn+"\"],\"label\":\"new\"}";
+        ScimResource replaced=assertInstanceOf(ScimResourceParseResult.Succeeded.class,
+            p.parseReplacementResult(type,old,omitted.getBytes(StandardCharsets.UTF_8))).getResource();
+        assertEquals("stored-secret",assertInstanceOf(JsonString.class,
+            replaced.getDocument().find("secret").orElseThrow()).getValue());
+    }
     @Test void whollyHiddenMultivaluedAddHasNoPublicIdentityAndAlwaysRefuses() {
         for(boolean complex:List.of(false,true)) {
             var b=ScimAttributeDefinition.withName("entries").multiValued(true).returned(ScimReturned.NEVER);

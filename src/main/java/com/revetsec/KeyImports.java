@@ -207,6 +207,10 @@ public final class KeyImports {
 			active(deadline);
 			if (privateKey instanceof ECPrivateKey ec && curve != null && selectedCurve(ec.getParams()) != curve)
 				throw failure(KeyImportException.Reason.KEY_PAIR_MISMATCH);
+			if (privateKey instanceof RSAPrivateCrtKey rsa && stable instanceof RSAPublicKey publicRsa
+					&& (!rsa.getModulus().equals(publicRsa.getModulus())
+							|| !rsa.getPublicExponent().equals(publicRsa.getPublicExponent())))
+				throw failure(KeyImportException.Reason.KEY_PAIR_MISMATCH);
 			if (!(privateAlgorithm.equals("RSA") || privateAlgorithm.equals("EC") || privateAlgorithm.equals("Ed25519") || privateAlgorithm.equals("EdDSA")))
 				throw failure(KeyImportException.Reason.UNSUPPORTED_KEY);
 			String algorithm = stable instanceof RSAPublicKey ? "SHA256withRSA" : curve != null
@@ -224,13 +228,18 @@ public final class KeyImports {
 			if (signature.length > RsaPublicKeys.MAXIMUM_SIGNATURE_LENGTH) throw failure(KeyImportException.Reason.OPERATION_UNAVAILABLE);
 			VerifyResult result;
 			if (curve != null) {
-				jose = EcdsaSignatures.toJose(curve, signature); active(deadline);
+				try { jose = EcdsaSignatures.toJose(curve, signature); }
+				catch (IllegalArgumentException mismatch) { throw failure(KeyImportException.Reason.KEY_PAIR_MISMATCH); }
+				active(deadline);
 				result = SignatureVerifier.verifyEcdsa(curve, curve == EcCurve.P_256 ? HashAlgorithm.SHA_256 : HashAlgorithm.SHA_384, stable, challenge, jose);
 			} else if (stable instanceof RSAPublicKey) result = SignatureVerifier.verifyRsaPkcs1(HashAlgorithm.SHA_256, stable, challenge, signature);
 			else result = SignatureVerifier.verifyEd25519(stable, challenge, signature);
 			active(deadline);
-			if (result != VerifyResult.VALID) throw failure(result == VerifyResult.MISMATCH
-					? KeyImportException.Reason.KEY_PAIR_MISMATCH : KeyImportException.Reason.OPERATION_UNAVAILABLE);
+			// The signature is produced locally from a normalized private-key algorithm. Shape,
+			// range and verification failures therefore establish a mismatch; only a JCA/provider
+			// failure remains an operational outage.
+			if (result != VerifyResult.VALID) throw failure(result == VerifyResult.PROVIDER_FAILURE
+					? KeyImportException.Reason.OPERATION_UNAVAILABLE : KeyImportException.Reason.KEY_PAIR_MISMATCH);
 		} catch (KeyImportException failure) { active(deadline); throw failure; }
 		catch (KeyRejectedException rejected) { active(deadline); throw failure(KeyImportException.Reason.KEY_REJECTED); }
 		catch (GeneralSecurityException | RuntimeException providerFailure) {
@@ -244,7 +253,8 @@ public final class KeyImports {
 
 	private static @NonNull PublicKey checkedPublic(@NonNull PublicKey key) throws KeyRejectedException {
 		if (key instanceof RSAPublicKey rsa) {
-			if (rsa.getParams() != null) throw failure(KeyImportException.Reason.UNSUPPORTED_KEY);
+			if (!"RSA".equals(rsa.getAlgorithm()) || rsa.getParams() != null)
+				throw failure(KeyImportException.Reason.UNSUPPORTED_KEY);
 			RsaPublicKeys.checkPublicKey(rsa);
 		} else if (key instanceof ECPublicKey ec) EcPublicKeys.checkPublicKey(selectedCurve(ec.getParams()), ec);
 		else if (key instanceof EdECPublicKey ed) {

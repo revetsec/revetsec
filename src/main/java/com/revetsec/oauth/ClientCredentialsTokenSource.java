@@ -17,6 +17,7 @@
 package com.revetsec.oauth;
 
 import com.revetsec.internal.Limits;
+import com.revetsec.internal.http.Deadline;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -98,20 +99,23 @@ public final class ClientCredentialsTokenSource {
 	 */
 	@CheckReturnValue
 	public @NonNull AccessTokenAcquisitionResult getAccessTokenResult() {
+		Deadline callDeadline = Deadline.fromNow(this.client.totalDeadline());
 		for (;;) {
-			AccessTokenAcquisitionResult result = getAccessTokenOnce();
+			AccessTokenAcquisitionResult result = getAccessTokenOnce(callDeadline);
 			if (result != null) return result;
 		}
 	}
 
 	// Only the caller that installed this exact future may publish or clear its flight.
 	@SuppressWarnings("ReferenceEquality")
-	private @Nullable AccessTokenAcquisitionResult getAccessTokenOnce() {
+	private @Nullable AccessTokenAcquisitionResult getAccessTokenOnce(@NonNull Deadline callDeadline) {
+		requireActive(callDeadline);
 		CompletableFuture<AccessTokenAcquisitionResult> mine = null;
 		CompletableFuture<AccessTokenAcquisitionResult> waitFor = null;
 		Cached old;
 		this.lock.lock();
 		try {
+			requireActive(callDeadline);
 			Instant now = this.clock.instant();
 			old = currentCached(now);
 			if (old != null && now.isBefore(old.renewAt) && now.isBefore(old.expiresAt))
@@ -127,7 +131,7 @@ public final class ClientCredentialsTokenSource {
 						&& System.nanoTime() - this.lastFailureNanos < backoff) {
 					if (old != null && now.isBefore(old.expiresAt)) return AccessTokenAcquisitionResult.fromAccessToken(old.token);
 					if (this.lastRejection != null) return this.lastRejection;
-					throw requireNonNull(this.lastFailure);
+					throw OAuthHttpErrors.copyForCaller(requireNonNull(this.lastFailure));
 				}
 				mine = new CompletableFuture<>();
 				this.flight = mine;
@@ -136,7 +140,7 @@ public final class ClientCredentialsTokenSource {
 			this.lock.unlock();
 		}
 		if (waitFor != null) {
-			AccessTokenAcquisitionResult shared = await(waitFor, this.client.totalDeadline());
+			AccessTokenAcquisitionResult shared = await(waitFor, callDeadline);
 			if (shared instanceof AccessTokenAcquisitionResult.Rejected) return shared;
 			AccessToken token = ((AccessTokenAcquisitionResult.Succeeded) shared).getAccessToken();
 			this.lock.lock();
@@ -182,15 +186,21 @@ public final class ClientCredentialsTokenSource {
 			leader.complete(result);
 			return result;
 		} catch (OAuthException failure) {
+			boolean interrupted = failure.getReason() == OAuthException.Reason.INTERRUPTED
+					|| Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || callDeadline.isExpired();
+			if (interrupted) Thread.currentThread().interrupt();
 			AccessToken fallback = null;
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
 					this.flight = null;
-					this.lastFailure = failure;
-					this.lastRejection = null;
-					this.lastFailureNanos = System.nanoTime();
-					this.failureCount = Math.min(5, this.failureCount + 1);
+					if (!callerLocal) {
+						this.lastFailure = OAuthHttpErrors.copyForCaller(failure);
+						this.lastRejection = null;
+						this.lastFailureNanos = System.nanoTime();
+						this.failureCount = Math.min(5, this.failureCount + 1);
+					}
 					Instant now = this.clock.instant();
 					Cached current = currentCached(now);
 					if (current != null && now.isBefore(current.expiresAt))
@@ -204,23 +214,31 @@ public final class ClientCredentialsTokenSource {
 				leader.complete(result);
 				return result;
 			}
-			leader.completeExceptionally(failure);
+			leader.completeExceptionally(callerLocal
+					? OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null)
+					: OAuthHttpErrors.copyForCaller(failure));
+			if (interrupted) throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
 			throw failure;
 		} catch (RuntimeException failure) {
-			OAuthException safe = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+			boolean interrupted = Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || callDeadline.isExpired();
+			OAuthException safe = OAuthTransportException.fromReason(
+					interrupted ? OAuthException.Reason.INTERRUPTED : OAuthException.Reason.NETWORK_FAILURE, null);
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
 					this.flight = null;
-					this.lastFailure = safe;
-					this.lastRejection = null;
-					this.lastFailureNanos = System.nanoTime();
-					this.failureCount = Math.min(5, this.failureCount + 1);
+					if (!callerLocal) {
+						this.lastFailure = OAuthHttpErrors.copyForCaller(safe);
+						this.lastRejection = null;
+						this.lastFailureNanos = System.nanoTime();
+						this.failureCount = Math.min(5, this.failureCount + 1);
+					}
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.completeExceptionally(safe);
+			leader.completeExceptionally(OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null));
 			throw safe;
 		} finally {
 			// An Error from an injected clock, credential supplier or transport must not strand every later caller.
@@ -296,18 +314,28 @@ public final class ClientCredentialsTokenSource {
 		}
 	}
 
-	private static @NonNull AccessTokenAcquisitionResult await(@NonNull CompletableFuture<@NonNull AccessTokenAcquisitionResult> future, @NonNull Duration deadline) {
+	private static @NonNull AccessTokenAcquisitionResult await(@NonNull CompletableFuture<@NonNull AccessTokenAcquisitionResult> future,
+			@NonNull Deadline deadline) {
 		try {
-			return future.get(deadline.toNanos(), TimeUnit.NANOSECONDS);
+			long remaining = deadline.remainingNanos();
+			if (remaining <= 0) throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+			return future.get(remaining, TimeUnit.NANOSECONDS);
 		} catch (InterruptedException interrupted) {
 			Thread.currentThread().interrupt();
 			throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
 		} catch (TimeoutException timeout) {
 			throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 		} catch (ExecutionException failure) {
-			if (failure.getCause() instanceof OAuthException oauth) throw oauth;
+			if (failure.getCause() instanceof OAuthException oauth) throw OAuthHttpErrors.copyForCaller(oauth);
 			throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 		}
+	}
+
+	private static void requireActive(@NonNull Deadline deadline) {
+		if (Thread.currentThread().isInterrupted())
+			throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
+		if (deadline.isExpired())
+			throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 	}
 
 	private record Cached(@NonNull AccessToken token, @NonNull Instant fetchedAt, @NonNull Instant expiresAt,

@@ -75,7 +75,7 @@ final class OAuthIssuerOvertakenSnapshotTests {
   AtomicReference<OAuthIssuerKeySnapshot> current=new AtomicReference<>(keys(2));AtomicInteger calls=new AtomicInteger();var life=lifecycle(budget->{calls.incrementAndGet();return requireNonNull(current.get());},Clock.fixed(NOW,ZoneOffset.UTC));
   assertNotNull(life.snapshot(deadline()));current.set(keys(1));refused(()->life.snapshot(deadline()));assertEquals(2,calls.get());current.set(keys(2));assertNotNull(life.snapshot(deadline()));assertEquals(3,calls.get());
  }
- @TestFactory @NonNull List<@NonNull DynamicTest> refreshStillChecksClockAndRetirementAndFaults(){
+ @TestFactory @NonNull List<@NonNull DynamicTest> refreshClampsClockRollbackAndStillChecksRetirementAndFaults(){
   List<DynamicTest> tests=new ArrayList<>();
   for(String mode:List.of("clock","retirement","interrupt","fatal"))tests.add(DynamicTest.dynamicTest(mode,()->{
    CountDownLatch fetched=new CountDownLatch(1),release=new CountDownLatch(1);AtomicInteger calls=new AtomicInteger();AtomicReference<Thread> delayed=new AtomicReference<>();AtomicReference<Instant> now=new AtomicReference<>(NOW);var first=keys(1);var latest=keys(2);
@@ -85,9 +85,10 @@ final class OAuthIssuerOvertakenSnapshotTests {
     Future<?> result=executor.submit(()->{delayed.set(Thread.currentThread());try{
      if(mode.equals("fatal"))assertThrows(InternalError.class,()->life.verificationKeys(deadline(),()->requireNonNull(now.get())));
      else if(mode.equals("retirement"))refused(()->life.sign("{}".getBytes(StandardCharsets.UTF_8),NOW.plusSeconds(60),deadline(),()->requireNonNull(now.get())));
+     else if(mode.equals("clock"))assertNotNull(life.verificationKeys(deadline(),()->requireNonNull(now.get())));
      else refused(()->life.verificationKeys(deadline(),()->requireNonNull(now.get())));
      assertEquals(mode.equals("interrupt"),Thread.currentThread().isInterrupted());
-    }finally{Thread.interrupted();}});await(fetched);assertNotNull(life.verificationKeys(deadline(),()->NOW));if(mode.equals("clock"))now.set(NOW.minusNanos(1));release.countDown();assertDoesNotThrow(()->result.get(3,TimeUnit.SECONDS));assertEquals(mode.equals("clock")?1:2,calls.get());
+    }finally{Thread.interrupted();}});await(fetched);assertNotNull(life.verificationKeys(deadline(),()->NOW));if(mode.equals("clock"))now.set(NOW.minusNanos(1));release.countDown();assertDoesNotThrow(()->result.get(3,TimeUnit.SECONDS));assertEquals(2,calls.get());
    }finally{release.countDown();executor.shutdownNow();assertTrue(executor.awaitTermination(3,TimeUnit.SECONDS));}
   }));return tests;
  }

@@ -154,12 +154,12 @@ public final class WebAuthnSettings {
             return this;
         }
         /** Sets the caller-thread operation budget.
-         * @param value 100 milliseconds through 30 seconds, or null for default
+         * @param value one second through 30 seconds, or null for default
          * @return this builder
          * @since 1.0.0 */
         public @NonNull Builder operationTimeout(@Nullable Duration value) {
             this.operationTimeout = bounded(value, DEFAULT_TIMEOUT,
-                    Duration.ofMillis(100), Duration.ofSeconds(30));
+                    Duration.ofSeconds(1), Duration.ofSeconds(30));
             return this;
         }
         /** Builds a stable settings snapshot.

@@ -91,7 +91,12 @@ final class OAuthRefreshRotation {
    Set<String> selected = OAuthServerAuthorizationAdmission.selectScopes(grant.text("resource"), request.value("scope"), client,
     Map.of(grant.text("resource"), approved), this.limits);
    boolean used = refresh.text("status").equals("USED");
-   if (used == grant.text("refreshId").equals(refreshId)) throw new OAuthStoreFailure(CORRUPT_STATE);
+   if (used == grant.text("refreshId").equals(refreshId)) {
+    // A rotation can commit between the two row reads. Confirm the contradictory pair before
+    // treating it as corruption; a conflict retries from a fresh coherent observation.
+    if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) throw new OAuthStoreFailure(CORRUPT_STATE);
+    continue;
+   }
    session.requireBefore(refresh.retention()); session.requireBefore(grant.retention());
    if (used || grant.text("status").equals("REVOKED")) {
     if (grant.text("status").equals("REVOKED")) { if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) throw invalid(); }

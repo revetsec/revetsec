@@ -44,9 +44,9 @@ import org.jspecify.annotations.Nullable;
  * Explicit bounded, volatile, single-process WebAuthn store. Restart loses ceremonies,
  * credentials, ownership tombstones, account fences and every recovery/time fence. Use durable
  * shared authoritative storage for established accounts or deployments with several nodes.
- * No ordinary read, predicate barrier or refusal reclaims records. Expired ceremonies can remain
- * retained until explicit admitted application maintenance; capacity may refuse safely. Permanent
- * records are never evicted to make room.
+ * No ordinary read, predicate barrier or refusal reclaims records. A successful mutating commit
+ * atomically reclaims expired ceremonies outside its predicate set using the same fresh admitted
+ * store time. Permanent records are never evicted to make room.
  * <p>The first operational call establishes this store's own volatile UTC/elapsed projection and
  * admission metadata. The relying party's worker Clock is never its time source. Construction
  * performs no I/O, random acquisition or time sampling. This demonstration does not qualify
@@ -84,7 +84,8 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 
 	/**
 	 * Creates empty volatile storage with explicit count and aggregate sealed-byte capacity.
-	 * No records are automatically evicted or reclaimed; one record may be up to 262144 bytes.
+	 * Expired ceremonies may be reclaimed by a later successful mutating commit; permanent records
+	 * are never evicted. One record may be up to 262144 bytes.
 	 * @param maximumEntries capacity from 1 to 65536
 	 * @param maximumSealedBytes aggregate capacity from 1 to 268435456 bytes
 	 * @return a new empty process-local store
@@ -152,6 +153,16 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 			Map<WebAuthnStoreKey, Stored> next = new HashMap<>(this.entries);
 			Set<String> nextActivated = new HashSet<>(this.activatedScopes);
 			long nextBytes = this.sealedBytes, nextSequence = this.sequence;
+			for (var iterator = next.entrySet().iterator(); iterator.hasNext();) {
+				Map.Entry<WebAuthnStoreKey, Stored> item = iterator.next();
+				Stored stored = item.getValue();
+				if (item.getKey().getKind() == WebAuthnStoreKey.Kind.CEREMONY
+						&& stored.expiresAt != null && !stored.expiresAt.isAfter(healthy.getObservedAt())
+						&& !write.getSnapshot().getEntries().containsKey(item.getKey())) {
+					nextBytes -= stored.sealedBytes.length;
+					iterator.remove();
+				}
+			}
 			for (WebAuthnStoreWrite.Mutation mutation : write.getMutations()) {
 				WebAuthnStoreKey key = mutation.getKey();
 				Stored prior = next.get(key);
@@ -163,7 +174,7 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 					if (prefix == null) { prefix = randomBytes(16); this.versionPrefix = prefix; }
 					byte[] version = ByteBuffer.allocate(24).put(prefix).putLong(++nextSequence).array();
 					byte[] bytes = mutation.getSealedBytes().orElseThrow();
-					next.put(key, new Stored(version, bytes)); nextBytes += bytes.length;
+					next.put(key, new Stored(version, bytes, mutation.getExpiresAt().orElse(null))); nextBytes += bytes.length;
 					if (key.getKind() == WebAuthnStoreKey.Kind.NAMESPACE_CLOCK) nextActivated.add(WebAuthnStoreSnapshot.scopeOf(key));
 				}
 			}
@@ -210,7 +221,10 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 		if (anchor == null && !this.authorityContinuityLost) {
 			long before = System.nanoTime(); Instant captured = Instant.now(); long after = System.nanoTime();
 			Optional<Duration> bracket = StoreTimeRules.elapsed(before, after);
-			if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured)) this.authorityContinuityLost = true;
+			// A long first sample can be caused by a transient process pause. No clock continuity
+			// exists yet to lose, so leave the anchor unset and allow the next operation to retry.
+			if (bracket.isEmpty() || bracket.get().compareTo(LOCAL_UTC_ERROR) > 0 || !supported(captured))
+				return StoreTimeObservation.Unavailable.fromAdmission(current);
 			else { this.authorityAnchor = captured; this.authorityStartedNanos = after; this.lastAuthorityNanos = after; anchor = captured; }
 		}
 		if (anchor == null || this.authorityContinuityLost) return StoreTimeObservation.Unavailable.fromAdmission(current);
@@ -258,6 +272,9 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 	private static final class Stored {
 		private final byte @NonNull [] version;
 		private final byte @NonNull [] sealedBytes;
-		private Stored(byte @NonNull [] version, byte @NonNull [] sealedBytes) { this.version = version; this.sealedBytes = sealedBytes; }
+		private final @Nullable Instant expiresAt;
+		private Stored(byte @NonNull [] version, byte @NonNull [] sealedBytes, @Nullable Instant expiresAt) {
+			this.version = version; this.sealedBytes = sealedBytes; this.expiresAt = expiresAt;
+		}
 	}
 }

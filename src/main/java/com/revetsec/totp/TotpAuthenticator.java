@@ -357,18 +357,18 @@ public final class TotpAuthenticator {
          * @return this builder
          * @since 1.0.0 */
         public @NonNull Builder recoveryGate(@Nullable TotpRecoveryGate recoveryGate) { this.gate = recoveryGate; return this; }
-        /** Sets the UTC instant source; persisted observed time limits backward movement.
+        /** Sets the worker UTC source used only to confirm bounded clock health against store time.
          * @param clock the clock, or null for the system UTC clock
          * @return this builder
          * @since 1.0.0 */
         public @NonNull Builder clock(@Nullable Clock clock) { this.clock = clock == null ? Clock.systemUTC() : clock; return this; }
         /** Sets one shrinking caller-thread deadline for admission, crypto, storage and conflict retries.
-         * @param operationTimeout from 100 milliseconds to 30 seconds, or null for five seconds
+         * @param operationTimeout from one second to 30 seconds, or null for five seconds
          * @return this builder
          * @since 1.0.0 */
         public @NonNull Builder operationTimeout(@Nullable Duration operationTimeout) {
             Duration timeout = operationTimeout == null ? Duration.ofSeconds(5) : operationTimeout;
-            if (timeout.compareTo(Duration.ofMillis(100)) < 0 || timeout.compareTo(Duration.ofSeconds(30)) > 0)
+            if (timeout.compareTo(Duration.ofSeconds(1)) < 0 || timeout.compareTo(Duration.ofSeconds(30)) > 0)
                 throw new IllegalArgumentException("Invalid TOTP operation timeout");
             this.timeout = timeout; return this;
         }

@@ -110,10 +110,10 @@ public final class SealedStateAccess {
         @NonNull String unsealDurable(@NonNull StateSealer sealer, @NonNull String sealed,
                 @NonNull String context) throws UnsealException;
 
-		/** Seals only OIDC logout hints under the sealer's existing configured-clock/lifetime profile.
+		/** Seals OIDC application-storage credentials under the sealer's configured-clock/lifetime profile.
 		 * Default denial preserves closed installation and cannot grant typed lifetime operations to other implementers.
 		 * @param sealer application sealer
-		 * @param type exactly OIDC_LOGOUT_HINT
+		 * @param type OIDC_LOGOUT_HINT or OIDC_SESSION
 		 * @param plaintext credential-bearing bounded storage text
 		 * @param context fixed application context
 		 * @param lifetime existing sealer lifetime profile
@@ -124,9 +124,9 @@ public final class SealedStateAccess {
 			throw new IllegalArgumentException("Typed lifetime operations are not available.");
 		}
 
-		/** Opens only OIDC logout hints using the sealer's configured clock, without exposing clock or keys.
+		/** Opens OIDC application-storage credentials using the sealer's configured clock, without exposing clock or keys.
 		 * @param sealer application sealer
-		 * @param type exactly OIDC_LOGOUT_HINT
+		 * @param type OIDC_LOGOUT_HINT or OIDC_SESSION
 		 * @param sealed untrusted typed sealed credential
 		 * @param context fixed application context
 		 * @return bounded credential storage text

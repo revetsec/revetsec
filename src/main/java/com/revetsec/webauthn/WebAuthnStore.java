@@ -28,8 +28,10 @@ import org.jspecify.annotations.NonNull;
  * {@link InMemoryWebAuthnStore} is an explicitly selected, volatile single-process option only.
  * Data and admitted time must be one coherent observation. Timed writes compare the current
  * authority, recovery and clock tuple, every predicate, and fresh time after all waits. Ordinary
- * reads, barriers and no-effect refusals perform no hidden reclamation or quota update. Expired
- * ceremonies may remain retained until explicit admitted maintenance; capacity can refuse safely.
+ * reads, barriers and no-effect refusals perform no hidden reclamation or quota update. A successful
+ * mutating commit may atomically reclaim expired ceremonies outside its predicate set using the same
+ * fresh healthy admitted time and their store-visible expiry hints; application stores must provide
+ * this bounded reclamation behavior or equivalent admitted maintenance.
  * Permanent credentials, ownership tombstones, indexes, fences and stable namespace roots are
  * never evicted to make room. A lost acknowledgement after
  * a possible write is UNKNOWN, never CONFLICT or UNAVAILABLE. Implementations honor the remaining

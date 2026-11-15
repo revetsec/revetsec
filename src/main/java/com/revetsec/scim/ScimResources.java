@@ -227,6 +227,14 @@ final class ScimResources {
                 JsonValue old = current.getMembers().get(name), next = incoming.getMembers().get(name);
                 if (definition.getMutability() == ScimMutability.READ_ONLY) { if (old != null) merged.put(name,old); continue; }
                 if (definition.getMutability() == ScimMutability.IMMUTABLE && ScimResourceValidation.assigned(old)) {
+                    // Omission preserves a hidden immutable value, but any submitted value is
+                    // refused without comparing it to the stored secret.
+                    if (definition.getReturned() == ScimReturned.NEVER) {
+                        if (next != null || validation.explicitlyCleared(incoming,name,prefix)) {
+                            if (error == null) error = ScimError.mutabilityInstance(); return null;
+                        }
+                        merged.put(name,old); continue;
+                    }
                     if (next == null && suppliedComplex && !validation.explicitlyCleared(incoming,name,prefix)) next = old;
                     if (definition.getType() == ScimAttributeType.COMPLEX && !definition.isMultiValued()
                             && old instanceof JsonObject previous && next instanceof JsonObject suppliedObject) {

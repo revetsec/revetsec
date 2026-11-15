@@ -202,6 +202,37 @@ public final class WebAuthnStoreProbe {
         System.out.println("EXPIRY_RETAINED_EXACT");
     }
 
+    /** Runs after {@code expiry}: explicit maintenance removes only the expired ceremony and its quota charge. */
+    private static void reclaimExpiredCeremonies() throws Exception {
+        String namespace="fixture_wa_expiry";PostgresqlWebAuthnStore store=store(namespace,4096);
+        WebAuthnStoreKey expired=WebAuthnStoreKey.forCeremony(namespace,RP,new byte[32]);
+        byte[] liveId=new byte[32];liveId[0]=1;
+        WebAuthnStoreKey live=WebAuthnStoreKey.forCeremony(namespace,RP,liveId);
+        if(!(read(store,Set.of(expired)).getEntry(expired) instanceof WebAuthnStoreEntry.Present))throw new IllegalStateException("Expired fixture ceremony missing before maintenance");
+        WebAuthnStoreSnapshot empty=read(store,Set.of(live));
+        Instant future=((StoreTimeObservation.Healthy)empty.getTimeObservation()).getObservedAt().plus(Duration.ofHours(1));
+        expect(store.compareAndCommit(write(empty,List.of(WebAuthnStoreWrite.Mutation.insertExpiring(live,new byte[]{2},future))),BUDGET),WebAuthnStoreCommitResult.COMMITTED);
+        long before=usedEntries(namespace);
+        try{store.reclaimExpiredCeremonies(0,BUDGET);throw new IllegalStateException("Unbounded cleanup batch accepted");}
+        catch(IllegalArgumentException expectedBound){/* Batches are one through sixteen rows. */}
+        PostgresqlWebAuthnStore.CleanupResult first=store.reclaimExpiredCeremonies(16,BUDGET);
+        if(first.getStatus()!=PostgresqlWebAuthnStore.CleanupStatus.COMMITTED || first.getRemovedCount().orElse(-1)!=1)throw new IllegalStateException("Expired ceremony was not reclaimed exactly once");
+        if(!(read(store,Set.of(expired)).getEntry(expired) instanceof WebAuthnStoreEntry.Absent))throw new IllegalStateException("Expired ceremony still present");
+        if(!(read(store,Set.of(live)).getEntry(live) instanceof WebAuthnStoreEntry.Present))throw new IllegalStateException("Live ceremony was reclaimed");
+        if(usedEntries(namespace)!=before-1)throw new IllegalStateException("Ceremony quota was not released exactly once");
+        PostgresqlWebAuthnStore.CleanupResult second=store.reclaimExpiredCeremonies(16,BUDGET);
+        if(second.getStatus()!=PostgresqlWebAuthnStore.CleanupStatus.COMMITTED || second.getRemovedCount().orElse(-1)!=0 || usedEntries(namespace)!=before-1)
+            throw new IllegalStateException("Repeated maintenance changed state");
+        System.out.println("EXPIRED_CEREMONY_RECLAIMED");
+    }
+
+    private static long usedEntries(@NonNull String namespace) throws SQLException {
+        try(Connection c=connection(BUDGET);var st=c.prepareStatement("SELECT sum(used_entries) FROM webauthn_store_escrow WHERE family='WEBAUTHN' AND namespace=?")){
+            st.setString(1,WebAuthnFixtureAuthority.physical(namespace));
+            try(var rows=st.executeQuery()){if(!rows.next())throw new IllegalStateException("Escrow inventory missing");return rows.getLong(1);}
+        }
+    }
+
     private static void reconcile() {
         String namespace = "fixture_wa_unknown";
         WebAuthnStoreEntry entry = read(store(namespace, 4096), Set.of(key(namespace, 1)))
@@ -272,6 +303,7 @@ public final class WebAuthnStoreProbe {
         switch (args[0]) {
             case "basic" -> basic();
             case "expiry" -> expiredCeremonyReclamation();
+            case "reclaim" -> reclaimExpiredCeremonies();
             case "unknown" -> unknown();
             case "reconcile" -> reconcile();
             case "race" -> race();

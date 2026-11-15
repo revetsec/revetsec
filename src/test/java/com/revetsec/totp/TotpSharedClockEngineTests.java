@@ -509,8 +509,8 @@ final class TotpSharedClockEngineTests {
   assertEquals(TotpUnavailableReason.ADMISSION_CLOSED,assertInstanceOf(TotpEnrollmentRequestResult.Unavailable.class,closed.begin()).getReason());
   assertEquals(0,closed.store.reads.get());assertEquals(0,closed.store.commits.get());assertTrue(closed.store.writes.isEmpty());
 
-  F expired=new F();expired.store.afterRead=(number,result)->{if(number==1)scMeasuredReleaseDelay(150_000_000L);return result;};
-  var deadline=expired.auth(expired.worker,Duration.ofMillis(100)).beginEnrollmentResult(options(ACCOUNT),"browser");
+  F expired=new F();expired.store.afterRead=(number,result)->{if(number==1)scMeasuredReleaseDelay(1_100_000_000L);return result;};
+  var deadline=expired.auth(expired.worker,Duration.ofSeconds(1)).beginEnrollmentResult(options(ACCOUNT),"browser");
   assertEquals(TotpUnavailableReason.DEADLINE_EXCEEDED,assertInstanceOf(TotpEnrollmentRequestResult.Unavailable.class,deadline).getReason());
   assertEquals(1,expired.store.reads.get());assertEquals(0,expired.store.commits.get());assertTrue(expired.store.writes.isEmpty());
  }
@@ -529,8 +529,8 @@ final class TotpSharedClockEngineTests {
  @Test void scEng02PostChargeOriginalBudgetExpiresBeforeSettlementCallback() throws Exception {
   F f=new F();f.enroll();f.advance(Duration.ofSeconds(60));String code=f.code(0);long used;
   try(var decoded=f.account()){used=Objects.requireNonNull(Objects.requireNonNull(decoded.account).active).usedStep;}f.reset();
-  f.store.afterCommit=(number,write,receipt)->{if(number==1)scMeasuredReleaseDelay(150_000_000L);return receipt;};
-  var result=f.auth(f.worker,Duration.ofMillis(100)).verifyResult(ACCOUNT,code,"SC-ENG-02/pre-settlement-timeout");
+  f.store.afterCommit=(number,write,receipt)->{if(number==1)scMeasuredReleaseDelay(1_100_000_000L);return receipt;};
+  var result=f.auth(f.worker,Duration.ofSeconds(1)).verifyResult(ACCOUNT,code,"SC-ENG-02/pre-settlement-timeout");
   assertEquals(TotpUnavailableReason.ATTEMPT_INCOMPLETE,assertInstanceOf(TotpVerificationResult.Unavailable.class,result).getReason());
   assertEquals(1,f.store.commits.get());assertEquals(0,f.store.conflicts.get());assertEquals(1,f.store.reads.get());assertEquals(1,f.store.writes.size());
   try(var decoded=f.account()){var account=Objects.requireNonNull(decoded.account);assertEquals(1,account.charges.size());assertEquals(1,account.totpCharges.size());assertEquals(account.charges.get(0).id,account.totpCharges.get(0).id);assertEquals(used,Objects.requireNonNull(account.active).usedStep);}
@@ -606,9 +606,9 @@ final class TotpSharedClockEngineTests {
   for(String fault:List.of("UNAVAILABLE","THROW","DELAY","PERMIT_CLOSE"))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-CLK-05/TOTP/good-completion/"+fault,()->{
    F f=new F();TotpStoreRecord root=f.record(f.root());var delivered=new AtomicReference<@Nullable StoreCommitTiming>();
    f.store.afterCommit=(number,write,receipt)->{var validated=receipt.getTiming().orElseThrow().getValidatedTime();var completed=StoreTimeObservation.Healthy.fromObservation(validated.getAdmission(),validated.getClockGeneration(),f.source.authorityTime(),validated.getMaximumUtcError());var timing=StoreCommitTiming.fromTimes(validated,completed);delivered.set(timing);return TotpStoreCommitReceipt.fromCommittedTiming(timing);};
-   f.store.afterRead=(number,result)->{if(number==2){if(fault.equals("UNAVAILABLE"))return TotpStoreReadResult.Unavailable.get();if(fault.equals("THROW"))throw new IllegalStateException("Test-only final read failure");if(fault.equals("DELAY"))scMeasuredReleaseDelay(150_000_000L);}return result;};
+   f.store.afterRead=(number,result)->{if(number==2){if(fault.equals("UNAVAILABLE"))return TotpStoreReadResult.Unavailable.get();if(fault.equals("THROW"))throw new IllegalStateException("Test-only final read failure");if(fault.equals("DELAY"))scMeasuredReleaseDelay(1_100_000_000L);}return result;};
    if(fault.equals("PERMIT_CLOSE"))f.gate.failClose.set(true);
-   var result=f.auth(f.worker,Duration.ofMillis(100)).beginEnrollmentResult(options(ACCOUNT),"browser");
+   var result=f.auth(f.worker,Duration.ofSeconds(1)).beginEnrollmentResult(options(ACCOUNT),"browser");
    assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,result);
    assertTrue(Objects.requireNonNull(delivered.get()).getCompletedTime().isPresent());assertEquals(1,f.store.commits.get());assertEquals(2,f.store.reads.get());assertEquals(1,f.store.writes.size());
    assertEquals(root.getVersion(),f.record(f.root()).getVersion());assertArrayEquals(root.getSealedBytes(),f.record(f.root()).getSealedBytes());

@@ -345,7 +345,8 @@ public final class OAuthAuthorizationServer {
  }
  /** Attempts one authenticated reseal CAS without changing grant authority or retention.
   * @param key privileged namespace-bound maintenance key
-  * @return COMMITTED, CONFLICT for absence/race/expired row, or UNKNOWN requiring reconciliation
+  * @return the factual store outcome: COMMITTED, CONFLICT for absence/race/expired row, UNKNOWN
+  * requiring reconciliation, or another explicit refusal reported by the configured store
   * @since 1.0.0
   */
  @CheckReturnValue public @NonNull OAuthStoreCommitReceipt resealStoreEntry(@NonNull OAuthStoreKey key) {

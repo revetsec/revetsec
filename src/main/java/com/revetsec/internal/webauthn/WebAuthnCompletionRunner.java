@@ -222,7 +222,7 @@ final class WebAuthnCompletionRunner {
                     case COMMITTED -> Outcome.COMMITTED_NO_PROOF;
                     case INDETERMINATE -> Outcome.INDETERMINATE;
                     case RECONCILIATION_REQUIRED -> Outcome.RECONCILIATION_REQUIRED;
-                    case TIME_EXPIRED -> Outcome.REJECTED;
+                    case TIME_EXPIRED -> expiresAt.isAfter(action) ? Outcome.UNAVAILABLE : Outcome.REJECTED;
                     case CAPACITY -> Outcome.CAPACITY;
                     case CONFLICT,UNAVAILABLE -> Outcome.UNAVAILABLE;
                 };

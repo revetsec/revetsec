@@ -113,7 +113,7 @@ final class WebAuthnTentativeEnrollmentTests {
     @Test void expiryAtCommitLeavesNoPartialAccountOrConsumption() throws Exception {
         F f=new F();var request=f.begin(HANDLE);var before=f.source.records();
         f.store.before=write->{f.advance(Duration.ofSeconds(300));};
-        assertEquals(WebAuthnEngine.Status.REJECTED,f.complete(request,ID).status());assertSameRecords(before,f.source.records());assertTentative(f,HANDLE);
+        assertEquals(WebAuthnEngine.Status.UNAVAILABLE,f.complete(request,ID).status());assertSameRecords(before,f.source.records());assertTentative(f,HANDLE);
     }
     @Test void capacityRefusalLeavesTentativeCeremonyUnconsumed() throws Exception {
         F f=new F(3);var request=f.begin(HANDLE);var before=f.source.records();

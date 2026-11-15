@@ -275,10 +275,10 @@ final class WebAuthnSharedClockEngineTests {
         var request=prepared(f.begin(new byte[]{9}));assertEquals(2,candidates.size());assertArrayEquals(candidates.get(0).ceremonyId(),candidates.get(1).ceremonyId());assertArrayEquals(candidates.get(0).challenge(),candidates.get(1).challenge());assertEquals(BASE,candidates.get(1).issuedAt());assertEquals(BASE.plusSeconds(300),candidates.get(1).expiresAt());assertArrayEquals(request.ceremonyId(),candidates.get(0).ceremonyId());
         assertEquals(f.store.writes.get(0).getTemporalCondition().getValidBeforeExclusive(),f.store.writes.get(1).getTemporalCondition().getValidBeforeExclusive());
     }
-    @Test void exactExpiryBeforeStoreValidationRejectsWithoutMutationOrRetry() {
+    @Test void operationExpiryBeforeStoreValidationIsUnavailableWithoutMutationOrRetry() {
         F f=new F();prepared(f.begin(HANDLE));f.reset();var before=f.source.records();
         f.store.beforeCommit=(n,w)->{Instant upper=w.getTemporalCondition().getValidBeforeExclusive().orElseThrow();f.advance(Duration.between(f.source.authorityTime(),upper));return null;};
-        assertEquals(WebAuthnEngine.Status.REJECTED,f.begin(new byte[]{11}).status());assertEquals(1,f.store.writes.size());assertRecordsSame(before,f.source.records());
+        assertEquals(WebAuthnEngine.Status.UNAVAILABLE,f.begin(new byte[]{11}).status());assertEquals(1,f.store.writes.size());assertRecordsSame(before,f.source.records());
     }
     @Test void committedRegistrationWithLostFinalAdmissionDoesNotReleaseProof() throws Exception {
         F f=new F();var request=prepared(f.begin(HANDLE));KeyPair pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();f.reset();f.store.afterCommit=(n,w,r)->{f.source.setHealthy(false);return r;};
@@ -293,10 +293,10 @@ final class WebAuthnSharedClockEngineTests {
         var key=WebAuthnStoreKey.forCredential(NAMESPACE,RP,CREDENTIAL_ID);assertEquals(1,new WebAuthnCredentialRecordCodec(NAMESPACE,RP,f.records).decode(key,f.record(key).getSealedBytes(),f.authorityClock()).counter());
         assertFalse(f.ceremony(request).isPendingAt(f.source.authorityTime()));
     }
-    @Test void authenticationExpiryDuringStoreWaitCannotConsumeTheCeremonyOrCounter() throws Exception {
+    @Test void authenticationOperationExpiryDuringStoreWaitCannotConsumeTheCeremonyOrCounter() throws Exception {
         F f=new F();KeyPair pair=f.enroll();var request=prepared(f.engine.beginAuthentication(BINDING));f.reset();var before=f.source.records();
         f.store.beforeCommit=(n,w)->{Instant upper=w.getTemporalCondition().getValidBeforeExclusive().orElseThrow();f.advance(Duration.between(f.source.authorityTime(),upper));return null;};
-        assertEquals(WebAuthnEngine.Status.REJECTED,f.engine.completeAuthentication(request.ceremonyId(),BINDING,assertionJson(pair.getPrivate(),Base64Url.encode(request.challenge()),1)).status());
+        assertEquals(WebAuthnEngine.Status.UNAVAILABLE,f.engine.completeAuthentication(request.ceremonyId(),BINDING,assertionJson(pair.getPrivate(),Base64Url.encode(request.challenge()),1)).status());
         assertEquals(1,f.store.writes.size());assertRecordsSame(before,f.source.records());
     }
     @Test void queryOnlyExpiryCannotReviveAfterAnEarlierClockGeneration() {
@@ -306,7 +306,7 @@ final class WebAuthnSharedClockEngineTests {
     }
     @Test void lateKnownAcknowledgementRemainsReconciliationAndLateNoEffectRemainsUnavailable() {
         for(boolean effect:List.of(false,true)){
-            F f=new F();prepared(f.begin(HANDLE));f.reset();WebAuthnEngine shortBudget=f.engine(f.worker,Duration.ofMillis(100));
+            F f=new F();prepared(f.begin(HANDLE));f.reset();WebAuthnEngine shortBudget=f.engine(f.worker,Duration.ofSeconds(1));
             if(effect)f.store.afterCommit=(n,w,r)->{pause();return r;};else f.store.beforeCommit=(n,w)->{pause();return refusal(WebAuthnStoreCommitResult.CAPACITY);};
             var result=shortBudget.beginRegistration(new byte[]{12},BINDING);
             assertEquals(effect?WebAuthnEngine.Status.RECONCILIATION_REQUIRED:WebAuthnEngine.Status.UNAVAILABLE,result.status());assertNull(result.request());assertEquals(1,f.store.writes.size());
@@ -316,7 +316,7 @@ final class WebAuthnSharedClockEngineTests {
         F f=new F();var request=prepared(f.begin(HANDLE));assertThrows(IllegalArgumentException.class,()->f.engine.resealStoreEntry(WebAuthnStoreKey.forCeremony(NAMESPACE,RP,request.ceremonyId())));f.reset();
         f.store.afterCommit=(n,w,r)->WebAuthnStoreCommitReceipt.unknownInstance();assertEquals(WebAuthnStoreCommitResult.UNKNOWN,f.engine.resealStoreEntry(f.root()).getStatus());assertEquals(1,f.store.writes.size());assertEquals(1,f.store.reads.get());
     }
-    private static void pause(){try{Thread.sleep(200);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}}
+    private static void pause(){try{Thread.sleep(1_100);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}}
 
     @org.junit.jupiter.api.TestFactory
     @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi02ErrorProfileCannotChangeAtReceiptOrFinalRead(){
@@ -628,7 +628,7 @@ final class WebAuthnSharedClockEngineTests {
 
  @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi08NormalStatusesDistinguishZeroEffectUnknownAndOneAllowedConflictRetry(){
   List<org.junit.jupiter.api.DynamicTest> cases=new ArrayList<>();for(var status:WebAuthnStoreCommitResult.values())for(boolean applied:status==WebAuthnStoreCommitResult.UNKNOWN?List.of(false,true):List.of(status==WebAuthnStoreCommitResult.COMMITTED))cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-08/WEBAUTHN/status="+status+"/applied="+applied,()->{
-   F f=new F();prepared(f.begin(new byte[]{7,8,9}));var before=f.source.records();f.reset();f.store.beforeCommit=(n,w)->{if(status==WebAuthnStoreCommitResult.COMMITTED||(status==WebAuthnStoreCommitResult.CONFLICT&&n>1)||(status==WebAuthnStoreCommitResult.UNKNOWN&&applied))return null;return status==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():WebAuthnStoreCommitReceipt.fromRefusal(status);};f.store.afterCommit=(n,w,r)->status==WebAuthnStoreCommitResult.UNKNOWN&&applied?WebAuthnStoreCommitReceipt.unknownInstance():r;var result=f.begin(HANDLE);WebAuthnEngine.Status expected=status==WebAuthnStoreCommitResult.COMMITTED||status==WebAuthnStoreCommitResult.CONFLICT?WebAuthnEngine.Status.PREPARED:status==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnEngine.Status.INDETERMINATE:status==WebAuthnStoreCommitResult.TIME_EXPIRED?WebAuthnEngine.Status.REJECTED:WebAuthnEngine.Status.UNAVAILABLE;assertEquals(expected,result.status());if(expected!=WebAuthnEngine.Status.PREPARED)assertNull(result.request());assertEquals(status==WebAuthnStoreCommitResult.CONFLICT?2:1,f.store.writes.size());assertEquals(status==WebAuthnStoreCommitResult.CONFLICT?3:status==WebAuthnStoreCommitResult.COMMITTED||status==WebAuthnStoreCommitResult.TIME_EXPIRED?2:1,f.store.reads.get());boolean changed=status==WebAuthnStoreCommitResult.COMMITTED||status==WebAuthnStoreCommitResult.CONFLICT||applied;if(changed){assertEquals(before.size()+1,f.source.records().size());for(var key:before.keySet()){assertArrayEquals(before.get(key).getVersion(),f.record(key).getVersion());assertArrayEquals(before.get(key).getSealedBytes(),f.record(key).getSealedBytes());}}else assertRecordsSame(before,f.source.records());
+   F f=new F();prepared(f.begin(new byte[]{7,8,9}));var before=f.source.records();f.reset();f.store.beforeCommit=(n,w)->{if(status==WebAuthnStoreCommitResult.COMMITTED||(status==WebAuthnStoreCommitResult.CONFLICT&&n>1)||(status==WebAuthnStoreCommitResult.UNKNOWN&&applied))return null;return status==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():WebAuthnStoreCommitReceipt.fromRefusal(status);};f.store.afterCommit=(n,w,r)->status==WebAuthnStoreCommitResult.UNKNOWN&&applied?WebAuthnStoreCommitReceipt.unknownInstance():r;var result=f.begin(HANDLE);WebAuthnEngine.Status expected=status==WebAuthnStoreCommitResult.COMMITTED||status==WebAuthnStoreCommitResult.CONFLICT?WebAuthnEngine.Status.PREPARED:status==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnEngine.Status.INDETERMINATE:WebAuthnEngine.Status.UNAVAILABLE;assertEquals(expected,result.status());if(expected!=WebAuthnEngine.Status.PREPARED)assertNull(result.request());assertEquals(status==WebAuthnStoreCommitResult.CONFLICT?2:1,f.store.writes.size());assertEquals(status==WebAuthnStoreCommitResult.CONFLICT?3:status==WebAuthnStoreCommitResult.COMMITTED?2:1,f.store.reads.get());boolean changed=status==WebAuthnStoreCommitResult.COMMITTED||status==WebAuthnStoreCommitResult.CONFLICT||applied;if(changed){assertEquals(before.size()+1,f.source.records().size());for(var key:before.keySet()){assertArrayEquals(before.get(key).getVersion(),f.record(key).getVersion());assertArrayEquals(before.get(key).getSealedBytes(),f.record(key).getSealedBytes());}}else assertRecordsSame(before,f.source.records());
   }));return cases;
  }
  @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi08EnteredNullOrThrowNeverInfersRollbackFromInstrumentedEffects(){
@@ -678,9 +678,9 @@ final class WebAuthnSharedClockEngineTests {
   for(String fault:List.of("UNAVAILABLE","THROW","DELAY","PERMIT_CLOSE"))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-CLK-05/WEBAUTHN/good-completion/"+fault,()->{
    F f=new F();var delivered=new AtomicReference<@Nullable StoreCommitTiming>();
    f.store.afterCommit=(number,write,receipt)->{var validated=receipt.getTiming().orElseThrow().getValidatedTime();var completed=StoreTimeObservation.Healthy.fromObservation(validated.getAdmission(),validated.getClockGeneration(),f.source.authorityTime(),validated.getMaximumUtcError());var timing=StoreCommitTiming.fromTimes(validated,completed);delivered.set(timing);return WebAuthnStoreCommitReceipt.fromCommittedTiming(timing);};
-   f.store.afterRead=(number,result)->{if(number==2){if(fault.equals("UNAVAILABLE"))return WebAuthnStoreReadResult.Unavailable.get();if(fault.equals("THROW"))throw new IllegalStateException("Test-only final read failure");if(fault.equals("DELAY"))scMeasuredReleaseDelay(150_000_000L);}return result;};
+   f.store.afterRead=(number,result)->{if(number==2){if(fault.equals("UNAVAILABLE"))return WebAuthnStoreReadResult.Unavailable.get();if(fault.equals("THROW"))throw new IllegalStateException("Test-only final read failure");if(fault.equals("DELAY"))scMeasuredReleaseDelay(1_100_000_000L);}return result;};
    if(fault.equals("PERMIT_CLOSE"))f.gate.failClose.set(true);
-   var result=f.engine(f.worker,Duration.ofMillis(100)).beginRegistration(HANDLE,BINDING);assertEquals(WebAuthnEngine.Status.RECONCILIATION_REQUIRED,result.status());assertNull(result.request());
+   var result=f.engine(f.worker,Duration.ofSeconds(1)).beginRegistration(HANDLE,BINDING);assertEquals(WebAuthnEngine.Status.RECONCILIATION_REQUIRED,result.status());assertNull(result.request());
    assertTrue(Objects.requireNonNull(delivered.get()).getCompletedTime().isPresent());assertEquals(1,f.store.writes.size());assertEquals(2,f.store.reads.get());assertEquals(Set.of(f.root()),f.store.lastRead);
    assertTrue(f.source.records().keySet().stream().anyMatch(key->key.getKind()==WebAuthnStoreKey.Kind.CEREMONY));for(var key:f.source.records().keySet())try(var decoded=f.decoded(key)){assertEquals(BASE,decoded.floor());}
   }));return cells;

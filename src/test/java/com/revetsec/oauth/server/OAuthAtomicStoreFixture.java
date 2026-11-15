@@ -33,12 +33,14 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /** Atomic single-process test double. No persistence, failover or durable-backend claim. */
 final class OAuthAtomicStoreFixture implements OAuthAuthorizationServerStore {
 	final @NonNull Map<@NonNull OAuthStoreKey, @NonNull OAuthStoreEntry> rows = new LinkedHashMap<>();
 	final @NonNull List<@NonNull Duration> budgets = new ArrayList<>();
 	@Nullable Runnable beforeRead;
+	@Nullable Consumer<@NonNull OAuthStoreKey> beforeReadKey;
 	@Nullable Runnable beforeCommit;
 	@Nullable Runnable afterCommit;
 	@Nullable Throwable fault;
@@ -79,6 +81,7 @@ final class OAuthAtomicStoreFixture implements OAuthAuthorizationServerStore {
 	public OAuthStoreReadResult read(@NonNull OAuthStoreKey key, @NonNull Duration budget) {
 		this.reads++; this.budgets.add(budget);
 		Runnable hook = this.beforeRead; this.beforeRead = null; if (hook != null) hook.run();
+		Consumer<OAuthStoreKey> keyHook = this.beforeReadKey; if (keyHook != null) keyHook.accept(key);
 		if (this.fault != null) raise(this.fault);
 		if (this.nullRead) return null;
 		synchronized (this.rows) {

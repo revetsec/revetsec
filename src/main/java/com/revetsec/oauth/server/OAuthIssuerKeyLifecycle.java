@@ -78,17 +78,19 @@ final class OAuthIssuerKeyLifecycle {
    OAuthIssuerKeySnapshot observed=history.previous;
    OAuthIssuerKeySnapshot next=requireNonNull(this.provider.getSnapshot(OAuthServerClientAdmission.remaining(deadline)));
    OAuthServerClientAdmission.remaining(deadline);
+   Instant sampledNow;
+   try { sampledNow=requireNonNull(authorityTime.get()); }
+   catch(OAuthStoreFailure failure) {
+    // Only the admitted internal authority supplier may preserve a store-health signal.
+    if(history==this.admitted)trustedAuthorityFailure=failure;
+    throw failure;
+   }
+   OAuthServerClientAdmission.remaining(deadline);
    if(!this.lock.tryLock(OAuthServerClientAdmission.remaining(deadline).toNanos(),TimeUnit.NANOSECONDS)) throw unavailable();
    try {
     OAuthServerClientAdmission.remaining(deadline);
-    Instant now;
-    try { now=requireNonNull(authorityTime.get()); }
-    catch(OAuthStoreFailure failure) {
-     // Only the admitted internal authority supplier may preserve a store-health signal.
-     if(history==this.admitted)trustedAuthorityFailure=failure;
-     throw failure;
-    }
-    if(next.getPublishedAt().isAfter(now) || (history.lastNow!=null && now.isBefore(history.lastNow))) throw unavailable();
+    Instant now=history.lastNow!=null && sampledNow.isBefore(history.lastNow)?history.lastNow:sampledNow;
+    if(next.getPublishedAt().isAfter(now)) throw unavailable();
     OAuthIssuerKeySnapshot old=history.previous;
     if(old!=null && old!=observed && !old.getGeneration().equals(next.getGeneration())
       && !next.getPublishedAt().isAfter(old.getPublishedAt())) {

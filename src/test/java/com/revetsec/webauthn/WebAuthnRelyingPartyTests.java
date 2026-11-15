@@ -369,12 +369,12 @@ final class WebAuthnRelyingPartyTests {
             }
         };
         WebAuthnSettings settings = WebAuthnSettings.builder()
-                .operationTimeout(Duration.ofMillis(100)).build();
+                .operationTimeout(Duration.ofSeconds(1)).build();
         assertInstanceOf(WebAuthnAuthenticationRequestResult.Unavailable.class,
                 relyingParty(store, ADMIT, settings, CLOCK).beginAuthenticationResult(BINDING_TEXT));
         Duration received = observed.get();
         assertTrue(received != null && !received.isNegative() && !received.isZero()
-                && received.compareTo(Duration.ofMillis(100)) <= 0);
+                && received.compareTo(Duration.ofSeconds(1)) <= 0);
     }
 
     @Test void removalRevokesPendingAssertionsAndPermanentlyReservesCredentialId() throws Exception {

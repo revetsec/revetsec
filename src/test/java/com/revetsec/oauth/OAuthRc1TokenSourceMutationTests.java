@@ -141,7 +141,8 @@ final class OAuthRc1TokenSourceMutationTests {
             java.lang.reflect.Field count=ClientCredentialsTokenSource.class.getDeclaredField("failureCount");
             count.setAccessible(true);assertEquals(1,count.getInt(source),"The first infrastructure failure starts the bounded backoff sequence.");
             assertFalse(first.toString().contains("TEST-ONLY-private-clock"));
-            assertSame(first,onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult)));
+            OAuthException cached=onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult));
+            assertNotSame(first,cached);assertEquals(first.getReason(),cached.getReason());
             assertEquals(1,server.getHitCount("/token"));
         }
     }
@@ -170,7 +171,7 @@ final class OAuthRc1TokenSourceMutationTests {
     }
 
     @TestFactory
-    @NonNull Stream<@NonNull DynamicTest> coalescedFailureAndInterruptionKeepTheirOriginalMeaning() {
+    @NonNull Stream<@NonNull DynamicTest> coalescedFailureCopiesAndInterruptionKeepTheirOriginalMeaning() {
         return Stream.of(false,true).map(interrupt -> DynamicTest.dynamicTest(interrupt?"interrupted waiter":"failed leader",()->{
             try(TestHttpsServer server=TestHttpsServer.start()) {
                 CountDownLatch followerEntered=new CountDownLatch(1);
@@ -197,8 +198,9 @@ final class OAuthRc1TokenSourceMutationTests {
                     thread.start();assertTrue(followerEntered.await(2,TimeUnit.SECONDS));
                     if(interrupt){thread.interrupt();assertEquals(OAuthException.Reason.INTERRUPTED,result(follower).getReason());}
                     held.release();OAuthException first=result(leader);
-                    if(!interrupt)assertSame(first,result(follower));
-                    assertSame(first,onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult)));
+                    if(!interrupt){OAuthException followerFailure=result(follower);assertNotSame(first,followerFailure);assertEquals(first.getReason(),followerFailure.getReason());}
+                    OAuthException cached=onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult));
+                    assertNotSame(first,cached);assertEquals(first.getReason(),cached.getReason());
                     assertEquals(1,server.getHitCount("/token"));
                 } finally {held.release();leader.cancel(true);follower.cancel(true);}
             }

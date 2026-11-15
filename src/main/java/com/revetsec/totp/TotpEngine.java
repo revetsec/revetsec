@@ -33,6 +33,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.Immutable;
 import java.io.IOException;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -97,8 +98,10 @@ final class TotpEngine {
 			if(permit!=null) {
 				try {
 					if(normal(result) && !run.current(permit)) result=run.failed(TotpUnavailableReason.ADMISSION_CLOSED);
-					permit.close();
 				} catch(VirtualMachineError fatal) {if(fatalFailure==null)fatalFailure=fatal;}
+				catch(Throwable failure) {preserveInterrupt(failure);result=run.failed(TotpUnavailableReason.ADMISSION_CLOSED);}
+				try {permit.close();}
+				catch(VirtualMachineError fatal) {if(fatalFailure==null)fatalFailure=fatal;}
 				catch(Throwable failure) {preserveInterrupt(failure);result=run.failed(TotpUnavailableReason.ADMISSION_CLOSED);}
 			}
 			if(run.remaining()==null) result=run.failed(TotpUnavailableReason.DEADLINE_EXCEEDED);
@@ -145,7 +148,8 @@ final class TotpEngine {
 						account=new TotpRecords.Account(Objects.requireNonNull(command.accountId),this.records.freshId(),state.now);
 						state.account=account;
 					}
-					if(account==null)result.reject(TotpRejectionReason.FACTOR_MISMATCH);
+					if(account==null)result.reject(command.action==Action.CANCEL
+							?TotpRejectionReason.ENROLLMENT_NOT_FOUND:TotpRejectionReason.FACTOR_MISMATCH);
 					else switch(command.action) {
 						case BEGIN -> {
 							begin(command,account,state.now,result,run);
@@ -223,8 +227,8 @@ final class TotpEngine {
 			try(State state=load(run,command.accountId,false,null)) {
 				TotpRecords.Account account=state.account;
 				if(account==null){account=new TotpRecords.Account(Objects.requireNonNull(command.accountId),this.records.freshId(),state.now);state.account=account;}
-				if(!authentication.prepared)authentication.prepare(run,command,account,state.now);
 				boolean throttled=account.charges.size()>=5 || (authentication.sixDigit && account.totpCharges.size()>=10);
+				if(!authentication.prepared)authentication.prepare(run,command,account,state.now,!throttled);
 				List<TotpStoreWrite.Mutation> changes=new ArrayList<>();
 				if(!throttled){account.charges.add(new TotpRecords.Charge(authentication.chargeId,state.now));if(authentication.sixDigit)account.totpCharges.add(new TotpRecords.Charge(authentication.chargeId,state.now));changes.add(accountMutation(state,account));}
 				TotpStoreCommitResult committed=run.commit(state,changes,TotpStoreWrite.Purpose.UPDATE,
@@ -502,18 +506,19 @@ final class TotpEngine {
 		@Nullable Instant upper;
 		@NonNull TotpRejectionReason expiredReason=TotpRejectionReason.REJECTED;
 		AuthAttempt(@NonNull String chargeId,boolean sixDigit){this.chargeId=chargeId;this.sixDigit=sixDigit;}
-		void prepare(@NonNull Run run,@NonNull Command command,TotpRecords.@NonNull Account account,@NonNull Instant now) throws Failure {
+		void prepare(@NonNull Run run,@NonNull Command command,TotpRecords.@NonNull Account account,@NonNull Instant now,
+				boolean evaluateCode) throws Failure {
 			this.fence=account.fence;this.batchId=account.batchId;this.upper=run.artifactUpper();
 			if(command.action==Action.CONFIRM){
 				TotpRecords.Pending pending=account.pending;
 				if(pending!=null){
 					this.factorId=pending.factorId;
 					if(!pending.expiresAt.isAfter(Objects.requireNonNull(this.upper))){this.upper=pending.expiresAt;this.expiredReason=TotpRejectionReason.ENROLLMENT_NOT_FOUND;}
-					this.matchedStep=matching(pending.secret,command.second,now,-1);
+					if(evaluateCode)this.matchedStep=matching(pending.secret,command.second,now,-1);
 				}
 			}else if(account.active!=null){
 				this.factorId=account.active.factorId;
-				if(this.sixDigit)this.matchedStep=matching(account.active.secret,command.second,now,account.active.usedStep);
+				if(evaluateCode && this.sixDigit)this.matchedStep=matching(account.active.secret,command.second,now,account.active.usedStep);
 			}
 			if(this.matchedStep>=0){
 				Instant end=Instant.ofEpochSecond(Math.multiplyExact(Math.addExact(this.matchedStep,2),30));
@@ -594,9 +599,10 @@ final class TotpEngine {
 		private @NonNull TotpStoreCommitResult commit(@NonNull State state,@NonNull List<TotpStoreWrite.@NonNull Mutation> mutations,
 				TotpStoreWrite.@NonNull Purpose purpose,@NonNull CommitRole role,@Nullable Instant upper) throws Failure {
 			checkCurrent();
-			if(upper!=null && !state.now.isBefore(upper))return TotpStoreCommitResult.TIME_EXPIRED;
 			StoreTimeObservation.Healthy observation=(StoreTimeObservation.Healthy)state.snapshot.getTimeObservation();
-			StoreTemporalCondition condition=StoreTimeAccess.get().fromObservation(observation,state.now,upper);
+			Instant commitUpper=commitUpper(observation,upper);
+			if(commitUpper!=null && !state.now.isBefore(commitUpper))return TotpStoreCommitResult.TIME_EXPIRED;
+			StoreTemporalCondition condition=StoreTimeAccess.get().fromObservation(observation,state.now,commitUpper);
 			TotpStoreWrite write=TotpStoreWrite.fromSnapshotAndMutations(purpose,state.snapshot,mutations,condition);
 			Duration budget=Objects.requireNonNull(remaining());long callStart=System.nanoTime();
 			TotpStoreCommitReceipt receipt;
@@ -605,6 +611,8 @@ final class TotpEngine {
 			if(receipt==null){if(mutations.isEmpty())this.barrierUnknown=true;else this.mutationUnknown=true;return TotpStoreCommitResult.UNKNOWN;}
 			TotpStoreCommitResult status=receipt.getStatus();
 			if(status==TotpStoreCommitResult.UNKNOWN){if(mutations.isEmpty())this.barrierUnknown=true;else this.mutationUnknown=true;return status;}
+			if(status==TotpStoreCommitResult.TIME_EXPIRED && commitUpper==null)
+				throw new Failure(failed(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE));
 			if(status==TotpStoreCommitResult.COMMITTED){
 				if(role==CommitRole.CHARGE_RESERVATION)this.chargeCommitted=true;
 				if(role==CommitRole.REQUESTED_TRANSITION)this.requestedCommitted=true;
@@ -613,7 +621,7 @@ final class TotpEngine {
 				if(timing==null){this.malformedCommitted=true;throw new Failure(failed(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE));}
 				StoreTimeObservation.Healthy validated=timing.getValidatedTime();
 				if(!StoreTimeRules.sameProfile(observation,validated) || validated.getObservedAt().isBefore(condition.getNotBeforeInclusive())
-						|| (upper!=null && !validated.getObservedAt().isBefore(upper))){
+						|| (commitUpper!=null && !validated.getObservedAt().isBefore(commitUpper))){
 					this.malformedCommitted=true;throw new Failure(failed(TotpUnavailableReason.FENCED));
 				}
 				if(role==CommitRole.AUXILIARY && this.chargeCommitted)this.chargeDecisionSettled=true;
@@ -627,6 +635,11 @@ final class TotpEngine {
 				}
 			}
 			checkCurrent();return status;
+		}
+		private @Nullable Instant commitUpper(StoreTimeObservation.@NonNull Healthy observation,@Nullable Instant releaseUpper){
+			if(releaseUpper==null)return null;
+			try{return releaseUpper.minus(observation.getMaximumUtcError());}
+			catch(DateTimeException | ArithmeticException invalid){return Instant.MIN;}
 		}
 		private void requireCommit(@NonNull TotpStoreCommitResult status,@NonNull TotpRejectionReason expired) throws Failure {
 			if(status==TotpStoreCommitResult.COMMITTED)return;

@@ -313,6 +313,7 @@ def main() -> None:
             for line in lines:check(True,line[5:])
             probe("basic", "BASIC_OK")
             probe("expiry", "EXPIRY_RETAINED_EXACT")
+            probe("reclaim", "EXPIRED_CEREMONY_RECLAIMED")
             probe("unknown", "UNKNOWN_REPORTED")
             probe("reconcile", "RECONCILED")
 
