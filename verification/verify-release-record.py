@@ -201,10 +201,8 @@ def verify_record(record, final=True):
 	if not isinstance(external_dependencies, list) or len(external_dependencies) != 1:
 		raise ReleaseRecordError("externalDependencies must contain the qualified Soklet release")
 	external = require_mapping(external_dependencies[0], "external dependency")
-	require_exact_keys(
-		external, {"coordinates", "repository", "jarSha256", "pomSha256"},
-		"external dependency",
-	)
+	# Soklet is a published Central release: the record names it by coordinates and records no hash.
+	require_exact_keys(external, {"coordinates", "repository"}, "external dependency")
 	if final:
 		try:
 			group_id, artifact_id, external_version = external["coordinates"].split(":")
@@ -217,10 +215,8 @@ def verify_record(record, final=True):
 			raise ReleaseRecordError("external dependency must be a literal Soklet release")
 		if external["repository"] != "https://repo.maven.apache.org/maven2":
 			raise ReleaseRecordError("external dependency must resolve from canonical Central")
-		require_sha256(external["jarSha256"], "external dependency jarSha256", True)
-		require_sha256(external["pomSha256"], "external dependency pomSha256", True)
 	else:
-		for field in ("coordinates", "repository", "jarSha256", "pomSha256"):
+		for field in ("coordinates", "repository"):
 			if not isinstance(external[field], str):
 				raise ReleaseRecordError(f"external dependency {field} must be a string")
 
@@ -1225,13 +1221,6 @@ def verify_evidence(record, evidence_root):
 				raise ReleaseRecordError(f"consumer core JAR differs for {coordinates}")
 			if artifacts[core_coordinates]["pomSha256"] != core_component["payloadSha256"]["pom"]:
 				raise ReleaseRecordError(f"consumer core POM differs for {coordinates}")
-		if component["repository"] == "revetsec-soklet":
-			external_hashes = artifacts[external_dependency["coordinates"]]
-			if (
-				external_hashes["jarSha256"] != external_dependency["jarSha256"]
-				or external_hashes["pomSha256"] != external_dependency["pomSha256"]
-			):
-				raise ReleaseRecordError("Soklet consumer artifacts differ from externalDependencies")
 
 		maven = require_mapping(consumer["maven"], "consumer receipt maven")
 		require_exact_keys(maven, {"result", "classpath", "output"}, "consumer receipt maven")

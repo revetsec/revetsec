@@ -28,7 +28,7 @@ Public top-level types in the exported packages below, and their reachable publi
 | `com.revetsec.password` | Argon2id password hashing, explicit legacy verification and migration, bounded work and pepper rotation |
 | `com.revetsec.totp` | TOTP enrollment and verification, recovery codes, durable record/store contracts and recovery fencing |
 
-### 1.0.0 declaration inventory (2026-11-15)
+### 1.0.0 declaration inventory (2026-11-16)
 
 The [complete current type list](docs/public-api-inventory.md) measures the `1.0.0` release source using the same exported-type rules as `PublicApiContractTests`, cross-checked against compiled declarations. Count each public top-level declaration once and each accessible public or protected nested declaration once under its declaring type. Builders, enums and restricted result variants count as types; methods, constructors, fields, enum constants and compiler-generated helpers do not. No protected nested declarations occur in this release. Adapter artifacts and internal packages are outside these totals.
 

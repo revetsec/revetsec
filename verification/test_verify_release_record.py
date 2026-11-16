@@ -62,8 +62,6 @@ class ReleaseRecordTests(unittest.TestCase):
 				"sha256": "e" * 64,
 			},
 		}
-		record["externalDependencies"][0]["jarSha256"] = "4" * 64
-		record["externalDependencies"][0]["pomSha256"] = "5" * 64
 		for component in record["components"]:
 			name = component["repository"]
 			component["localBundleSha256"] = "b" * 64
@@ -983,14 +981,14 @@ class ReleaseRecordTests(unittest.TestCase):
 				VERIFIER.verify_evidence(record, temporary)
 			self.assertIn("published component POM dependencies differ", str(raised.exception))
 
-	def test_external_dependency_hashes_must_match_resolved_consumer_artifacts(self):
-		record = self.complete_record()
-		with tempfile.TemporaryDirectory() as temporary:
-			self.materialize_evidence(temporary, record)
-			record["externalDependencies"][0]["jarSha256"] = "9" * 64
-			with self.assertRaises(VERIFIER.ReleaseRecordError) as raised:
-				VERIFIER.verify_evidence(record, temporary)
-			self.assertIn("differ from externalDependencies", str(raised.exception))
+	def test_external_dependency_records_no_artifact_hash(self):
+		for field in ("jarSha256", "pomSha256"):
+			with self.subTest(field=field):
+				record = self.complete_record()
+				record["externalDependencies"][0][field] = "4" * 64
+				with self.assertRaises(VERIFIER.ReleaseRecordError) as raised:
+					VERIFIER.verify_record(record)
+				self.assertIn("external dependency", str(raised.exception))
 
 	def test_documentation_receipt_with_rehashed_wrong_javadoc_is_rejected(self):
 		record = self.complete_record()

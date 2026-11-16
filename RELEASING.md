@@ -25,7 +25,7 @@ The first release comprises four components, each built from its own repository:
 
 Publish core first. Publish adapters only after the exact required core release is available from Central. The two Servlet adapters are a paired release.
 
-`revetsec-soklet` declares the published provided dependency `com.soklet:soklet:4.0.0` from Maven Central. There is no Soklet source-commit pin in the release source set. If the selected version changes, update the adapter POM and `externalDependencies` in the release-record template together; the four-repository preflight requires them to agree. The consumer verifier binds the published Soklet JAR and POM hashes from canonical Central into the final release record.
+`revetsec-soklet` declares the published provided dependency `com.soklet:soklet:4.0.0` from Maven Central. There is no Soklet source-commit pin in the release source set. If the selected version changes, update the adapter POM and `externalDependencies` in the release-record template together; the four-repository preflight requires them to agree. The release record names Soklet by its coordinates and canonical Central repository and records no Soklet hash.
 
 ## Prepare release sources
 
@@ -184,7 +184,7 @@ For each component in release order:
      --output /release-records/revetsec-1.0.0-consumers.json
    ```
 
-   Repeat for each adapter with its component name. The Soklet adapter also requires `--soklet-version` naming the owner-approved literal release selected in its POM; the verifier refuses a different version. Its receipt retains the published adapter POM's exact provided dependencies and the canonical-Central hashes of the resolved Soklet JAR and POM. Copy those exact coordinates and hashes into the release record's single `externalDependencies` entry. Final verification requires the source template, published adapter POM, Maven and Gradle classpaths, resolved bytes, release record, and `externalQualification` owner acceptance to describe the same release. Record the Central deployment, publication and consumer receipts, tag, commit, hosted run, and separately named provenance/SBOM attestation links.
+   Repeat for each adapter with its component name. The Soklet adapter also requires `--soklet-version` naming the owner-approved literal release selected in its POM; the verifier refuses a different version. Its receipt retains the published adapter POM's exact provided dependencies and the Soklet artifacts it resolved from canonical Central. Copy the Soklet coordinates into the release record's single `externalDependencies` entry. Final verification requires the source template, published adapter POM, Maven and Gradle classpaths, release record, and `externalQualification` owner acceptance to name the same Soklet release. Record the Central deployment, publication and consumer receipts, tag, commit, hosted run, and separately named provenance/SBOM attestation links.
 
 After all four components are verified, publish the API documentation and the approved `revetsec.com` static export. Run the documentation verifier from the core checkout with all four Central receipts. It refuses a dirty website checkout, binds its exact HEAD commit, downloads the exact Central Javadoc JARs, compares every component package page with `https://javadoc.revetsec.com`, and compares every exported website file with its canonical `https://revetsec.com` URL. The static host must serve extensionless HTML routes as described by the website repository. The receipt is create-new:
 

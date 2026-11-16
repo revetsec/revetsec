@@ -92,9 +92,7 @@
   "externalDependencies": [
     {
       "coordinates": "com.soklet:soklet:4.0.0",
-      "repository": "https://repo.maven.apache.org/maven2",
-      "jarSha256": "",
-      "pomSha256": ""
+      "repository": "https://repo.maven.apache.org/maven2"
     }
   ],
   "components": [
