@@ -60,7 +60,7 @@ class AdapterCompatibilityTests(unittest.TestCase):
         self.assertEqual(2, manifest["schemaVersion"])
         self.assertEqual("pinned-upstream-tests", manifest["mode"])
         self.assertEqual(manifest["adapterRevision"], json.loads((bridge.ROOT / "examples/pins.json").read_text())["adapter"]["revision"])
-        self.assertEqual(196, manifest["expectedTests"])
+        self.assertEqual(197, manifest["expectedTests"])
         self.assertFalse((bridge.ROOT / "examples/compatibility/soklet-shared-clock/SokletOAuthAuthorizationServerTests.java").exists())
 
     def test_complete_pinned_sources_pass_without_any_replacement(self):
@@ -99,7 +99,7 @@ class AdapterCompatibilityTests(unittest.TestCase):
     def test_exact_suite_count_and_no_skips_are_required(self):
         info = self.prepare()
         report = self.adapter / "target/surefire-reports/TEST-fixture.xml"
-        for count, skipped, failures, valid in [(196, 0, 0, True), (195, 0, 0, False), (196, 1, 0, False), (196, 0, 1, False)]:
+        for count, skipped, failures, valid in [(197, 0, 0, True), (196, 0, 0, False), (197, 1, 0, False), (197, 0, 1, False)]:
             self.write(report, ('<testsuite tests="%d" failures="%d" errors="0" skipped="%d"/>' % (count, failures, skipped)).encode())
             if valid:
                 bridge.record_test_results(self.adapter, info)
@@ -147,7 +147,7 @@ class AdapterCompatibilityTests(unittest.TestCase):
                 def results(selected_adapter, selected_info):
                     self.assertEqual((adapter, info), (selected_adapter, selected_info))
                     calls.append("results")
-                    info["testResults"] = {"tests": 196, "failures": 0, "errors": 0, "skipped": 0}
+                    info["testResults"] = {"tests": 197, "failures": 0, "errors": 0, "skipped": 0}
 
                 with mock.patch.object(bridge, "prepare_adapter", side_effect=prepare), \
                      mock.patch.object(bridge, "assert_adapter_unchanged", side_effect=postcondition), \

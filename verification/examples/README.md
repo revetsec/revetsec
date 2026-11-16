@@ -23,7 +23,7 @@ Never upload generated private TLS material, keys, tokens or browser state.
 
 The [adapter input guard](adapter_compatibility.py) checks the exact pinned POM,
 production and test trees before and after the build. The current published adapter
-runs its full 196-test upstream suite without source replacements. The former
+runs its full 197-test upstream suite without source replacements. The former
 shared-clock fixture overlay is retired; the [manifest](../../examples/compatibility/soklet-shared-clock/manifest.json)
 records the current revision and required count. Dirty inputs, source drift or
 missing/failing/skipped tests fail closed.

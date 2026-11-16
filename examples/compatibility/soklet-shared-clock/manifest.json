@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "adapterRevision": "2e522099bfc2511aba19354d7f4b68d4d79d15ff",
-  "expectedTests": 196,
+  "adapterRevision": "12d6637930a00140f41c1a476dfbfaa3772563a3",
+  "expectedTests": 197,
   "mode": "pinned-upstream-tests",
   "retiredOverlayRevision": "3bad3251bb9b3bd2baeecd5c55a41574c8ebb9b0",
   "scope": "All adapter tests and library/POM inputs are unchanged from the published pin; no fixture replacement is applied."
