@@ -100,6 +100,21 @@ export function requireOutcome(outcomes, since, path, status) {
     throw new Error(`Expected one server response ${path} ${status}`);
 }
 
+export function requireCredentialMetadata(response) {
+  const credential = response?.status === 200 && response.body?.credentials?.length === 1
+    ? response.body.credentials[0] : null;
+  const canonicalAaguid = credential?.aaguid === null
+    || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(
+      credential?.aaguid ?? "");
+  if (!credential || credential.metadataAvailable !== true
+      || typeof credential.credentialId !== "string" || credential.credentialId.length === 0
+      || !canonicalAaguid || typeof credential.backupEligible !== "boolean"
+      || typeof credential.backedUp !== "boolean" || (credential.backedUp && !credential.backupEligible)
+      || credential.userVerifiedAtRegistration !== true)
+    throw new Error("Passkey metadata observation was incomplete or inconsistent");
+  return credential;
+}
+
 async function jarHashes(classpath) {
   const jars = classpath.split(delimiter).filter((entry) => entry.endsWith(".jar"));
   if (jars.length > 32) throw new Error("Too many runtime JARs for bounded evidence");
@@ -237,6 +252,14 @@ async function click(cdp, selector) {
   const found = await cdp.evaluate("(()=>{const element=document.querySelector("
     + JSON.stringify(selector) + ");if(!element)return false;element.click();return true})()", true);
   if (!found) throw new Error("Browser control missing: " + selector);
+}
+
+async function observeCredentialMetadata(cdp) {
+  const response = await cdp.evaluate("(async()=>{const response=await fetch('/credentials/list',"
+    + "{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'X-CSRF-Token':"
+    + "document.body.dataset.csrf}});let body=null;try{body=await response.json()}catch{}"
+    + "return{status:response.status,body}})()", true);
+  return requireCredentialMetadata(response);
 }
 
 async function stop(child) {
@@ -413,7 +436,9 @@ async function main() {
       + JSON.stringify((await readFile(accessFile, "utf8")).trim()));
     await ceremony("#register", "registration", "Register: choose your physical security key in Chrome, "
       + "enter its PIN there if requested, then touch the key.",
-    (state) => state.status === "Passkey registered.", [["/register/start", 200], ["/register/finish", 200]]);
+    (state) => state.status === "Passkey registered. Provider and sync metadata saved by the application.",
+    [["/register/start", 200], ["/register/finish", 200]]);
+    await observeCredentialMetadata(cdp);
     if (args.has("--restart-app")) {
       await stop(app);
       app = await startApp();
@@ -442,10 +467,12 @@ async function main() {
       + "physical security key in Chrome, enter its PIN there if requested, then touch it.",
     (state) => state.ready === "complete" && state.auth === "true",
     [["/sign-in/start", 200], ["/sign-in/finish", 200]]);
+    await observeCredentialMetadata(cdp);
     await ceremony("#reauth", "account-pinned reauthentication", "Reauthenticate: use the same "
       + "physical security key in Chrome and complete any PIN/touch prompt.",
     (state) => state.status === "Sensitive action approved for one use.",
     [["/reauth/start", 200], ["/reauth/finish", 200]]);
+    await observeCredentialMetadata(cdp);
     if (args.has("--postgres-container")) {
       const container = args.get("--postgres-container");
       await database("stop", container);

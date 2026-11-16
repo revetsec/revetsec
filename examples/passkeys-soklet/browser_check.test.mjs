@@ -1,7 +1,8 @@
 // Copyright 2026 Revetware LLC. Licensed under the Apache License, Version 2.0.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chromeArguments, configureAuthenticator, options, requireOutcome } from "./browser_check.mjs";
+import { chromeArguments, configureAuthenticator, options, requireCredentialMetadata,
+  requireOutcome } from "./browser_check.mjs";
 
 const required = ["--classpath-file", "/tmp/classpath", "--tls-dir", "/tmp/tls",
   "--java", "/tmp/java", "--chrome", "/tmp/chrome"];
@@ -46,6 +47,26 @@ test("removed-key rejection requires a fresh actual server finish response", () 
     1, "/sign-in/finish", 400));
   assert.doesNotThrow(() => requireOutcome([...old, { path: "/sign-in/finish", status: 400 }],
     1, "/sign-in/finish", 400));
+});
+
+test("browser evidence requires factual registration and backup metadata", () => {
+  const credential = {
+    credentialId: "AQID", metadataAvailable: true,
+    aaguid: "00000000-0000-0000-0000-000000000000",
+    backupEligible: true, backedUp: true, userVerifiedAtRegistration: true
+  };
+  const response = { status: 200, body: { credentials: [credential] } };
+  assert.equal(requireCredentialMetadata(response), credential);
+  assert.throws(() => requireCredentialMetadata({ ...response, status: 403 }));
+  assert.throws(() => requireCredentialMetadata({ status: 200, body: { credentials: [] } }));
+  assert.throws(() => requireCredentialMetadata({ status: 200,
+    body: { credentials: [{ ...credential, userVerifiedAtRegistration: false }] } }));
+  assert.throws(() => requireCredentialMetadata({ status: 200,
+    body: { credentials: [{ ...credential, aaguid: "not-a-uuid" }] } }));
+  assert.throws(() => requireCredentialMetadata({ status: 200,
+    body: { credentials: [{ ...credential, backupEligible: false }] } }));
+  assert.doesNotThrow(() => requireCredentialMetadata({ status: 200,
+    body: { credentials: [{ ...credential, aaguid: null, backupEligible: false, backedUp: false }] } }));
 });
 
 
