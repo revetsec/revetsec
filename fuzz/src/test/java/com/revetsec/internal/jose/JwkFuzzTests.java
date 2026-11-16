@@ -126,7 +126,7 @@ public class JwkFuzzTests {
 			Map.entry("HS512", JwsAlgorithm.HS512));
 
 	/**
-	 * The default JWKS limits (256 KiB, 100 keys), which {@link Jwks#fromJson} uses too, and tight ones.
+	 * The default JWKS limits (256 KiB, 100 keys), which {@link Jwks#fromJsonResult} uses too, and tight ones.
 	 */
 	private static final List<SetLimits> SET_LIMITS = List.of(
 			new SetLimits(Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.JWKS_KEY_COUNT.getDefaultIntValue()),
@@ -140,7 +140,7 @@ public class JwkFuzzTests {
 	 * strict JSON, no {@code keys} array, too many elements, an element that is not an object) with {@code KEY_SET},
 	 * and otherwise keeps every key the twelve rules accept, in order, and skips each other key with the reason of the
 	 * first rule it breaks, at its index. Every object anywhere in the document, taken as a JWK, gets the oracle's
-	 * verdict from {@link JwkParser#parse}. The public {@link Jwks#fromJson} agrees on the same text, its keys
+	 * verdict from {@link JwkParser#parse}. The public {@link Jwks#fromJsonResult} agrees on the same text, its keys
 	 * escape the {@code kid} in {@code toString}, and a {@link StaticJwksSource} needs one usable key.
 	 *
 	 * @param document the fuzzed JWK Set document: JSON text

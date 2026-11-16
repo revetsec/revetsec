@@ -14,7 +14,7 @@ The [security-tightening policy](#security-tightening-policy) below is the one d
 
 Public top-level types in the exported packages below, and their reachable public or protected members, are API. Public or protected member types are included recursively when every enclosing type is exported. Reachable public or protected members inherited from a non-exported Revetsec base are API too. A public declaration inside an internal or otherwise non-exported enclosing type does not by itself export that type. The exported package layout is part of the 1.0.0 public API.
 
-| Package | Planned contents |
+| Package | Contents |
 | --- | --- |
 | `com.revetsec` | shared, protocol-neutral types |
 | `com.revetsec.json` | the immutable JSON value model that appears in public signatures |

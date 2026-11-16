@@ -70,7 +70,7 @@ final class UserInfoEndpoint {
 					Map.of("Authorization", header), 256 * 1_024, 16 * 1_024, this.requestTimeout), deadline);
 		} catch (HttpExchangeException cause) {
 			OAuthException mapped = OidcTransactionAccess.get().endpointExchangeFailure(cause);
-			this.attempts.failed(attempt, mapped);
+			this.attempts.failed(attempt, mapped, cause.isCallerDeadlineTimeout());
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailEndpoint(OAuthEndpoint.USERINFO, safe, mapped, elapsed));
 			throw mapped;

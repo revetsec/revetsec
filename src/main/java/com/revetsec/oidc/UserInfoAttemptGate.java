@@ -74,9 +74,12 @@ final class UserInfoAttemptGate {
 		} finally { this.lock.unlock(); }
 	}
 	void failed(@NonNull Attempt attempt, @NonNull OAuthException failure) {
+		failed(attempt, failure, false);
+	}
+	void failed(@NonNull Attempt attempt, @NonNull OAuthException failure, boolean callerDeadlineTimeout) {
 		boolean interrupted = failure.getReason() == OAuthException.Reason.INTERRUPTED
 				|| Thread.currentThread().isInterrupted();
-		boolean callerLocal = interrupted || attempt.deadline.isExpired();
+		boolean callerLocal = interrupted || callerDeadlineTimeout || attempt.deadline.isExpired();
 		if (interrupted) Thread.currentThread().interrupt();
 		this.lock.lock();
 		try {

@@ -224,15 +224,18 @@ public final class HttpExchange {
 		requirePermittedUri(request.uri());
 
 		if (deadline.remainingNanos() <= 0)
-			throw new HttpExchangeException(Kind.TIMEOUT);
+			throw new HttpExchangeException(Kind.TIMEOUT, true);
 
 		HttpClient httpClient = resolveHttpClient();
 
 		// Resolving the default client the first time can take a moment, so the deadline is read again.
-		long exchangeNanos = Math.min(deadline.remainingNanos(), requestTimeoutNanos(request));
+		long deadlineNanos = deadline.remainingNanos();
+		long requestNanos = requestTimeoutNanos(request);
+		boolean callerDeadlineLimited = deadlineNanos <= requestNanos;
+		long exchangeNanos = Math.min(deadlineNanos, requestNanos);
 
 		if (exchangeNanos <= 0)
-			throw new HttpExchangeException(Kind.TIMEOUT);
+			throw new HttpExchangeException(Kind.TIMEOUT, true);
 
 		if (Thread.currentThread().isInterrupted())
 			throw new HttpExchangeException(Kind.INTERRUPTED);
@@ -272,7 +275,10 @@ public final class HttpExchange {
 		// leaves execute.
 		cancelIfPending(sent);
 
-		throw outcome.toException();
+		HttpExchangeException failure = outcome.toException();
+		if (failure.getKind() == Kind.TIMEOUT && callerDeadlineLimited)
+			throw new HttpExchangeException(Kind.TIMEOUT, true);
+		throw failure;
 	}
 
 	/**

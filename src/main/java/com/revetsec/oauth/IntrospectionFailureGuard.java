@@ -25,8 +25,9 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Endpoint health only: 401/429 opens backoff immediately; any three transport/5xx failures
- * within one cooldown window open it without retaining a credential verdict. RFC7662 section2.2.
+ * Endpoint health only: 401/429 opens backoff immediately; three transport/5xx failures within one
+ * cooldown window, measured from the first and with no valid response in between, open it without
+ * retaining a credential verdict. RFC7662 section2.2.
  */
 @ThreadSafe
 final class IntrospectionFailureGuard {

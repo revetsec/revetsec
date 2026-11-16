@@ -47,6 +47,7 @@ public final class HttpExchangeException extends Exception {
 	 */
 	@NonNull
 	private final Kind kind;
+	private final boolean callerDeadlineTimeout;
 
 	/**
 	 * Why an exchange failed, with the category and transience the M1 plan's Kind table assigns.
@@ -152,13 +153,24 @@ public final class HttpExchangeException extends Exception {
 	}
 
 	HttpExchangeException(@NonNull Kind kind) {
-		this(kind, null);
+		this(kind, null, false);
 	}
 
 	HttpExchangeException(@NonNull Kind kind,
 												@Nullable IOException cause) {
-		super(checkedMessage(kind, cause), cause, false, true);
+		this(kind, cause, false);
+	}
+
+	HttpExchangeException(@NonNull Kind kind, boolean callerDeadlineTimeout) {
+		this(kind, null, callerDeadlineTimeout);
+	}
+
+	private HttpExchangeException(@NonNull Kind kind,
+												 @Nullable IOException cause,
+												 boolean callerDeadlineTimeout) {
+		super(checkedMessage(kind, cause, callerDeadlineTimeout), cause, false, true);
 		this.kind = kind;
+		this.callerDeadlineTimeout = callerDeadlineTimeout;
 	}
 
 	/**
@@ -171,12 +183,25 @@ public final class HttpExchangeException extends Exception {
 		return this.kind;
 	}
 
+	/**
+	 * Whether this timeout used the caller's total deadline as the exchange budget instead of the request timeout.
+	 * This is always {@code false} for a kind other than {@link Kind#TIMEOUT}.
+	 *
+	 * @return {@code true} only for a timeout limited by the caller's total deadline
+	 */
+	public boolean isCallerDeadlineTimeout() {
+		return this.callerDeadlineTimeout;
+	}
+
 	private static @NonNull String checkedMessage(@NonNull Kind kind,
-																			 @Nullable IOException cause) {
+																				 @Nullable IOException cause,
+																				 boolean callerDeadlineTimeout) {
 		requireNonNull(kind);
 
 		if (cause != null && kind != Kind.IO)
 			throw new IllegalArgumentException("Only an IO failure keeps a cause.");
+		if (callerDeadlineTimeout && kind != Kind.TIMEOUT)
+			throw new IllegalArgumentException("Only a timeout can be limited by the caller's deadline.");
 
 		return kind.getMessage();
 	}

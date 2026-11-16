@@ -34,9 +34,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * Audience-checked RFC7662 JSON introspection using the supplied OAuth client settings.
  * No credential result is cached; an admitted validation performs its own single authenticated POST.
- * Endpoint health backoff can prevent that POST: 401/429 or transport failure opens it immediately,
- * while three 5xx responses within one cooldown window are required to open it. Other client errors
- * remain local to their request. Blocked callers receive fresh infrastructure exceptions, never
+ * Endpoint health backoff can prevent that POST: 401/429 opens it immediately. Transport failures and
+ * 5xx responses count together; three within one cooldown window, measured from the first and with no
+ * valid response in between, open it. Other client errors remain local to their request. Blocked callers receive fresh infrastructure exceptions, never
  * another request's endpoint rejection. A valid parsed response, including inactive, restores health.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0

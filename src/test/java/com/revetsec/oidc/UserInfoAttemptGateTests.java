@@ -98,4 +98,14 @@ final class UserInfoAttemptGateTests {
 		assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason());
 		gate.healthy(gate.acquire(deadline(), REQUEST));
 	}
+	@Test
+	void callerDeadlineTimeoutDoesNotPoisonButRequestTimeoutDoes() {
+		AtomicLong time = new AtomicLong();
+		UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);
+		gate.failed(gate.acquire(deadline(), REQUEST), failure(), true);
+		gate.healthy(gate.acquire(deadline(), REQUEST));
+		gate.failed(gate.acquire(deadline(), REQUEST), failure(), false);
+		assertEquals(OAuthException.Reason.NETWORK_FAILURE,
+				assertThrows(OAuthException.class, () -> gate.acquire(deadline(), REQUEST)).getReason());
+	}
 }

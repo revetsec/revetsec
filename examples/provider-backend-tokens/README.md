@@ -68,7 +68,7 @@ responses containing challenges/sessions, provider tokens and exceptions out of 
 ## Google browser POST flow
 
 1. `GET /session` reads local session status and allocates nothing. Explicit
-   `POST /google/begin` with `begin=1` requires the exact configured Origin.
+   `POST /google/begin` with `begin=1` requires an origin admitted by the [browser request-origin policy](../../docs/browser-request-origin-policy.md).
    Existing authenticated browsers also send their session-bound `csrf` value.
    The admission callback runs before allocation. A successful begin returns a
    nonce and a host-only Secure/HttpOnly `__Host-provider-login` cookie.
@@ -166,7 +166,7 @@ creation or read-based reconstruction of a withheld session. Start a fresh
 user-initiated login after failure; infrastructure responses do not authorize a
 blind retry loop. A pre-work busy refusal does not run the token/account phase.
 
-Browser logout requires same Origin and session CSRF; native logout uses its
+Browser logout requires an origin the browser request-origin policy admits and session CSRF; native logout uses its
 explicit app-session bearer and accepts no ambient cookies. Both end only the
 application's local session. Disable/unlink current account mappings and apply
 current policy to recovery/revocation separately from provider logout. Concurrent

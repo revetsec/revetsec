@@ -37,7 +37,7 @@ For each repository:
 2. In each adapter, change `revetsec.version` to `1.0.0`. Update every active example, verification tool, documentation snippet, and build input that consumes the release. Do not rewrite sealed historical evidence.
 3. Add `<tag>v1.0.0</tag>` to `<scm>`. The release configuration test requires the tag for every non-SNAPSHOT POM.
 4. Date and finalize `CHANGELOG.md` and create the accepted `release/SECURITY_CLAIMS_AUDIT.md`, separating approved, narrowed, and rejected public claims without overstating qualification.
-5. Confirm that no active release input still uses the release's SNAPSHOT coordinate:
+5. From the core repository, verify the four sibling repositories as one source set. This confirms that no active release input still uses the release's SNAPSHOT coordinate, and checks the release-record template, dated changelogs and accepted claims-audit structure. It also reports the published Soklet dependency whose exact Central artifacts require owner-recorded external qualification:
 
    ```sh
    python3 verification/verify-release-sources.py .. \
@@ -55,19 +55,12 @@ For each repository:
 
    Adapter repositories use `scripts` in place of `verification`.
 
-   From the core repository, verify the four sibling repositories as one source set. This also checks the release-record template, dated changelogs and accepted claims-audit structure, and reports the published Soklet dependency whose exact Central artifacts require owner-recorded external qualification:
+7. Have the owner commit and push core, then wait for green hosted CI on that exact head.
+8. Set every adapter workflow's `REVETSEC_CORE_SHA` to that exact pushed core commit. Have the owner commit and push the adapters, then wait for green hosted CI on each exact head. If core changes again, repeat steps 7 and 8.
+9. Repeat the step 5 check with `--require-clean`. That mode requires clean worktrees and all three adapter pins to equal the core head.
+10. Create the signed annotated `v1.0.0` tag at each of the four release heads, then repeat the check with `--require-tag` as well. The local tag check confirms annotation and target identity; the hosted release-evidence workflow remains responsible for requiring GitHub-verified signatures. Build only from those exact tags. Agents do not commit or tag.
 
-   ```sh
-   python3 verification/verify-release-sources.py .. \
-     --version 1.0.0 \
-     --phase release
-   ```
-
-7. Have the owner commit and push the release source, wait for exact-head hosted CI, then create the signed `v1.0.0` tag. Build only from that exact tag. Agents do not commit or tag.
-
-After the owner commits core, update every adapter workflow's `REVETSEC_CORE_SHA` to that exact pushed release commit, then commit the adapters. Repeat the source-set check with `--require-clean`; that mode requires all three adapter pins to equal the clean core release head. After all four annotated tags exist at their exact release heads, also add `--require-tag`. The local tag check confirms annotation and target identity; the hosted release-evidence workflow remains responsible for requiring GitHub-verified signatures.
-
-The core and Soklet adapter use an intentionally acyclic pre-release pin pair: the adapter pins the last core code commit, while the later core commit pins the adapter. A release must be joined by the released Maven coordinates, not by introducing a circular source-build pin.
+Core's unpublished examples pin a Soklet adapter commit in `examples/pins.json`, the examples and SCIM interoperability workflows, and `examples/compatibility/soklet-shared-clock`. That pin may name the adapter commit from before step 8, which keeps the pins acyclic; the release verifier checks only the adapters' core pins. Consumers join the released artifacts through their Maven coordinates, not through source pins.
 
 ## Tag provenance evidence
 

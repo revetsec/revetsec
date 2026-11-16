@@ -20,8 +20,8 @@ from `WebAuthnRegistration`, refresh backup state from successful authentication
 creation time and last-used time. The bounded authoritative listing remains a credential-ID operation; it does not
 perform an unbounded per-credential metadata fan-out.
 
-The active credential payload uses the unreleased version-3 format. Unreleased version 1 is rejected rather than
-silently inferred; version 2 remains the permanent tombstone. No released 1.0 data migration is required.
+The active credential payload uses the version-3 format, and version 2 is the permanent tombstone. Any other version
+is rejected rather than silently inferred.
 
 ## Accepted and rejected outputs
 

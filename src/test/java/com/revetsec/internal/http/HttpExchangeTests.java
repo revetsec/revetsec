@@ -621,17 +621,43 @@ final class HttpExchangeTests {
 		HttpExchangeException io = new HttpExchangeException(Kind.IO, cause);
 		Assertions.assertSame(cause, io.getCause());
 		Assertions.assertEquals(Kind.IO.getMessage(), io.getMessage());
+		Assertions.assertFalse(io.isCallerDeadlineTimeout());
 
 		for (Kind kind : Kind.values()) {
 			HttpExchangeException exception = new HttpExchangeException(kind);
 			Assertions.assertEquals(kind.getMessage(), exception.getMessage());
 			Assertions.assertNull(exception.getCause());
+			Assertions.assertFalse(exception.isCallerDeadlineTimeout());
 			exception.addSuppressed(new IllegalStateException());
 			Assertions.assertEquals(0, exception.getSuppressed().length);
 			Assertions.assertTrue(kind.getMessage().endsWith("."), kind::name);
 			if (kind != Kind.IO)
 				Assertions.assertThrows(IllegalArgumentException.class, () -> new HttpExchangeException(kind, cause));
+			if (kind != Kind.TIMEOUT)
+				Assertions.assertThrows(IllegalArgumentException.class, () -> new HttpExchangeException(kind, true));
 		}
+		Assertions.assertTrue(new HttpExchangeException(Kind.TIMEOUT, true).isCallerDeadlineTimeout());
+	}
+
+	@Test
+	void aTimeoutRecordsWhichBudgetLimitedTheExchange() {
+		HttpExchange stalled = HttpExchange.fromHttpClient(
+				ScriptedHttpClient.failingBeforeAnyResponse(ScriptedHttpClient.Behavior.NEVER_RESPOND),
+				OutboundUriPolicy.defaultInstance(), false);
+		URI uri = URI.create("https://example.com/");
+		HttpExchangeRequest oneSecondRequest = new HttpExchangeRequest(uri, ResponseProfile.TOKEN, null, Map.of(),
+				1_000, 1_000, Duration.ofSeconds(1));
+		HttpExchangeException callerLimited = Assertions.assertThrows(HttpExchangeException.class,
+				() -> stalled.execute(oneSecondRequest, Deadline.fromNow(Duration.ofMillis(25))));
+		Assertions.assertEquals(Kind.TIMEOUT, callerLimited.getKind());
+		Assertions.assertTrue(callerLimited.isCallerDeadlineTimeout());
+
+		HttpExchangeRequest shortRequest = new HttpExchangeRequest(uri, ResponseProfile.TOKEN, null, Map.of(),
+				1_000, 1_000, Duration.ofMillis(25));
+		HttpExchangeException requestLimited = Assertions.assertThrows(HttpExchangeException.class,
+				() -> stalled.execute(shortRequest, Deadline.fromNow(Duration.ofSeconds(1))));
+		Assertions.assertEquals(Kind.TIMEOUT, requestLimited.getKind());
+		Assertions.assertFalse(requestLimited.isCallerDeadlineTimeout());
 	}
 
 	// M1 plan, algorithm step 4: HttpTimeoutException anywhere in the cause chain is TIMEOUT (JDK 26 wraps it in an
