@@ -202,11 +202,9 @@ public final class TotpStoreKey {
  public enum Kind {
   /**
    * Namespace initialization and observed-time fences.
-   * @since 1.0.0
    */ NAMESPACE_STATE,
   /**
    * Factor, pending enrollment, replay mark, recovery verifiers and account fences.
-   * @since 1.0.0
    */ ACCOUNT_STATE
  }
 }

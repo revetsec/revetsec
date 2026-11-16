@@ -23,13 +23,10 @@ import javax.annotation.concurrent.Immutable;
  */
 @Immutable
 public enum ScimPatchOperationType {
-    /** Adds or merges the supplied value.
-     * @since 1.0.0 */
+    /** Adds or merges the supplied value. */
     ADD,
-    /** Removes the selected attribute or values.
-     * @since 1.0.0 */
+    /** Removes the selected attribute or values. */
     REMOVE,
-    /** Replaces the selected value, retaining omitted complex children.
-     * @since 1.0.0 */
+    /** Replaces the selected value, retaining omitted complex children. */
     REPLACE
 }

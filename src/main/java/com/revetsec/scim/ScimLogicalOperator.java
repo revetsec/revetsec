@@ -24,13 +24,7 @@ import javax.annotation.concurrent.Immutable;
  */
 @Immutable
 public enum ScimLogicalOperator {
-    /** Conjunction.
-     * @since 1.0.0
-     */ AND,
-    /** Disjunction.
-     * @since 1.0.0
-     */ OR,
-    /** Negation.
-     * @since 1.0.0
-     */ NOT
+    /** Conjunction. */ AND,
+    /** Disjunction. */ OR,
+    /** Negation. */ NOT
 }

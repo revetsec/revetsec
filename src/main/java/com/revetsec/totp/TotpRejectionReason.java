@@ -22,31 +22,22 @@ import javax.annotation.concurrent.Immutable;
  * @since 1.0.0 */
 @Immutable
 public enum TotpRejectionReason {
-    /** The input, binding or requested transition was not accepted.
-     * @since 1.0.0 */
+    /** The input, binding or requested transition was not accepted. */
     REJECTED,
-    /** The submitted code was invalid, expired or already consumed.
-     * @since 1.0.0 */
+    /** The submitted code was invalid, expired or already consumed. */
     INVALID_CODE,
-    /** No active factor exists for this account.
-     * @since 1.0.0 */
+    /** No active factor exists for this account. */
     NOT_ENROLLED,
-    /** Initial enrollment cannot replace an active factor.
-     * @since 1.0.0 */
+    /** Initial enrollment cannot replace an active factor. */
     ALREADY_ENROLLED,
-    /** The pending enrollment was absent or expired.
-     * @since 1.0.0 */
+    /** The pending enrollment was absent or expired. */
     ENROLLMENT_NOT_FOUND,
-    /** A pending enrollment already exists or its generation changed.
-     * @since 1.0.0 */
+    /** A pending enrollment already exists or its generation changed. */
     ENROLLMENT_CONFLICT,
-    /** The approved factor generation is no longer current.
-     * @since 1.0.0 */
+    /** The approved factor generation is no longer current. */
     FACTOR_MISMATCH,
-    /** The approved recovery batch is no longer current.
-     * @since 1.0.0 */
+    /** The approved recovery batch is no longer current. */
     RECOVERY_BATCH_MISMATCH,
-    /** The server-owned operation or browser binding did not match.
-     * @since 1.0.0 */
+    /** The server-owned operation or browser binding did not match. */
     BINDING_MISMATCH
 }

@@ -61,7 +61,7 @@ public sealed interface SamlSessionReferenceSealResult permits SamlSessionRefere
      */
     @Immutable
     enum TooLarge implements SamlSessionReferenceSealResult {
-        /** The fixed size-refusal outcome. @since 1.0.0 */
+        /** The fixed size-refusal outcome. */
         INSTANCE;
         /**
          * Returns the fixed outcome without reference data.
@@ -79,7 +79,7 @@ public sealed interface SamlSessionReferenceSealResult permits SamlSessionRefere
      */
     @Immutable
     enum Unavailable implements SamlSessionReferenceSealResult {
-        /** The fixed provider-unavailable outcome. @since 1.0.0 */
+        /** The fixed provider-unavailable outcome. */
         INSTANCE;
         /**
          * Returns the fixed outcome without provider or reference data.

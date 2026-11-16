@@ -24,31 +24,13 @@ import javax.annotation.concurrent.Immutable;
  */
 @Immutable
 public enum ScimComparisonOperator {
-    /** Equal.
-     * @since 1.0.0
-     */ EQ,
-    /** Not equal; multi-valued attributes use any-element semantics.
-     * @since 1.0.0
-     */ NE,
-    /** Contains.
-     * @since 1.0.0
-     */ CO,
-    /** Starts with.
-     * @since 1.0.0
-     */ SW,
-    /** Ends with.
-     * @since 1.0.0
-     */ EW,
-    /** Greater than.
-     * @since 1.0.0
-     */ GT,
-    /** Less than.
-     * @since 1.0.0
-     */ LT,
-    /** Greater than or equal.
-     * @since 1.0.0
-     */ GE,
-    /** Less than or equal.
-     * @since 1.0.0
-     */ LE
+    /** Equal. */ EQ,
+    /** Not equal; multi-valued attributes use any-element semantics. */ NE,
+    /** Contains. */ CO,
+    /** Starts with. */ SW,
+    /** Ends with. */ EW,
+    /** Greater than. */ GT,
+    /** Less than. */ LT,
+    /** Greater than or equal. */ GE,
+    /** Less than or equal. */ LE
 }

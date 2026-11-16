@@ -142,11 +142,9 @@ public final class TotpStoreWrite {
  public enum Purpose {
   /**
    * Activate only a newly provisioned recovery epoch.
-   * @since 1.0.0
    */ INITIALIZE_NAMESPACE,
   /**
    * Compare an existing initialized namespace fence.
-   * @since 1.0.0
    */ UPDATE
  }
  /**
@@ -205,11 +203,9 @@ public final class TotpStoreWrite {
   public enum Kind {
    /**
     * Insert after confirmed absence.
-    * @since 1.0.0
     */ INSERT,
    /**
     * Replace an exact version.
-    * @since 1.0.0
     */ REPLACE
   }
  }

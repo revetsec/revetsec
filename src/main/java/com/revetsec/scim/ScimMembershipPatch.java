@@ -149,23 +149,15 @@ public final class ScimMembershipPatch {
     @Immutable
     public enum Kind {
         /** Append IDs absent from current membership, preserving existing metadata and order.
-         * An empty values list is a no-op that preserves absent, empty or assigned membership.
-         * @since 1.0.0
-         */
+         * An empty values list is a no-op that preserves absent, empty or assigned membership. */
         ADD_IDS,
         /** Remove the exact IDs if present; absent IDs are no-ops.
-         * Removing the last value from an existing members array leaves it present and empty.
-         * @since 1.0.0
-         */
+         * Removing the last value from an existing members array leaves it present and empty. */
         REMOVE_IDS,
         /** Remove the optional members attribute, yielding absence rather than a present empty array.
-         * This differs from REPLACE_IDS with an empty list.
-         * @since 1.0.0
-         */
+         * This differs from REPLACE_IDS with an empty list. */
         CLEAR,
-        /** Replace represented sequence, retaining metadata for surviving exact IDs; an empty list represents an empty array.
-         * @since 1.0.0
-         */
+        /** Replace represented sequence, retaining metadata for surviving exact IDs; an empty list represents an empty array. */
         REPLACE_IDS
     }
 }

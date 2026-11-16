@@ -39,11 +39,11 @@ public final class SamlAttributeValue {
      */
     @Immutable
     public enum Kind {
-        /** An element-free text value. @since 1.0.0 */
+        /** An element-free text value. */
         TEXT,
-        /** A nested SAML NameID. @since 1.0.0 */
+        /** A nested SAML NameID. */
         NAME_ID,
-        /** Element content whose shape is not mapped to a scalar. @since 1.0.0 */
+        /** Element content whose shape is not mapped to a scalar. */
         COMPLEX
     }
 

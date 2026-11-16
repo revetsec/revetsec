@@ -136,7 +136,7 @@ public final class BrowserRequestOriginPolicy {
         if ("same-site".equals(fetchSite))
             return BrowserRequestOriginResult.rejected(BrowserRequestOriginResult.Reason.SAME_SITE);
         if (fetchSite != null)
-            return BrowserRequestOriginResult.rejected(BrowserRequestOriginResult.Reason.UNTRUSTED_ORIGIN);
+            return BrowserRequestOriginResult.rejected(BrowserRequestOriginResult.Reason.UNRECOGNIZED_FETCH_SITE);
         if (this.allowMissingMetadata)
             return BrowserRequestOriginResult.allowed(
                     BrowserRequestOriginResult.Basis.MISSING_METADATA_COMPATIBILITY);

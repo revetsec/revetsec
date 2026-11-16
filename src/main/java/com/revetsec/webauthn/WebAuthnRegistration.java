@@ -86,6 +86,7 @@ public final class WebAuthnRegistration {
      * @since 1.0.0 */
     public @NonNull Boolean isBackedUp() { return Boolean.valueOf(this.backedUp); }
     /** Returns whether user verification was observed when this credential was registered.
+     * This release requires user verification for every registration, so the value is always {@code true}.
      * @return registration user-verification fact
      * @since 1.0.0 */
     public @NonNull Boolean isUserVerifiedAtRegistration() {

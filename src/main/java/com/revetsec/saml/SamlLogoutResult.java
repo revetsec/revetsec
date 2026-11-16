@@ -51,7 +51,6 @@ public sealed interface SamlLogoutResult permits SamlLogoutResult.Succeeded,
          * The provider reported Success with second-level PartialLogout: its own logout
          * completed, but not all other participants confirmed logout. This is the provider's
          * authenticated report, not proof that application sessions were terminated.
-         * @since 1.0.0
          */
         PARTIAL_LOGOUT
     }

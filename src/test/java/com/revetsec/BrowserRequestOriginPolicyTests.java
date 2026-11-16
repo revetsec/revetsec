@@ -64,7 +64,10 @@ final class BrowserRequestOriginPolicyTests {
                 BrowserRequestOriginResult.Reason.SAME_SITE);
         assertRejected(POLICY.checkResult("POST", List.of("cross-site"), List.of()),
                 BrowserRequestOriginResult.Reason.CROSS_SITE);
-        assertRejected(POLICY.checkResult("POST", List.of("future-site"), List.of()),
+        for (String unrecognized : List.of("future-site", " Future-Site\t", "Same-Origin", "NONE"))
+            assertRejected(POLICY.checkResult("POST", List.of(unrecognized), List.of()),
+                    BrowserRequestOriginResult.Reason.UNRECOGNIZED_FETCH_SITE);
+        assertRejected(POLICY.checkResult("POST", List.of("future-site"), List.of("https://other.example.com")),
                 BrowserRequestOriginResult.Reason.UNTRUSTED_ORIGIN);
         assertRejected(POLICY.checkResult("POST", List.of(), List.of("https://other.example.com")),
                 BrowserRequestOriginResult.Reason.UNTRUSTED_ORIGIN);

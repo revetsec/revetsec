@@ -110,11 +110,9 @@ public final class OAuthStoreTransaction {
   * @since 1.0.0 */
  @Immutable
  public enum Purpose {
-  /** Normal timed validation including initialization, issuance and maintenance.
-   * @since 1.0.0 */
+  /** Normal timed validation including initialization, issuance and maintenance. */
   TIMED,
-  /** Exactly one existing permanent issuer/subject epoch advance; no temporal condition.
-   * @since 1.0.0 */
+  /** Exactly one existing permanent issuer/subject epoch advance; no temporal condition. */
   FENCE_ONLY
  }
  /** Returns the complete immutable predicate set.
@@ -205,11 +203,9 @@ public final class OAuthStoreTransaction {
    */
   @Immutable
   public enum Kind {
-   /** Store the supplied entry.
- * @since 1.0.0 */
+   /** Store the supplied entry. */
    PUT,
-   /** Remove the version-conditioned entry.
- * @since 1.0.0 */
+   /** Remove the version-conditioned entry. */
    REMOVE
   }
  }

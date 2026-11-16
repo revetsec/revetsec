@@ -28,9 +28,6 @@ First release.
 - Bounded SCIM filter and attribute-path syntax parsing with sealed results and fixed errors, an immutable six-kind AST, a Java 17 visitor, explicit serialization and default-deny policy configuration. Syntax success grants no query permission; the provider binds schemas and enforces complete policies. See [SCIM filter syntax](docs/scim-filters.md).
 - Unpublished runnable examples: a self-issued Soklet MCP issuer with app-owned login and consent, a playground with OIDC, SAML and SCIM routes, and OIDC, logout, passkey, TOTP, password, key-import, provider-token and PostgreSQL store examples. They keep their documented state, session and recovery limitations; see [runnable examples](examples/README.md).
 
-### Changed
-- The application-side PostgreSQL examples and their current-source qualification fixtures use the released `com.pyranid:pyranid:4.9.0` artifact from Maven Central. Revetsec core continues to have no Pyranid runtime dependency; preserved pre-release evidence retains its historical dependency bytes only within that evidence boundary.
-
 ### Security
 Pre-release hardening from the October and November 2026 security reviews:
 - Shared caches isolate caller cancellation, introspection handles errors per token, injected HTTP authenticators and cookie handlers are rejected, and client-metadata admission, TLS chain construction, HTTP status classification and cache recovery are bounded.

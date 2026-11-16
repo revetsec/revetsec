@@ -20,8 +20,6 @@ package com.revetsec.webauthn;
  * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
 public enum WebAuthnRejectionReason {
-    /** Input or policy was not accepted.
-     * @since 1.0.0 */ REJECTED,
-    /** A non-increasing nonzero signature counter requires account review.
-     * @since 1.0.0 */ COUNTER_RISK
+    /** Input or policy was not accepted. */ REJECTED,
+    /** A non-increasing nonzero signature counter requires account review. */ COUNTER_RISK
 }

@@ -22,10 +22,8 @@ import javax.annotation.concurrent.Immutable;
  * @since 1.0.0 */
 @Immutable
 public enum TotpAuthenticationMethod {
-    /** A fresh time-based one-time password was accepted.
-     * @since 1.0.0 */
+    /** A fresh time-based one-time password was accepted. */
     TOTP,
-    /** A single-use recovery code was consumed; application recovery policy applies.
-     * @since 1.0.0 */
+    /** A single-use recovery code was consumed; application recovery policy applies. */
     RECOVERY_CODE
 }

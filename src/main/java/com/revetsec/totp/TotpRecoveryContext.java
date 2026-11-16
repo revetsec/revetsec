@@ -93,11 +93,9 @@ public final class TotpRecoveryContext {
  public enum Purpose {
   /**
    * Provision only a fresh externally authorized epoch.
-   * @since 1.0.0
    */ INITIALIZE_NAMESPACE,
   /**
    * Authenticate or manage an initialized epoch.
-   * @since 1.0.0
    */ OPERATION
  }
 }

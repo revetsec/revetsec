@@ -29,27 +29,22 @@ import javax.annotation.concurrent.Immutable;
 public enum PendingAuthorizationSaveResult {
 	/**
 	 * A new record was saved.
-	 * @since 1.0.0
 	 */
 	SAVED,
 	/**
 	 * A live record already uses this binding and state.
-	 * @since 1.0.0
 	 */
 	ALREADY_PRESENT,
 	/**
 	 * Capacity refused the write without evicting a live record.
-	 * @since 1.0.0
 	 */
 	CAPACITY_REFUSED,
 	/**
 	 * The write did not occur because the store or budget was unavailable.
-	 * @since 1.0.0
 	 */
 	UNAVAILABLE,
 	/**
 	 * A write may have occurred; presence and safe retry are not established.
-	 * @since 1.0.0
 	 */
 	INDETERMINATE
 }

@@ -228,15 +228,15 @@ public final class WebAuthnStoreKey {
   * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  public enum Kind {
-  /** Single-use ceremony or retained consumption proof. @since 1.0.0 */
+  /** Single-use ceremony or retained consumption proof. */
   CEREMONY,
-  /** Credential state keyed by its unique ID. @since 1.0.0 */
+  /** Credential state keyed by its unique ID. */
   CREDENTIAL,
-  /** Per-account credential index. @since 1.0.0 */
+  /** Per-account credential index. */
   ACCOUNT_CREDENTIAL_INDEX,
-  /** Per-account active state and revocation fence. @since 1.0.0 */
+  /** Per-account active state and revocation fence. */
   ACCOUNT_FENCE,
-  /** Per-namespace monotonic observed-time fence. @since 1.0.0 */
+  /** Per-namespace monotonic observed-time fence. */
   NAMESPACE_CLOCK
  }
 }

@@ -94,9 +94,7 @@ public final class WebAuthnAuthentication {
     /** The two authentication ceremonies.
      * @since 1.0.0 */
     @Immutable public enum Kind {
-        /** Discoverable sign-in.
-         * @since 1.0.0 */ SIGN_IN,
-        /** Account-pinned sensitive action.
-         * @since 1.0.0 */ REAUTHENTICATION
+        /** Discoverable sign-in. */ SIGN_IN,
+        /** Account-pinned sensitive action. */ REAUTHENTICATION
     }
 }

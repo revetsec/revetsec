@@ -33,31 +33,22 @@ import static java.util.Objects.requireNonNull;
  */
 @Immutable
 public enum OAuthStoreCommitStatus {
- /** All predicates and mutations linearized durably together.
-  * @since 1.0.0 */
+ /** All predicates and mutations linearized durably together. */
  COMMITTED,
- /** An exact predicate failed with no effect.
-  * @since 1.0.0 */
+ /** An exact predicate failed with no effect. */
  CONFLICT,
- /** Assigned backend capacity refused the whole mutation with no eviction.
-  * @since 1.0.0 */
+ /** Assigned backend capacity refused the whole mutation with no eviction. */
  CAPACITY,
- /** The active authority/recovery/clock tuple does not match.
-  * @since 1.0.0 */
+ /** The active authority/recovery/clock tuple does not match. */
  FENCED,
- /** No healthy admitted time was available at final validation.
-  * @since 1.0.0 */
+ /** No healthy admitted time was available at final validation. */
  TIME_UNAVAILABLE,
- /** Fresh validation time precedes the required inclusive floor.
-  * @since 1.0.0 */
+ /** Fresh validation time precedes the required inclusive floor. */
  TIME_BEFORE_FLOOR,
- /** Fresh validation time reached the original exclusive upper bound.
-  * @since 1.0.0 */
+ /** Fresh validation time reached the original exclusive upper bound. */
  TIME_EXPIRED,
- /** Definitive unavailability with no effect from this callback.
-  * @since 1.0.0 */
+ /** Definitive unavailability with no effect from this callback. */
  UNAVAILABLE,
- /** The outcome is uncertain; reconcile before repeating a non-idempotent operation.
-  * @since 1.0.0 */
+ /** The outcome is uncertain; reconcile before repeating a non-idempotent operation. */
  UNKNOWN
 }

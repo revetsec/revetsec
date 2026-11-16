@@ -21,22 +21,22 @@ package com.revetsec.webauthn;
 @javax.annotation.concurrent.Immutable
 public enum WebAuthnStoreCommitResult {
  /** All predicates matched and all changes committed to the selected store. Durability across
-  * restarts requires a durable implementation. @since 1.0.0 */
+  * restarts requires a durable implementation. */
  COMMITTED,
- /** A predicate failed; no mutation took effect. @since 1.0.0 */
+ /** A predicate failed; no mutation took effect. */
  CONFLICT,
- /** Capacity was insufficient; no mutation took effect. @since 1.0.0 */
+ /** Capacity was insufficient; no mutation took effect. */
  CAPACITY,
- /** The active authority, recovery or clock generation differs; no mutation took effect. @since 1.0.0 */
+ /** The active authority, recovery or clock generation differs; no mutation took effect. */
  FENCED,
- /** No healthy admitted time was available; no mutation took effect. @since 1.0.0 */
+ /** No healthy admitted time was available; no mutation took effect. */
  TIME_UNAVAILABLE,
- /** Fresh validation time precedes the inclusive floor; no mutation took effect. @since 1.0.0 */
+ /** Fresh validation time precedes the inclusive floor; no mutation took effect. */
  TIME_BEFORE_FLOOR,
- /** Fresh validation time reached the exclusive expiry; no mutation took effect. @since 1.0.0 */
+ /** Fresh validation time reached the exclusive expiry; no mutation took effect. */
  TIME_EXPIRED,
- /** The store refused with known no effect, including a confirmed abort. @since 1.0.0 */
+ /** The store refused with known no effect, including a confirmed abort. */
  UNAVAILABLE,
- /** The write may have taken effect; reconciliation is required. @since 1.0.0 */
+ /** The write may have taken effect; reconciliation is required. */
  UNKNOWN
 }

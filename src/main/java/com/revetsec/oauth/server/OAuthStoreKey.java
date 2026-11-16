@@ -93,26 +93,19 @@ public final class OAuthStoreKey {
   */
  @Immutable
  public enum Kind {
-  /** Permanent issuer epoch and clock fence.
- * @since 1.0.0 */
+  /** Permanent issuer epoch and clock fence. */
   ISSUER_STATE,
-  /** Permanent issuer-local subject epoch.
- * @since 1.0.0 */
+  /** Permanent issuer-local subject epoch. */
   SUBJECT_STATE,
-  /** Browser-bound authorization interaction.
- * @since 1.0.0 */
+  /** Browser-bound authorization interaction. */
   INTERACTION,
-  /** Authorization code or retained consumption proof.
- * @since 1.0.0 */
+  /** Authorization code or retained consumption proof. */
   CODE,
-  /** Authorization grant and revocation state.
- * @since 1.0.0 */
+  /** Authorization grant and revocation state. */
   GRANT,
-  /** Issued access-token identifier and binding.
- * @since 1.0.0 */
+  /** Issued access-token identifier and binding. */
   ACCESS_TOKEN,
-  /** Rotating refresh credential or retained reuse proof.
- * @since 1.0.0 */
+  /** Rotating refresh credential or retained reuse proof. */
   REFRESH_TOKEN
  }
 }

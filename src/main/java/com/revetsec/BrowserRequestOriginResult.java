@@ -86,6 +86,8 @@ public abstract sealed class BrowserRequestOriginResult permits BrowserRequestOr
         CROSS_SITE,
         /** Same-site metadata had no exact configured origin. */
         SAME_SITE,
+        /** An unrecognized {@code Sec-Fetch-Site} value had no exact configured origin. */
+        UNRECOGNIZED_FETCH_SITE,
         /** A syntactically valid origin was not configured. */
         UNTRUSTED_ORIGIN,
         /** An opaque {@code Origin: null} could not be admitted. */

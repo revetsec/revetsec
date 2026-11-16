@@ -22,45 +22,30 @@ import javax.annotation.concurrent.Immutable;
  * @since 1.0.0 */
 @Immutable
 public enum TotpUnavailableReason {
-    /** A store, clock, random source or other dependency was unavailable.
-     * @since 1.0.0 */
+    /** A store, clock, random source or other dependency was unavailable. */
     DEPENDENCY_UNAVAILABLE,
-    /** Recovery admission was closed or could not be confirmed.
-     * @since 1.0.0 */
+    /** Recovery admission was closed or could not be confirmed. */
     ADMISSION_CLOSED,
-    /** The authority, admission, clock generation or recovery epoch was no longer authoritative.
-     * @since 1.0.0 */
+    /** The authority, admission, clock generation or recovery epoch was no longer authoritative. */
     FENCED,
-    /** The backend refused capacity without changing state.
-     * @since 1.0.0 */
+    /** The backend refused capacity without changing state. */
     CAPACITY_REFUSED,
-    /** An opaque record could not be authenticated or validated.
-     * @since 1.0.0 */
+    /** An opaque record could not be authenticated or validated. */
     INVALID_STORED_STATE,
-    /** An authenticated durable record format was unsupported.
-     * @since 1.0.0 */
-    UNSUPPORTED_STORED_FORMAT,
-    /** A required durable-record sealing key was unavailable.
-     * @since 1.0.0 */
+    /** A required durable-record sealing key was unavailable. */
     SEALING_KEY_UNAVAILABLE,
-    /** The activated namespace record was missing or initialization was incomplete.
-     * @since 1.0.0 */
+    /** The activated namespace record was missing or initialization was incomplete. */
     NAMESPACE_NOT_INITIALIZED,
-    /** The original operation budget was exhausted.
-     * @since 1.0.0 */
+    /** The original operation budget was exhausted. */
     DEADLINE_EXCEEDED,
-    /** Repeated confirmed conflicts exhausted the bounded retry policy.
-     * @since 1.0.0 */
+    /** Repeated confirmed conflicts exhausted the bounded retry policy. */
     CONFLICT_LIMIT_REACHED,
     /** A charge reservation is confirmed, but verification or settlement is definitely incomplete.
-     * No proof is released and the charge is not refunded or reserved again automatically.
-     * @since 1.0.0 */
+     * No proof is released and the charge is not refunded or reserved again automatically. */
     ATTEMPT_INCOMPLETE,
     /** Healthy admitted authority time is unavailable or precedes a required minimum or entity floor.
-     * No worker-time fallback is permitted.
-     * @since 1.0.0 */
+     * No worker-time fallback is permitted. */
     TIME_AUTHORITY_UNAVAILABLE,
-    /** The complete worker offset interval, elapsed continuity or release-rate bound could not establish health.
-     * @since 1.0.0 */
+    /** The complete worker offset interval, elapsed continuity or release-rate bound could not establish health. */
     CLOCK_HEALTH_UNCONFIRMED
 }

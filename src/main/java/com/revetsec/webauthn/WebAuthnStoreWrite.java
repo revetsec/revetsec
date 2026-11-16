@@ -216,9 +216,9 @@ public final class WebAuthnStoreWrite {
    * @since 1.0.0 */
   @javax.annotation.concurrent.Immutable
   public enum Kind {
-   /** Insert after confirmed absence. @since 1.0.0 */ INSERT,
-   /** Replace an exact version. @since 1.0.0 */ REPLACE,
-   /** Delete an exact version. @since 1.0.0 */ DELETE
+   /** Insert after confirmed absence. */ INSERT,
+   /** Replace an exact version. */ REPLACE,
+   /** Delete an exact version. */ DELETE
   }
  }
 }

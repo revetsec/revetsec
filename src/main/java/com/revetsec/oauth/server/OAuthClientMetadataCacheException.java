@@ -85,17 +85,11 @@ public final class OAuthClientMetadataCacheException extends RevetsecException {
      */
     @Immutable
     public enum Reason {
-        /** The provider could not complete the operation.
-         * @since 1.0.0
-         */
+        /** The provider could not complete the operation. */
         UNAVAILABLE,
-        /** The remaining operation budget elapsed.
-         * @since 1.0.0
-         */
+        /** The remaining operation budget elapsed. */
         TIMEOUT,
-        /** The calling thread was interrupted.
-         * @since 1.0.0
-         */
+        /** The calling thread was interrupted. */
         INTERRUPTED
     }
 }

@@ -21,6 +21,7 @@ import org.jspecify.annotations.NonNull;
 import com.revetsec.ContractSupport.SourceAnalysis;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.doctree.DocTree;
+import com.sun.source.doctree.SinceTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.util.TreePath;
@@ -70,7 +71,8 @@ import java.util.stream.Collectors;
  *   <li>it has Javadoc with {@code @since}, and so does every public or protected member it declares or inherits
  *   from a non-exported Revetsec class (such as a package-private base class), since callers can reach those
  *   members too. Two exemptions: {@code @Override} methods inherit their documentation, and enum constants need
- *   Javadoc but take their {@code @since} from the enum (Pyranid precedent);</li>
+ *   Javadoc but take their {@code @since} from the enum (Pyranid precedent). A constant carries its own
+ *   {@code @since} only when it was added in a later release than its enum, so repeating the enum's is reported;</li>
  *   <li>it has no implicit public or protected constructor (declare constructors explicitly);</li>
  *   <li>no public or protected static method is named {@code of*}, {@code create*} or {@code new*} (R1);</li>
  *   <li>every non-primitive type in a public or protected field, parameter or return type carries exactly one
@@ -683,6 +685,21 @@ final class PublicApiContractTests {
 		}
 		if (requireSince && docComment.getBlockTags().stream().noneMatch(tag -> tag.getKind() == DocTree.Kind.SINCE))
 			violations.add(owner + ": Javadoc has no @since tag (D28)");
+		if (element.getKind() == ElementKind.ENUM_CONSTANT) {
+			@Nullable String since = sinceText(docComment);
+			@Nullable DocCommentTree enumComment = analysis.getTrees().getDocCommentTree(element.getEnclosingElement());
+			if (since != null && enumComment != null && since.equals(sinceText(enumComment)))
+				violations.add(owner + ": repeats its enum's @since; enum constants take it from the enum and carry "
+						+ "their own only when added in a later release (D28)");
+		}
+	}
+
+	private static @Nullable String sinceText(@NonNull DocCommentTree docComment) {
+		return docComment.getBlockTags().stream()
+				.filter(tag -> tag.getKind() == DocTree.Kind.SINCE)
+				.map(tag -> ((SinceTree) tag).getBody().stream().map(DocTree::toString).collect(Collectors.joining()).strip())
+				.findFirst()
+				.orElse(null);
 	}
 
 	private static boolean isOverride(@NonNull Element element) {

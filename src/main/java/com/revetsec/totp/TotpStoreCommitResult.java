@@ -24,38 +24,29 @@ package com.revetsec.totp;
 public enum TotpStoreCommitResult {
  /**
   * All predicates matched and all mutations committed.
-  * @since 1.0.0
   */ COMMITTED,
  /**
   * A version or absence predicate failed; no mutation occurred.
-  * @since 1.0.0
   */ CONFLICT,
  /**
   * Capacity was insufficient; no record was evicted and no mutation occurred.
-  * @since 1.0.0
   */ CAPACITY_REFUSED,
  /**
   * The active authority, recovery/clock generation or address epoch was fenced; no mutation occurred.
-  * @since 1.0.0
   */ FENCED,
  /**
   * Current data admission exists but healthy admitted time was unavailable at validation; no effect.
-  * @since 1.0.0
   */ TIME_UNAVAILABLE,
  /**
   * Fresh admitted validation time was below the inclusive condition floor; no effect.
-  * @since 1.0.0
   */ TIME_BEFORE_FLOOR,
  /**
   * Fresh admitted validation time reached the original exclusive expiry; no effect.
-  * @since 1.0.0
   */ TIME_EXPIRED,
  /**
   * The backend failed before any possible mutation.
-  * @since 1.0.0
   */ UNAVAILABLE,
  /**
   * A write may have committed; never retry automatically.
-  * @since 1.0.0
   */ UNKNOWN
 }
