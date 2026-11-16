@@ -22,6 +22,7 @@ ROOT = HERE.parents[2]
 EXAMPLE = ROOT / 'revetsec/examples/postgresql-pending-store'
 OLD = ROOT / 'planning/records/security/shared-clock-scp01-2026-10-29'
 IMAGE = 'sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
+PYRANID_SHA256 = 'e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 
 
 def sha(path):
@@ -103,6 +104,7 @@ def main():
     parser.add_argument('--java-home', type=Path, required=True)
     parser.add_argument('--core-jar', type=Path, required=True)
     parser.add_argument('--core-sha256', required=True)
+    parser.add_argument('--pyranid-jar', type=Path, required=True)
     parser.add_argument('--adapter-sources', type=Path, default=EXAMPLE / 'src/main/java/example/pending')
     parser.add_argument('--family', choices=['TOTP', 'WEBAUTHN', 'ISSUER'])
     parser.add_argument('--case', choices=['expired', 'below', 'unavailable', 'catchup', 'N-1', 'N', 'E-1', 'E', 'E+1'])
@@ -110,6 +112,11 @@ def main():
     args = parser.parse_args()
     if sha(args.core_jar) != args.core_sha256:
         parser.error('Selected core SHA-256 mismatch')
+    try:
+        if sha(args.pyranid_jar) != PYRANID_SHA256:
+            parser.error('Pyranid does not match com.pyranid:pyranid:4.9.0 from Maven Central')
+    except OSError as failure:
+        parser.error(str(failure))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     runtime = Path(tempfile.mkdtemp(prefix='revetsec-temporal-'))
@@ -155,9 +162,10 @@ def main():
         check(label + '/all-256-exact-assigned-counters', len(quotas) == 256 and all(row['bucket'] == i and [row['used_entries'], row['used_bytes']] == counts[i] and row['used_entries'] <= row['entry_limit'] and row['used_bytes'] <= row['byte_limit'] for i, row in enumerate(quotas)) and sum(row['entry_limit'] for row in quotas) == 4096 and sum(row['byte_limit'] for row in quotas) == (4_000_000 if family == 'TOTP' else 0))
 
     try:
-        dependencies = []
+        dependencies = [args.pyranid_jar.resolve()]
+        check('released/com.pyranid:pyranid:4.9.0', sha(dependencies[0]) == PYRANID_SHA256)
         manifest = json.loads((OLD / 'ARTIFACT-PRESERVATION.json').read_text())
-        for coordinate in ['com.pyranid:pyranid:4.7.0', 'org.postgresql:postgresql:42.7.14', 'org.jspecify:jspecify:1.0.1', 'com.google.code.findbugs:jsr305:3.0.2', 'com.google.errorprone:error_prone_annotations:2.50.0']:
+        for coordinate in ['org.postgresql:postgresql:42.7.14', 'org.jspecify:jspecify:1.0.1', 'com.google.code.findbugs:jsr305:3.0.2', 'com.google.errorprone:error_prone_annotations:2.50.0']:
             row = next(r for r in manifest['artifacts'] if r.get('coordinate') == coordinate)
             dependency = ROOT / row['frozen_path']
             check('pinned/' + coordinate, sha(dependency) == row['sha256'])

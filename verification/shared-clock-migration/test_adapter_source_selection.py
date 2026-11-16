@@ -11,6 +11,7 @@ import unittest
 
 ROOT=Path(os.environ.get('REVETSEC_WORKSPACE_ROOT',Path(__file__).resolve().parents[3]))
 HERE=ROOT/'revetsec/verification/shared-clock-migration'
+PYRANID_SHA256='e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 
 class AdapterSourceSelectionTests(unittest.TestCase):
  @classmethod
@@ -25,8 +26,10 @@ class AdapterSourceSelectionTests(unittest.TestCase):
   expected=os.environ.get('SCP10_CORE_SHA256',namespace['DEFAULT_CORE_SHA256'])
   if hashlib.sha256(cls.core.read_bytes()).hexdigest()!=expected:raise AssertionError('Explicit current artifact mismatch')
   manifest=json.loads((ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/ARTIFACT-PRESERVATION.json').read_text())
-  cls.dependencies=[]
-  for name in ['com.pyranid:pyranid:4.7.0','org.postgresql:postgresql:42.7.14','org.jspecify:jspecify:1.0.1','com.google.code.findbugs:jsr305:3.0.2','com.google.errorprone:error_prone_annotations:2.50.0']:
+  pyranid=Path(os.environ.get('SCP10_PYRANID_JAR',Path.home()/'.m2/repository/com/pyranid/pyranid/4.9.0/pyranid-4.9.0.jar')).resolve()
+  if hashlib.sha256(pyranid.read_bytes()).hexdigest()!=PYRANID_SHA256:raise AssertionError('Pyranid does not match com.pyranid:pyranid:4.9.0 from Maven Central')
+  cls.dependencies=[pyranid]
+  for name in ['org.postgresql:postgresql:42.7.14','org.jspecify:jspecify:1.0.1','com.google.code.findbugs:jsr305:3.0.2','com.google.errorprone:error_prone_annotations:2.50.0']:
    row=next(r for r in manifest['artifacts'] if r.get('coordinate')==name);path=ROOT/row['frozen_path']
    if hashlib.sha256(path.read_bytes()).hexdigest()!=row['sha256']:raise AssertionError('Pinned dependency mismatch')
    cls.dependencies.append(path)

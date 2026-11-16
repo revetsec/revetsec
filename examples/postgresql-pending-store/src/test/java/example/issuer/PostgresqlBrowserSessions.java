@@ -229,8 +229,8 @@ public final class PostgresqlBrowserSessions implements BrowserSessionStore {
 
     private <@NonNull T> @NonNull T transaction(@NonNull Operation<@NonNull T> operation) {
         long deadline=System.nanoTime()+BUDGET.toNanos();
-        Database database=Database.withDataSource(new PostgresqlPyranidDataSource(source,deadline))
-                .databaseType(DatabaseType.POSTGRESQL).build();
+        Database database=Database.with(new PostgresqlPyranidDataSource(source,deadline),
+                DatabaseType.POSTGRESQL).build();
         Completion completion=new Completion();Holder<T> candidate=new Holder<>();
         try {
             Optional<T> result=database.transaction(

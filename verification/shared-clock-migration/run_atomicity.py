@@ -24,6 +24,7 @@ ROOT = HERE.parents[2]
 EXAMPLE = ROOT / 'revetsec/examples/postgresql-pending-store'
 OLD = ROOT / 'planning/records/security/shared-clock-scp01-2026-10-29'
 IMAGE = 'sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
+PYRANID_SHA256 = 'e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 
 
 def sha(path):
@@ -60,10 +61,16 @@ def main():
     parser.add_argument('--java-home', type=Path, required=True)
     parser.add_argument('--core-jar', type=Path, required=True)
     parser.add_argument('--core-sha256', required=True)
+    parser.add_argument('--pyranid-jar', type=Path, required=True)
     # Private calibration uses copied sources; normal invocation always uses current sources.
     parser.add_argument('--adapter-sources', type=Path, default=EXAMPLE / 'src/main/java/example/pending')
     parser.add_argument('--family', choices=['TOTP', 'WEBAUTHN', 'ISSUER'])
     args = parser.parse_args()
+    try:
+        if sha(args.pyranid_jar) != PYRANID_SHA256:
+            parser.error('Pyranid does not match com.pyranid:pyranid:4.9.0 from Maven Central')
+    except OSError as failure:
+        parser.error(str(failure))
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
     result = {'status': 'RUNNING', 'checks': [], 'cases': [], 'image': IMAGE,
@@ -122,9 +129,10 @@ def main():
     try:
         check('exact-current-core', result['coreJarSha256'] == args.core_sha256)
         check('cached-image-no-pull', docker('image', 'inspect', IMAGE, '--format', '{{.Id}}') == IMAGE)
-        dependencies = []
+        dependencies = [args.pyranid_jar.resolve()]
+        check('released/com.pyranid:pyranid:4.9.0', sha(dependencies[0]) == PYRANID_SHA256)
         manifest = json.loads((OLD / 'ARTIFACT-PRESERVATION.json').read_text())
-        for coordinate in ['com.pyranid:pyranid:4.7.0', 'org.postgresql:postgresql:42.7.14', 'org.jspecify:jspecify:1.0.1', 'com.google.code.findbugs:jsr305:3.0.2', 'com.google.errorprone:error_prone_annotations:2.50.0']:
+        for coordinate in ['org.postgresql:postgresql:42.7.14', 'org.jspecify:jspecify:1.0.1', 'com.google.code.findbugs:jsr305:3.0.2', 'com.google.errorprone:error_prone_annotations:2.50.0']:
             row = next(r for r in manifest['artifacts'] if r.get('coordinate') == coordinate)
             dependency = ROOT / row['frozen_path']
             check('pinned/' + coordinate, sha(dependency) == row['sha256'])

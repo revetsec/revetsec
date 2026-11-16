@@ -113,8 +113,8 @@ final class WebAuthnFixtureRecoveryGate implements WebAuthnRecoveryGate {
                     || !fields[1].equals(this.expectedSealerDigest)) return false;
             long nanos = deadline - System.nanoTime();
             if (nanos <= 0) return false;
-            Database database = Database.withDataSource(new PostgresqlPyranidDataSource(
-                    WebAuthnStoreProbe::connection, deadline)).databaseType(DatabaseType.POSTGRESQL).build();
+            Database database = Database.with(new PostgresqlPyranidDataSource(
+                    WebAuthnStoreProbe::connection, deadline), DatabaseType.POSTGRESQL).build();
             Optional<Marker> row = database.query("SELECT epoch,sealer_digest FROM webauthn_recovery_epoch "
                     + "WHERE namespace=:namespace")
                     .bind("namespace", this.namespace).fetchObject(Marker.class);

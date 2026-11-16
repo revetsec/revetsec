@@ -26,7 +26,7 @@
   <properties><maven.compiler.release>17</maven.compiler.release></properties>
   <dependencies>
     <dependency><groupId>com.revetsec</groupId><artifactId>revetsec</artifactId></dependency>
-    <dependency><groupId>com.pyranid</groupId><artifactId>pyranid</artifactId><version>4.7.0</version></dependency>
+    <dependency><groupId>com.pyranid</groupId><artifactId>pyranid</artifactId><version>4.9.0</version></dependency>
     <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>42.7.14</version><scope>runtime</scope></dependency>
     <!-- Standalone database probes also exercise the example application hosts. -->
     <dependency><groupId>com.revetsec.examples</groupId><artifactId>self-issued</artifactId><version>${project.version}</version><scope>test</scope></dependency>

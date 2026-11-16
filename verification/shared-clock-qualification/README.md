@@ -9,10 +9,13 @@ The native lane measures the actual current TOTP, WebAuthn and issuer adapters w
 ```sh
 python3 verification/shared-clock-qualification/run_postgres.py \
   --output /absolute/fresh-owned-output \
-  --java-home /absolute/jdk17-or21-home
+  --java-home /absolute/jdk17-or21-home \
+  --core-jar /absolute/current/revetsec-1.0.0.jar \
+  --core-sha256 EXACT_CORE_SHA256 \
+  --pyranid-jar /absolute/maven-central/pyranid-4.9.0.jar
 ```
 
-The runner checks its cached PostgreSQL image and pinned artifacts without pulling an image. It removes its owned containers, volumes, networks and protected runtime files on success or failure. Results retain structural assertions, tool/source identities, generated schedule seeds, blocker relationships and timings; they exclude credentials, raw authentication records and secret material.
+The runner checks its cached PostgreSQL image, the exact Maven Central Pyranid 4.9.0 artifact, and its preserved support artifacts without pulling an image. It removes its owned containers, volumes, networks and protected runtime files on success or failure. Results retain structural assertions, tool/source identities, generated schedule seeds, blocker relationships and timings; they exclude credentials, raw authentication records and secret material.
 
 The 95-group evidence inventory records applicable lanes and unresolved requirements separately. Scripted authority time supports functional tests. Approved UTC accuracy, witness custody, platform/device durability, worker continuity and complete applicable profile evidence remain prerequisites for a qualified shared deployment. Local A/B evidence and partial one-host C evidence cannot pass an unavailable lane or qualify cross-host D. The source checkpoint does not close SCP-11/SCG-07 while those dependencies remain missing.
 

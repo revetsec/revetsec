@@ -616,13 +616,13 @@ jobs:
 
       # Core supplies the provided annotation JARs, but it intentionally has no Pyranid or JDBC
       # dependency. Resolve the example-only versions explicitly on a fresh runner.
-      - name: Resolve pinned PostgreSQL fixture dependencies
+      - name: Resolve released PostgreSQL fixture dependencies
         run: |
           mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
-            -Dartifact=com.pyranid:pyranid:4.7.0 -Dtransitive=false
+            -Dartifact=com.pyranid:pyranid:4.9.0 -Dtransitive=false
           mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
             -Dartifact=org.postgresql:postgresql:42.7.14 -Dtransitive=false
-          test -f "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar"
+          test -f "$HOME/.m2/repository/com/pyranid/pyranid/4.9.0/pyranid-4.9.0.jar"
           test -f "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar"
           test -f "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar"
           test -f "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar"
@@ -635,7 +635,7 @@ jobs:
           python3 examples/postgresql-pending-store/run_totp.py \
             --java-home "$JAVA_HOME" \
             --core-jar target/revetsec-1.0.0.jar \
-            --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
+            --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.9.0/pyranid-4.9.0.jar" \
             --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
             --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
             --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \

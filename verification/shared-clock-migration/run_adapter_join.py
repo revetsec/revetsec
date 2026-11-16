@@ -37,6 +37,7 @@ IMAGE='sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
 OLD=ROOT/'planning/records/security/shared-clock-scp01-2026-10-29'
 DEFAULT_CORE=ROOT/'planning/records/security/remaining-work-2026-11-05/performance42/core.jar'
 DEFAULT_CORE_SHA256='3cd4a04dfb397d4cba7cedb0c78bbc576ea05ad1ab510625add86dfb89bcf11d'
+PYRANID_SHA256='e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 CORE=DEFAULT_CORE
 CURRENT=ROOT/'revetsec/examples/postgresql-pending-store'
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
@@ -52,7 +53,7 @@ def current_sources(current_java, *, quota_allocation=False):
  return sources
 
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);parser.add_argument('--core-jar',type=Path);parser.add_argument('--core-sha256');parser.add_argument('--repository',type=Path,default=Path('/private/tmp/revetsec-refresh-m2'));parser.add_argument('--rotation-key-id-length',type=int,choices=[14,64],default=14);parser.add_argument('--inventory-preflight',action='store_true');parser.add_argument('--crash-restart',action='store_true');parser.add_argument('--unknown-reconciliation',action='store_true');parser.add_argument('--restore-fencing',action='store_true');parser.add_argument('--retention-maintenance',action='store_true');parser.add_argument('--fence-only',action='store_true');parser.add_argument('--floor-timing',action='store_true');parser.add_argument('--bootstrap-recovery',action='store_true');parser.add_argument('--totp-capacity',action='store_true');parser.add_argument('--webauthn-capacity',action='store_true');parser.add_argument('--quota-allocation',action='store_true');parser.add_argument('--capacity-contention',action='store_true');args=parser.parse_args()
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);parser.add_argument('--core-jar',type=Path);parser.add_argument('--core-sha256');parser.add_argument('--pyranid-jar',type=Path);parser.add_argument('--repository',type=Path,default=Path('/private/tmp/revetsec-refresh-m2'));parser.add_argument('--rotation-key-id-length',type=int,choices=[14,64],default=14);parser.add_argument('--inventory-preflight',action='store_true');parser.add_argument('--crash-restart',action='store_true');parser.add_argument('--unknown-reconciliation',action='store_true');parser.add_argument('--restore-fencing',action='store_true');parser.add_argument('--retention-maintenance',action='store_true');parser.add_argument('--fence-only',action='store_true');parser.add_argument('--floor-timing',action='store_true');parser.add_argument('--bootstrap-recovery',action='store_true');parser.add_argument('--totp-capacity',action='store_true');parser.add_argument('--webauthn-capacity',action='store_true');parser.add_argument('--quota-allocation',action='store_true');parser.add_argument('--capacity-contention',action='store_true');args=parser.parse_args()
  global CORE
  if args.core_jar is not None:
   if args.core_sha256 is None:parser.error('--core-jar requires its explicit --core-sha256')
@@ -60,6 +61,11 @@ def main():
  elif args.core_sha256 is not None:parser.error('--core-sha256 requires --core-jar')
  selected_core_sha256=args.core_sha256 or DEFAULT_CORE_SHA256
  if sha(CORE)!=selected_core_sha256:raise RuntimeError('Selected current core artifact mismatch')
+ if args.pyranid_jar is None:parser.error('--pyranid-jar is required for current adapter sources')
+ pyranid=args.pyranid_jar.resolve()
+ try:
+  if sha(pyranid)!=PYRANID_SHA256:parser.error('Pyranid does not match com.pyranid:pyranid:4.9.0 from Maven Central')
+ except OSError as failure:parser.error(str(failure))
  out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
  result={'status':'RUNNING','checks':[],'image':IMAGE,'java_home':str(args.java_home),'coreJarSha256':sha(CORE),'oldCoreJarSha256':sha(OLD/'baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),'qualified':False,'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'actualDeploymentMigration':False,'qualifiedSharedProfile':False},'cleanup':{}}
  def save():(out/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
@@ -102,9 +108,11 @@ def main():
   return answer if answer in ['COMMITTED','NO_EFFECT','UNKNOWN'] else 'UNKNOWN'
  try:
   check('exact-cached-image-no-pull',docker('image','inspect',IMAGE,'--format','{{.Id}}')==IMAGE)
-  manifest=json.loads((OLD/'ARTIFACT-PRESERVATION.json').read_text());dependencies=[]
+  manifest=json.loads((OLD/'ARTIFACT-PRESERVATION.json').read_text());legacy_dependencies=[];common_dependencies=[]
   for coordinate in ['com.pyranid:pyranid:4.7.0','org.postgresql:postgresql:42.7.14','org.jspecify:jspecify:1.0.1','com.google.code.findbugs:jsr305:3.0.2','com.google.errorprone:error_prone_annotations:2.50.0']:
-   row=next(x for x in manifest['artifacts'] if x.get('coordinate')==coordinate);p=ROOT/row['frozen_path'];check('pinned-'+coordinate,sha(p)==row['sha256']);dependencies.append(p)
+   row=next(x for x in manifest['artifacts'] if x.get('coordinate')==coordinate);p=ROOT/row['frozen_path'];check('pinned-'+coordinate,sha(p)==row['sha256']);legacy_dependencies.append(p)
+   if coordinate!='com.pyranid:pyranid:4.7.0':common_dependencies.append(p)
+  check('released-com.pyranid:pyranid:4.9.0',sha(pyranid)==PYRANID_SHA256);current_dependencies=[pyranid,*common_dependencies]
   oldjar=OLD/'baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar';frozen=OLD/'baseline/source/revetsec/examples/postgresql-pending-store';frozen_java=frozen/'src/main/java/example/pending';current_java=CURRENT/'src/main/java/example/pending'
   oldclasses=runtime/'old-classes';classes=runtime/'current-classes';oldclasses.mkdir();classes.mkdir()
   oldsources=[frozen_java/'PostgresqlWebAuthnStore.java',frozen_java/'PostgresqlPyranidDataSource.java',HERE/'java/example/migration/CodecSupport.java',HERE/'native/com/revetsec/webauthn/AdapterLegacyWriter.java',HERE/'native/com/revetsec/webauthn/AdapterLegacySeed.java']
@@ -114,13 +122,13 @@ def main():
    inputs[str(source.relative_to(ROOT))]=sha(source)
   for name in inputs:
    target=out/'SOURCE'/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,target)
-  result['artifactInputsSha256']={str(path.relative_to(ROOT)):sha(path) for path in [CORE,oldjar,*dependencies]}
+  result['artifactInputsSha256']={str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path):sha(path) for path in [CORE,oldjar,*legacy_dependencies,pyranid]}
   result['javaVersion']=execute([str(args.java_home/'bin/java'),'-version']).stderr.strip()
-  for label,selected,jar,dest in [('legacy',oldsources,oldjar,oldclasses),('current',sources,CORE,classes)]:
+  for label,selected,jar,dest,dependencies in [('legacy',oldsources,oldjar,oldclasses,legacy_dependencies),('current',sources,CORE,classes,current_dependencies)]:
    p=execute([str(args.java_home/'bin/javac'),'--release','17','-proc:none','-Xlint:all','-Werror','-cp',os.pathsep.join(map(str,[jar,*dependencies])),'-d',str(dest),*map(str,selected)])
    (out/(label+'-compile.log')).write_text(p.stdout+p.stderr);check(label+'-strict-compile',p.returncode==0)
-  oldcp=os.pathsep.join(map(str,[oldclasses,oldjar,*dependencies]));currentcp=os.pathsep.join(map(str,[classes,CORE,*dependencies]));native_cp=currentcp
-  p=execute([str(args.java_home/'bin/javac'),'--release','17','-proc:none','-Xlint:all','-Werror','-cp',os.pathsep.join(map(str,dependencies)),'-d',str(classes),str(auditor)]);(out/'audit-compile.log').write_text(p.stdout+p.stderr);check('signature-auditor-strict-compile',p.returncode==0)
+  oldcp=os.pathsep.join(map(str,[oldclasses,oldjar,*legacy_dependencies]));currentcp=os.pathsep.join(map(str,[classes,CORE,*current_dependencies]));native_cp=currentcp
+  p=execute([str(args.java_home/'bin/javac'),'--release','17','-proc:none','-Xlint:all','-Werror','-cp',os.pathsep.join(map(str,current_dependencies)),'-d',str(classes),str(auditor)]);(out/'audit-compile.log').write_text(p.stdout+p.stderr);check('signature-auditor-strict-compile',p.returncode==0)
   for label,selected,classpath in [('legacy',oldsources,oldcp),('current',sources,currentcp)]:
    source_file=runtime/(label+'-audit.sources');source_file.write_text('\n'.join(map(str,selected))+'\n');classpath_file=runtime/(label+'-audit.classpath');classpath_file.write_text(classpath);audit_output=out/(label+'-nullability.json')
    p=execute([str(args.java_home/'bin/java'),'-cp',currentcp,'NullabilityAudit',str(source_file),str(classpath_file),str(audit_output)]);audit=json.loads(audit_output.read_text()) if audit_output.exists() else {};check(label+'-all-compiled-source-signature-nullability',p.returncode==0 and not audit.get('missing',[1]) and not audit.get('attribution_errors',[1]));result[label+'Nullability']=audit

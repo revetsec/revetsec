@@ -358,8 +358,8 @@ final class TotpApplicationSessionStore {
     }
 
     private @NonNull Database database(long deadline) {
-        return Database.withDataSource(new PostgresqlPyranidDataSource(this.source::open, deadline))
-                .databaseType(DatabaseType.POSTGRESQL).build();
+        return Database.with(new PostgresqlPyranidDataSource(this.source::open, deadline),
+                DatabaseType.POSTGRESQL).build();
     }
 
     private static @NonNull TransactionOptions options() {

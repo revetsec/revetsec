@@ -25,7 +25,7 @@ are not required to build or use the Java stores.
 
 At its recorded artifact boundary, the historical fixture's adapter-join lane starts with frozen legacy tables, including WebAuthn's `TIMESTAMPTZ`-only retention column. It derives exact retention from authenticated legacy payloads and rehearses schema installation and adapter checks under a scripted witness profile. That evidence is retained for its original source only: it neither compiles a WebAuthn conversion against current source nor authorizes one. Pending or uncertain issuer schema/migration intent still keeps current issuer admission closed.
 
-These application-side examples implement PostgreSQL storage for OAuth, OIDC, WebAuthn and TOTP flows that can reach different JVMs. They use Pyranid 4.7.0 for bound SQL and transaction lifecycle against one authoritative primary. The Revetsec core artifact retains zero runtime dependencies.
+These application-side examples implement PostgreSQL storage for OAuth, OIDC, WebAuthn and TOTP flows that can reach different JVMs. They use the released Pyranid 4.9.0 artifact from Maven Central for bound SQL and transaction lifecycle against one authoritative primary. The Revetsec core artifact retains zero runtime dependencies.
 
 Apply `schema.sql` with your migration tool, then create one clock row for a **new** stable namespace. Pass the same namespace and database to every JVM. For example:
 
@@ -66,7 +66,7 @@ The selected PostgreSQL issuer profile explicitly sets both the issuer record ca
 
 The library defaults remain 3,800 bytes. A deliberately narrower profile is valid; the SQL ceiling alone does not select the larger engine budget. The issuer cap cannot exceed the sealer cap, and every adapter instance must match the namespace's provisioned entry capacity. Configuration disagreement must refuse before data writes. The SQL issuer ceiling remains `octet_length(sealed_form) BETWEEN 1 AND 16384`; selecting it does not guarantee that every retained legacy row or aggregate inventory fits a migration. [The CAP-01 component runner](../../verification/capacity-profile/README.md) checks both fixture builders and all three issuer schema variants with disposable PostgreSQL.
 
-The authority is application-owned and independent of worker `Clock` and PostgreSQL wall time. Every participating JVM uses the same primary, admitted metadata, physical scope and sealing/recovery lifecycle. The connection source opens a fresh clean primary connection within the shrinking budget and preserves deployment TLS/certificate requirements. Pyranid 4.7.0 and the JDBC driver remain application dependencies. The fixture verifies primary `fsync`/`full_page_writes` and transaction-local synchronous COMMIT.
+The authority is application-owned and independent of worker `Clock` and PostgreSQL wall time. Every participating JVM uses the same primary, admitted metadata, physical scope and sealing/recovery lifecycle. The connection source opens a fresh clean primary connection within the shrinking budget and preserves deployment TLS/certificate requirements. Pyranid 4.9.0 and the JDBC driver remain application dependencies. The fixture verifies primary `fsync`/`full_page_writes` and transaction-local synchronous COMMIT.
 
 Ordinary callbacks take shared physical admission, sorted strongest logical-key transaction locks including confirmed absences, then changed escrow buckets. Fresh issuer-root insertion takes exclusive admission first. A permanent per-issuer root registry commits atomically with activation; missing registered roots and orphan data refuse initialization. Normal paths have no namespace-row mutex, global count/sum, read cleanup or timestamp write. Exact opaque versions and the full read set precede fresh authority sampling after all waits; inclusive floor and exclusive expiry precede assigned capacity checks and atomic data/quota DML. An assigned bucket may refuse while another has room. Permanent issuer/subject records cannot be deleted or evicted. Replay state retains its full exact seconds/nanos retention.
 
@@ -106,7 +106,7 @@ Then run from the core checkout:
 python3 examples/postgresql-pending-store/run_totp.py \
   --java-home "$JAVA_HOME" \
   --core-jar target/revetsec-1.0.0.jar \
-  --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
+  --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.9.0/pyranid-4.9.0.jar" \
   --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
   --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
   --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar"
@@ -138,7 +138,7 @@ For example, from the core checkout after building its JAR, use `python3 example
 
 The OIDC lanes verify cross-JVM identity release, wrong-nonce and bad-signature rejection, and one winner in callback races. The HMAC lane explicitly opts into Revetsec's compatibility mode with a run-local secret. The RS256 lane generates a fresh key pair inside a test JVM and serves its public JWKS from the loopback provider; the private key is never written to disk or included in the runner output. These are local protocol fixtures, not real-provider or cross-host qualification.
 
-The runner also checks cross-JVM cache reads and compare-and-set races, bounded eviction, uncertain COMMIT, confirmed reads despite a connection-close acknowledgement failure, outage and restart. It requires absolute paths to a current core JAR, Java home, and the pinned Pyranid, PostgreSQL, JSpecify and JSR-305 JARs; run `python3 run.py --help` for the arguments. Docker resources, the local endpoint and test credentials are removed after the run.
+The runner also checks cross-JVM cache reads and compare-and-set races, bounded eviction, uncertain COMMIT, confirmed reads despite a connection-close acknowledgement failure, outage and restart. It requires absolute paths to a current core JAR, Java home, the released Pyranid 4.9.0 JAR from Maven Central, and the selected PostgreSQL, JSpecify and JSR-305 JARs; run `python3 run.py --help` for the arguments. Docker resources, the local endpoint and test credentials are removed after the run.
 
 To include the self-issued Soklet application lane, use JDK 21 or newer and also pass `--adapter-jar` for the matching Revetsec/Soklet helper and `--framework-jar` for the pinned Soklet 4.0.0 JAR. The runner compiles the current app source for Java 21 with the Pyranid store, then runs fresh and established application instances in separate JVMs against a dedicated PostgreSQL namespace. It checks an issued token across startup, refusal to reinitialize an established issuer, rejection with the wrong sealing key and refresh rotation across JVMs. An established Soklet process then serves OAuth metadata and JWKS over an actual loopback HTTP listener, returns an active introspection verdict, and accepts the persisted token on its MCP listener while denying a missing bearer. Refresh replay in another JVM revokes that token; the still-running Soklet process rejects its next MCP call and returns an inactive introspection verdict.
 
@@ -165,7 +165,7 @@ Use the exact packaged core and dependency artifacts, with `JAVA_HOME` selecting
 python3 examples/postgresql-pending-store/run_scim.py \
   --java-home "$JAVA_HOME" \
   --core-jar target/revetsec-1.0.0.jar \
-  --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
+  --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.9.0/pyranid-4.9.0.jar" \
   --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
   --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
   --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \

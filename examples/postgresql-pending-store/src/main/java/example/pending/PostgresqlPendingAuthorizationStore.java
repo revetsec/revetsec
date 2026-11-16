@@ -209,8 +209,8 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 	}
 
 	private <@NonNull T> @NonNull T transaction(long deadline, @NonNull Operation<@NonNull T> operation) {
-		Database database = Database.withDataSource(new PostgresqlPyranidDataSource(this.source::open, deadline))
-				.databaseType(DatabaseType.POSTGRESQL).build();
+		Database database = Database.with(new PostgresqlPyranidDataSource(this.source::open, deadline),
+				DatabaseType.POSTGRESQL).build();
 		Completion completion = new Completion();
 		Holder<T> candidate = new Holder<>();
 		try {

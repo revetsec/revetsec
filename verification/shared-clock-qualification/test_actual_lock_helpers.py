@@ -13,6 +13,7 @@ import unittest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+PYRANID_SHA256 = 'e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 
 
 class ActualLockHelperTests(unittest.TestCase):
@@ -26,8 +27,11 @@ class ActualLockHelperTests(unittest.TestCase):
         cls.runtime = Path(tempfile.mkdtemp(prefix='revetsec-actual-locks-'))
         cls.addClassCleanup(shutil.rmtree, cls.runtime)
         manifest = json.loads((ROOT / 'planning/records/security/shared-clock-scp01-2026-10-29/ARTIFACT-PRESERVATION.json').read_text())
-        dependencies = []
-        for coordinate in ['com.pyranid:pyranid:4.7.0', 'org.postgresql:postgresql:42.7.14', 'org.jspecify:jspecify:1.0.1', 'com.google.code.findbugs:jsr305:3.0.2', 'com.google.errorprone:error_prone_annotations:2.50.0']:
+        pyranid = Path(os.environ.get('PG_QUALIFICATION_PYRANID_JAR', Path.home() / '.m2/repository/com/pyranid/pyranid/4.9.0/pyranid-4.9.0.jar')).resolve()
+        if hashlib.sha256(pyranid.read_bytes()).hexdigest() != PYRANID_SHA256:
+            raise AssertionError('Pyranid does not match com.pyranid:pyranid:4.9.0 from Maven Central')
+        dependencies = [pyranid]
+        for coordinate in ['org.postgresql:postgresql:42.7.14', 'org.jspecify:jspecify:1.0.1', 'com.google.code.findbugs:jsr305:3.0.2', 'com.google.errorprone:error_prone_annotations:2.50.0']:
             row = next(r for r in manifest['artifacts'] if r.get('coordinate') == coordinate)
             path = ROOT / row['frozen_path']
             if hashlib.sha256(path.read_bytes()).hexdigest() != row['sha256']:

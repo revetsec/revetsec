@@ -25,8 +25,7 @@ HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[2]
 CURRENT=ROOT/'revetsec/examples/postgresql-pending-store'
 OLD=ROOT/'planning/records/security/shared-clock-scp01-2026-10-29'
-CORE=ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0.jar'
-LEGACY_CORE_SHA256='b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38'
+PYRANID_SHA256='e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 IMAGE='sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
 LABEL='com.revetsec.scp11.native=true'
 FAMILIES=('TOTP','WEBAUTHN','ISSUER')
@@ -38,20 +37,27 @@ def encode(value):return base64.urlsafe_b64encode(value).decode().rstrip('=')
 def quote(value):return "'"+str(value).replace("'","''")+"'"
 def run(command,*,data=None,env=None,timeout=60):return subprocess.run(command,input=data,capture_output=True,text=True,env=env,timeout=timeout)
 def select_core(core_jar,core_sha256):
- if (core_jar is None)!=(core_sha256 is None):raise ValueError('--core-jar and --core-sha256 must be supplied together')
- selected=CORE if core_jar is None else core_jar
- expected=LEGACY_CORE_SHA256 if core_sha256 is None else core_sha256
+ if core_jar is None or core_sha256 is None:raise ValueError('--core-jar and --core-sha256 are required together')
+ selected=core_jar
+ expected=core_sha256
  if not re.fullmatch('[a-f0-9]{64}',expected):raise ValueError('Expected a lowercase SHA-256 for selected core')
  selected=selected.resolve()
  if sha(selected)!=expected:raise ValueError('Selected core SHA-256 mismatch')
  return selected,expected
+def select_pyranid(pyranid_jar):
+ if pyranid_jar is None:raise ValueError('--pyranid-jar is required for current adapter sources')
+ selected=pyranid_jar.resolve()
+ if sha(selected)!=PYRANID_SHA256:raise ValueError('Pyranid does not match com.pyranid:pyranid:4.9.0 from Maven Central')
+ return selected
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);parser.add_argument('--core-jar',type=Path);parser.add_argument('--core-sha256');args=parser.parse_args()
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);parser.add_argument('--core-jar',type=Path);parser.add_argument('--core-sha256');parser.add_argument('--pyranid-jar',type=Path);args=parser.parse_args()
  try:core,expected_core_sha256=select_core(args.core_jar,args.core_sha256)
+ except (ValueError,OSError) as failure:parser.error(str(failure))
+ try:pyranid=select_pyranid(args.pyranid_jar)
  except (ValueError,OSError) as failure:parser.error(str(failure))
  out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
  runtime=Path(tempfile.mkdtemp(prefix='revetsec-scp11-native-',dir=Path(tempfile.gettempdir()).resolve()));runtime.chmod(0o700)
- result={'status':'RUNNING','checks':[],'workloads':[],'blocking':[],'qualified':False,'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'service120msPreparationQualified':False,'completeLaneCQualified':False,'actualDeploymentMigration':False},'profile':{'scope':'structural store carriers only; opaque synthetic records not opened by engines','families':list(FAMILIES),'actors':[8,16],'authorityDelayMillis':1,'authorityTime':'fixed-scripted-1800000000','normalServiceOperations':False,'realUTC':False},'actorJvmOptions':ACTOR_JVM_OPTIONS,'scriptedCarrierConstructedBeforeCallbacks':True,'image':IMAGE,'coreJar':str(core),'coreJarSha256':expected_core_sha256,'explicitCoreSelection':args.core_jar is not None,'java_home':str(args.java_home),'cleanup':{}}
+ result={'status':'RUNNING','checks':[],'workloads':[],'blocking':[],'qualified':False,'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'service120msPreparationQualified':False,'completeLaneCQualified':False,'actualDeploymentMigration':False},'profile':{'scope':'structural store carriers only; opaque synthetic records not opened by engines','families':list(FAMILIES),'actors':[8,16],'authorityDelayMillis':1,'authorityTime':'fixed-scripted-1800000000','normalServiceOperations':False,'realUTC':False},'actorJvmOptions':ACTOR_JVM_OPTIONS,'scriptedCarrierConstructedBeforeCallbacks':True,'image':IMAGE,'coreJar':str(core),'coreJarSha256':expected_core_sha256,'explicitCoreSelection':True,'java_home':str(args.java_home),'cleanup':{}}
  resource='revetsec-scp11-native-'+secrets.token_hex(6);volume=resource+'-data';network=resource+'-network';password=secrets.token_urlsafe(32);created=[];children=[]
  def save():(out/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
  def check(label,condition):
@@ -124,8 +130,8 @@ def main():
   return rows
  try:
   check('exact-cached-image-no-pull',docker('image','inspect',IMAGE,'--format','{{.Id}}')==IMAGE)
-  deps=[];manifest=json.loads((OLD/'ARTIFACT-PRESERVATION.json').read_text())
-  for coordinate in ['com.pyranid:pyranid:4.7.0','org.postgresql:postgresql:42.7.14','org.jspecify:jspecify:1.0.1','com.google.code.findbugs:jsr305:3.0.2','com.google.errorprone:error_prone_annotations:2.50.0']:
+  deps=[pyranid];check('released-com.pyranid:pyranid:4.9.0',sha(pyranid)==PYRANID_SHA256);manifest=json.loads((OLD/'ARTIFACT-PRESERVATION.json').read_text())
+  for coordinate in ['org.postgresql:postgresql:42.7.14','org.jspecify:jspecify:1.0.1','com.google.code.findbugs:jsr305:3.0.2','com.google.errorprone:error_prone_annotations:2.50.0']:
    item=next(x for x in manifest['artifacts'] if x.get('coordinate')==coordinate);path=ROOT/item['frozen_path'];check('pinned-'+coordinate,sha(path)==item['sha256']);deps.append(path)
   current=CURRENT/'src/main/java/example/pending';sources=[*sorted(current.glob('*Pg*.java')),*[current/n for n in ['PostgresqlTotpStore.java','PostgresqlWebAuthnStore.java','PostgresqlIssuerStore.java','PostgresqlPyranidDataSource.java']],*sorted((HERE/'native').rglob('*.java'))];auditor=ROOT/'revetsec/verification/examples/NullabilityAudit.java'
   inputs={str(p.relative_to(ROOT)):sha(p) for p in [Path(__file__),*sources,auditor,*[CURRENT/(family.lower()+'-schema.sql') for family in FAMILIES]]};result['sourceInputsSha256']=inputs

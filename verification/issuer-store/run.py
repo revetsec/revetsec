@@ -23,7 +23,8 @@ import time
 import xml.etree.ElementTree as ET
 
 IMAGE = 'sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
-PYRANID_SHA = 'a9f142bb5e5a9de76668fb1ae1fede6a6dafae392196b551a2f965fbf19a226b'
+# com.pyranid:pyranid:4.9.0, verified against the Maven Central artifact.
+PYRANID_SHA = 'e29b07bf48dcb47e80d7d1564cc84ef9558663331383fd52f04baea6b7b68a4f'
 # org.postgresql:postgresql:42.7.14, verified against the Maven Central artifact.
 DRIVER_SHA = '73914527305a40cce504b0d3d90b23caf565136912d607ae8ae7c5895512332c'
 

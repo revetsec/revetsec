@@ -63,7 +63,7 @@ public final class PostgresqlScimPatch {
         long deadline = System.nanoTime() + capped.toNanos();
         Completion completion = new Completion();
         try {
-            Database database = Database.withDataSource(new PostgresqlPyranidDataSource(source::open, deadline)).databaseType(DatabaseType.POSTGRESQL).build();
+            Database database = Database.with(new PostgresqlPyranidDataSource(source::open, deadline), DatabaseType.POSTGRESQL).build();
             Optional<Outcome> result = database.transaction(TransactionOptions.withIsolation(TransactionIsolation.READ_COMMITTED).build(), () -> {
                 database.currentTransaction().orElseThrow().addPostTransactionOperation(value -> completion.result = value);
                 bound(database, deadline);

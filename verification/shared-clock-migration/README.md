@@ -67,10 +67,11 @@ Run the legacy schema/backfill and current-adapter join with its own fresh outpu
 python3 verification/shared-clock-migration/run_adapter_join.py \
   --output /absolute/fresh-owned-adapter-output \
   --java-home /absolute/jdk17-or21-home \
+  --pyranid-jar /absolute/maven-central/pyranid-4.9.0.jar \
   --repository /absolute/offline-maven-repository
 ```
 
-Both runners own and remove their disposable PostgreSQL resources and protected temporary runtime files. The earlier structural result and the adapter-join result have separate evidence boundaries; neither grants deployment migration or release approval.
+The adapter join compiles the frozen legacy writer against its preserved Pyranid 4.7.0 artifact and current adapters against the released Maven Central Pyranid 4.9.0 artifact. Both runners own and remove their disposable PostgreSQL resources and protected temporary runtime files. The earlier structural result and the adapter-join result have separate evidence boundaries; neither grants deployment migration or release approval.
 
 For current-source MIG-06 qualification, pass an explicit existing `--core-jar` and its exact `--core-sha256`, plus `--repository` for the existing offline annotation dependencies. Omitting these options retains the hash-checked canonical API-BIND29/Performance42 artifact pin that supports the live probe; there is no automatic selection of a cached replacement. Add `--capacity-preflight` to `run_postgres.py` for the five current-codec/controller capacity cases against real native tables. They check refusal before writes, repeated preflight after a permitted `16383 → 16384` record-cap adjustment, hard-limit refusal and TOTP quotas based on reserved K64 bytes rather than current short-key output.
 
@@ -154,9 +155,12 @@ false; this component must not be reported as a lane-B, full lane-C or whole
 
 `run_atomicity.py` compiles the three current reference adapters and their private
 helpers with `--release 17 -proc:none -Xlint:all -Werror`, using a caller-selected
-core JAR with an explicit SHA-256 and the preserved pinned dependencies. Run with
+core JAR with an explicit SHA-256, the released Pyranid 4.9.0 artifact and the
+preserved support dependencies. Run with
 `--output <new-private-directory> --java-home <jdk-home> --core-jar <jar>
---core-sha256 <sha256>`. Docker must already have the exact pinned image cached.
+--core-sha256 <sha256> --pyranid-jar <maven-central-4.9.0-jar>`. The exact
+released Pyranid bytes are verified before output is created. Docker must already
+have the exact pinned image cached.
 The runner owns a new loopback-published container, network and volume; it removes
 them and the protected credential directory even after assertion failure.
 

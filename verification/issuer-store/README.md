@@ -1,6 +1,6 @@
 # PostgreSQL issuer storage with Pyranid
 
-This unpublished fixture implements the schema-2 admitted-time issuer SPI on one PostgreSQL primary using pinned Pyranid 4.7.0. Revetsec core acquires no database dependency. Applications own access, keys, TLS, pools, capacity, witness/recovery admission, migration and operating procedures.
+This unpublished fixture implements the schema-2 admitted-time issuer SPI on one PostgreSQL primary using the released Pyranid 4.9.0 artifact from Maven Central. Revetsec core acquires no database dependency. Applications own access, keys, TLS, pools, capacity, witness/recovery admission, migration and operating procedures.
 
 `IssuerFixture` explicitly selects `maximumStoreRecordBytes(16384)` and `maximumSealedLength(16384)` in every sealing-key mode, including rotation and lost-key controls. Global library defaults stay 3,800 bytes; the SQL issuer ceiling stays 16,384 **bytes**. A narrower application profile remains valid. The selected settings do not promise universal legacy conversion or sufficient aggregate capacity. [CAP-01's component runner](../capacity-profile/README.md) verifies the actual builder, the example builder, all issuer schemas and adapter profile refusal before data writes.
 

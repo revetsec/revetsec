@@ -178,8 +178,8 @@ public final class PostgresqlClientMetadataCache implements OAuthClientMetadataC
 	private <@NonNull T> @NonNull T transaction(@NonNull Duration remainingBudget,
 			@NonNull Operation<@NonNull T> operation) {
 		long deadline = deadline(remainingBudget);
-		Database database = Database.withDataSource(new PostgresqlPyranidDataSource(this.source::open, deadline))
-				.databaseType(DatabaseType.POSTGRESQL).build();
+		Database database = Database.with(new PostgresqlPyranidDataSource(this.source::open, deadline),
+				DatabaseType.POSTGRESQL).build();
 		Completion completion = new Completion();
 		Holder<T> candidate = new Holder<>();
 		try {

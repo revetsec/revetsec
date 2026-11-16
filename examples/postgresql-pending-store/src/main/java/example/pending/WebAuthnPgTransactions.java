@@ -38,7 +38,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
-/** Inactive private transaction boundary for the pinned Pyranid fixture. */
+/** Inactive private transaction boundary for the released Pyranid fixture. */
 final class WebAuthnPgTransactions {
 	private static final @NonNull ThreadLocal<@NonNull Boolean> ENTERED = new ThreadLocal<>();
 	private static final @NonNull Duration MAXIMUM_BUDGET = Duration.ofMinutes(1);
@@ -175,7 +175,7 @@ final class WebAuthnPgTransactions {
 		Prepared<T> prepared = new Prepared<>();
 		ENTERED.set(Boolean.TRUE);
 		try {
-			Database database = Database.withDataSource(new BudgetSource(source, deadline)).databaseType(DatabaseType.POSTGRESQL).build();
+			Database database = Database.with(new BudgetSource(source, deadline), DatabaseType.POSTGRESQL).build();
 			database.transaction(TransactionOptions.withIsolation(TransactionIsolation.READ_COMMITTED).build(), () -> {
 				database.currentTransaction().orElseThrow().addPostTransactionOperation(result -> state.completion = result);
 				return database.useRawConnection(connection -> {
