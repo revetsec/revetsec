@@ -1,7 +1,7 @@
 # Google and Apple ID tokens handed to a backend
 
-This unpublished Java 17 application recipe implements the shared R9/R10 behavior
-using public `JwtValidator` and JWKS APIs. It supplies a bounded application
+This unpublished Java 17 application recipe implements the shared Google and Apple
+backend-token behavior using public `JwtValidator` and JWKS APIs. It supplies a bounded application
 handler, one-use login state, local session rotation and explicit account and
 authorization callbacks. A valid ID token reaches those callbacks after the
 provider and request checks; it does not create an account or grant application
@@ -17,7 +17,7 @@ The module is an integration recipe. Its carrier-neutral handler is the common
 implementation for the [Soklet carrier](../provider-backend-tokens-soklet/README.md) and paired
 [Jakarta](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/docs/provider-tokens.md)/
 [javax](https://github.com/revetsec/revetsec-servlet-javax/blob/main/docs/provider-tokens.md) recipe sources.
-Those local source/container components have separate receipts and profile limits. This directory adds no
+Those Soklet and Servlet recipes have their own verification and profile limits. This directory adds no
 native SDK or hosted-provider qualification; the Soklet carrier needs its declared trusted HTTPS/query-free edge.
 The source is application code and adds no core API or standalone ID-token product.
 
@@ -184,4 +184,4 @@ package-private fixture wiring; the production factory exposes neither.
 
 Hosted Google/browser and Apple account/device observations remain **unproven**.
 Soklet and both Servlet namespace routing, real-container parity, distributed
-sessions/recovery and the formal M12 tool pass require their own evidence.
+sessions/recovery and the formal manual tool pass require their own evidence.

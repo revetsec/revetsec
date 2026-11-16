@@ -85,8 +85,8 @@ changes. Its ISC license header is retained and the original source hash is chec
 `BcryptVendoredSourceTests` after reversing that rewrite. The wrapper decides the accepted format, cost and
 password-length policy before invoking it.
 
-The [password SpotBugs disposition](reviews/password-spotbugs-2026-10-16.md)
-records two calculation-preserving byte-write changes in the Java translation,
-removal of unused per-instance constants, and method-scoped exceptions for the
-unchanged pinned bcrypt source and fresh per-call salt generator. Local static
-analysis is green; the independent primitive review remains a separate gate.
+Static analysis with SpotBugs led to two calculation-preserving byte-write
+changes in the Java translation and the removal of unused per-instance
+constants. The unchanged pinned bcrypt source and the per-call salt generator
+have method-scoped SpotBugs exclusions. The translation has not had an
+independent review.

@@ -1,4 +1,4 @@
-# OAuth and token responsibility map — 2026-10-14
+# OAuth and token responsibility map
 
 This is an internal source/test responsibility map for the shipped library and examples. It is not an assessment of a deployed application. The references are OWASP ASVS [5.0.0 V9](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x18-V9-Self-contained-Tokens.md) and [V10](https://github.com/OWASP/ASVS/blob/v5.0.0/5.0/en/0x19-V10-OAuth-and-OIDC.md). Each identifier is retained, including unsupported and application-owned requirements. A test reference supplies bounded implementation evidence; deployment remains the application's responsibility.
 
@@ -55,9 +55,9 @@ Test names are relative to `src/test/java/com/revetsec`; example tests are label
 
 Store atomicity, persistence, restore coordination, keys, browser sessions, consent, authorization and operational policy require application evidence. The volatile self-issued example does not qualify a production deployment. Bearer tokens do not prove possession or prevent theft/replay by a credential holder. Current RC qualification records retain actual local observations and remaining gates separately.
 
-## Selected pre-release changes — 2026-11-06
+## Additional source and test coverage
 
-The original 43 V9/V10 identifiers and responsibility assignments above remain. The following source/test additions refine this map; they do not establish deployed-application assessment results or close release qualification.
+The 43 V9/V10 identifiers and responsibility assignments above still apply. The following source and test additions refine the map; they are not a deployed-application assessment.
 
 | Surface | Responsibility and current source/test inputs |
 | --- | --- |

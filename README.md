@@ -137,9 +137,9 @@ dependencies {
 
 Each adapter lives in its own repository, and its README lists its coordinates. An adapter declares Revetsec core and its framework API as `provided` dependencies, so your application declares both.
 
-- [revetsec-soklet](https://github.com/revetsec/revetsec-soklet) for [Soklet](https://www.soklet.com) 4, requiring Java 21 or newer
-- [revetsec-servlet-jakarta](https://github.com/revetsec/revetsec-servlet-jakarta) for the `jakarta.servlet` API
-- [revetsec-servlet-javax](https://github.com/revetsec/revetsec-servlet-javax) for the legacy `javax.servlet` API
+- [revetsec-soklet](https://github.com/revetsec/revetsec-soklet) for [Soklet](https://www.soklet.com) 4, requiring Java 21 or newer ([Javadoc](https://soklet.javadoc.revetsec.com))
+- [revetsec-servlet-jakarta](https://github.com/revetsec/revetsec-servlet-jakarta) for the `jakarta.servlet` API ([Javadoc](https://jakarta.javadoc.revetsec.com))
+- [revetsec-servlet-javax](https://github.com/revetsec/revetsec-servlet-javax) for the legacy `javax.servlet` API ([Javadoc](https://javax.javadoc.revetsec.com))
 
 ### Scope
 

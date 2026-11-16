@@ -267,7 +267,5 @@ restorable password-hash record.
 
 The [password primitive provenance and verification record](password-vendored-source.md)
 identifies the pinned Argon2 and bcrypt sources, vectors and differential checks.
-Those checks are not an independent audit. The
-[external-review packet](reviews/password-primitive-external-review-packet.md)
-states the remaining Argon2id/BLAKE2b review gate and how to reproduce the
-source-bound evidence.
+Those checks are not an independent audit, and the Argon2id and BLAKE2b
+translation has not had an independent review.

@@ -1,14 +1,14 @@
-# RC-1 comparator profiles and differences
+# JOSE and JSON comparator profiles and differences
 
-Observed locally on 2026-10-14. This ledger describes the exact configured test
-profiles; it does not assert that different libraries have identical defaults.
-The Maven pins are test-only. RSA/EC verification shares JCA providers; Nimbus's
-Ed25519 path uses Tink. The original protected header and signed input are never
-rewritten to make an oracle accept a different algorithm.
+This ledger describes the exact configured test profiles; it does not assert that
+different libraries have identical defaults. The Maven pins are test-only:
+Nimbus JOSE+JWT 10.10, jose4j 0.9.7, Jackson-core 2.22.4 and Tink 1.24.0.
+RSA/EC verification shares JCA providers; Nimbus's Ed25519 path uses Tink. The
+original protected header and signed input are never rewritten to make an oracle
+accept a different algorithm.
 
-These original observations are retained below. The
-[2026-10-28 dependency refresh](#2026-10-28-dependency-refresh) records the current
-pins and the two changed JSON corpus verdicts separately.
+The [dependency refresh section](#2026-10-28-dependency-refresh) lists the two JSON
+corpus verdicts that changed between Jackson-core 2.18.8 and 2.22.4.
 
 | Input or capability | Revetsec | Nimbus 10.10 | jose4j 0.9.7 | Disposition |
 |---|---|---|---|---|
@@ -28,15 +28,15 @@ keys are public test keys; these are no account-backed provider observations.
 
 The JSON corpus ledger is
 [`json-corpus-verdicts.tsv`](src/test/resources/rc1/json-corpus-verdicts.tsv).
-It covers all 318 vendored inputs. Of these, 298 have the same accept/reject
-verdict; every shared acceptance has an equal typed tree. The 20 differences are
+It covers all 318 vendored inputs. Of these, 300 have the same accept/reject
+verdict; every shared acceptance has an equal typed tree. The 18 differences are
 all Revetsec rejections and Jackson acceptances:
 
 | Disposition | Inputs | Reason |
 |---|---:|---|
 | `BOUNDED_EXPONENT` | 3 | Revetsec's protocol profile bounds written and adjusted exponents to magnitude 10,000; Jackson can expose these numeric spellings as BigDecimal. |
-| `UNICODE_SCALAR_MODEL` | 10 | Revetsec rejects unpaired escaped UTF-16 surrogates, including member names. Jackson exposes those UTF-16 code units. |
-| `STRICT_UTF8_PROFILE` | 6 | Three UTF-16 auto-detection inputs and three invalid UTF-8 inputs (encoded surrogate, code point beyond Unicode range, overlong two-byte sequence). Revetsec validates UTF-8 before tokenization. |
+| `UNICODE_SCALAR_MODEL` | 9 | Revetsec rejects unpaired escaped UTF-16 surrogates in string values. Jackson exposes those UTF-16 code units. An escaped unpaired surrogate in a member name rejects in both parsers. |
+| `STRICT_UTF8_PROFILE` | 5 | Three UTF-16 auto-detection inputs and two invalid UTF-8 inputs (code point beyond Unicode range, overlong two-byte sequence). Revetsec validates UTF-8 before tokenization. A UTF-8-encoded surrogate rejects in both parsers. |
 | `UTF8_BOM_PROFILE` | 1 | Revetsec rejects a leading UTF-8 BOM; Jackson consumes it. |
 
 For `n_structure_null-byte-outside-string.json` (`5b 00 5d`), adding a leading or
@@ -51,30 +51,30 @@ large-number cases preserve exact BigDecimal values; no double conversion or
 precision rounding is used. The vendored `I_DECISIONS.txt` retains Revetsec's
 original intended profile decisions.
 
-Primary pin sources checked on 2026-10-14: [Nimbus release metadata](https://repo.maven.apache.org/maven2/com/nimbusds/nimbus-jose-jwt/maven-metadata.xml),
+Pin sources: [Nimbus release metadata](https://repo.maven.apache.org/maven2/com/nimbusds/nimbus-jose-jwt/maven-metadata.xml),
 [jose4j upstream tags](https://bitbucket.org/b_c/jose4j/downloads/?iframe=true&spa=0&tab=tags),
-[Jackson 2.18.8 release](https://github.com/FasterXML/jackson/wiki/Jackson-Release-2.18.8),
-[Tink 1.23.0 release](https://github.com/tink-crypto/tink-java/releases/tag/v1.23.0).
-Nimbus's published POM selects optional Tink 1.23.0; the dedicated dependency
-makes that verifier available without adding it to core.
+[Jackson-core release metadata](https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/maven-metadata.xml),
+[Tink release metadata](https://repo.maven.apache.org/maven2/com/google/crypto/tink/tink/maven-metadata.xml).
+Nimbus's published POM declares Tink as an optional dependency; the comparator's
+dedicated Tink test dependency makes that verifier available without adding it to core.
 
 ## 2026-10-28 dependency refresh
 
-The current standalone comparator pins Jackson-core 2.22.4 and Tink 1.24.0;
-Nimbus 10.10 and jose4j 0.9.7 are unchanged. All 930 JOSE and 1,310 JSON cases
-passed on JDK 17 and 21 with zero failures, errors or skips. The complete-case
-report verifier passed on both JDKs.
+The comparator pins Jackson-core 2.22.4 and Tink 1.24.0, replacing Jackson-core
+2.18.8 and Tink 1.23.0; Nimbus 10.10 and jose4j 0.9.7 did not change. The suite
+runs 930 JOSE and 1,310 JSON cases on JDK 17 and 21, and the report verifier
+requires the complete case set with zero failures, errors or skips.
 
 Jackson 2.22.4 rejects two corpus inputs that Jackson 2.18.8 accepted:
 
 | Input | Current Revetsec | Current Jackson | Disposition |
 |---|---|---|---|
-| `i_object_key_lone_2nd_surrogate.json` | Reject | Reject | An escaped unpaired surrogate in a member name is now rejected by both parsers. |
-| `i_string_UTF8_surrogate_U+D800.json` | Reject | Reject | The UTF-8 byte sequence encoding a surrogate is now rejected by both parsers. |
+| `i_object_key_lone_2nd_surrogate.json` | Reject | Reject | An escaped unpaired surrogate in a member name is rejected by both parsers. |
+| `i_string_UTF8_surrogate_U+D800.json` | Reject | Reject | The UTF-8 byte sequence encoding a surrogate is rejected by both parsers. |
 
-The current TSV therefore has 300 shared verdicts and 18 differences: three
-bounded-exponent inputs, nine Unicode-scalar model inputs, five strict-UTF-8
-inputs and the BOM input. Explicit high- and low-surrogate member-name controls
-also reject in both parsers. Jackson still exposes escaped unpaired UTF-16 units
-in string values; that model difference remains asserted. No core parser policy
-or accepted typed tree changed to obtain agreement.
+These two inputs account for the difference between the 298 shared verdicts
+under Jackson 2.18.8 and the 300 in the current TSV. Explicit high- and
+low-surrogate member-name controls also reject in both parsers. Jackson still
+exposes escaped unpaired UTF-16 units in string values; that model difference
+remains asserted. No core parser policy or accepted typed tree changed to obtain
+agreement.

@@ -507,6 +507,7 @@ class ReleaseRecordTests(unittest.TestCase):
 			javadoc_name = f"{artifact_id}-{record['version']}-javadoc.jar"
 			api_components.append({
 				"coordinates": component["coordinates"],
+				"baseUrl": VERIFIER.JAVADOC_BASE_URLS[component["repository"]],
 				"centralReceipt": {
 					"path": str(central_path),
 					"sha256": component["centralReceipt"]["sha256"],
@@ -527,7 +528,6 @@ class ReleaseRecordTests(unittest.TestCase):
 				"sha256": record["claimsAudit"]["sha256"],
 			},
 			"api": {
-				"baseUrl": "https://javadoc.revetsec.com",
 				"components": api_components,
 				"result": "PASS",
 			},
@@ -1006,6 +1006,27 @@ class ReleaseRecordTests(unittest.TestCase):
 			with self.assertRaises(VERIFIER.ReleaseRecordError) as raised:
 				VERIFIER.verify_evidence(record, temporary)
 			self.assertIn("Javadoc JAR differs from Central", str(raised.exception))
+
+	def test_documentation_receipt_with_adapter_on_core_host_is_rejected(self):
+		record = self.complete_record()
+		with tempfile.TemporaryDirectory() as temporary:
+			self.materialize_evidence(temporary, record)
+			receipt_path = Path(temporary) / record["documentation"]["receipt"]["path"]
+			receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+			soklet = next(
+				component for component in receipt["api"]["components"]
+				if component["coordinates"].startswith("com.revetsec:revetsec-soklet:")
+			)
+			soklet["baseUrl"] = "https://javadoc.revetsec.com"
+			receipt_path.write_text(
+				json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+			)
+			record["documentation"]["receipt"]["sha256"] = hashlib.sha256(
+				receipt_path.read_bytes()
+			).hexdigest()
+			with self.assertRaises(VERIFIER.ReleaseRecordError) as raised:
+				VERIFIER.verify_evidence(record, temporary)
+			self.assertIn("documentation API host differs", str(raised.exception))
 
 	def test_documentation_receipt_with_rehashed_wrong_website_is_rejected(self):
 		record = self.complete_record()

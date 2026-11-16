@@ -24,7 +24,7 @@ Do not use credential expiry, an empty active-credential list, SQL row counts or
 5. Perform complete new inventory and verification after writers are fenced or their output is proven to use the new key. Verify current versions, authenticated key/context/kind, semantic facts, floors/retention and capacity accounting. Include tombstones and historical scopes. Expiring forms may be allowed to reach their original full retention, with admitted cleanup where supported; never invent an extended lifetime by reissuing pending state.
 6. Retire an old opening key only after that complete evidence shows no retained value or authorized restore can depend on it, and no old writer/in-flight operation can reintroduce it. Keep it in separately controlled recovery custody if an authorized backup still needs it, without re-enabling unsafe serving acceptance. A partial scan or elapsed browser-cookie lifetime is insufficient.
 
-The library supplies neither an inventory scanner nor a distributed key-retirement controller. The [store contract](shared-clock-stores.md), [closed migration/restore fixture](../verification/shared-clock-migration/README.md) and application recovery gate define the component boundaries. Actual deployment time, writer fencing, durability and restore qualification remain application obligations.
+The library supplies neither an inventory scanner nor a distributed key-retirement controller. The [store contract](shared-clock-stores.md) and the application recovery gate define the component boundaries. Actual deployment time, writer fencing, durability and restore qualification remain application obligations.
 
 ## Compromise and old backups
 

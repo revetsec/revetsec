@@ -1,6 +1,6 @@
 # Scripted IdP
 
-Revetsec's own SAML test IdP, built to be the SAML partner in Revetsec's integration tests.
+Revetsec's own SAML test identity provider (IdP), built to be the SAML partner in Revetsec's integration tests.
 It signs and encrypts with **libxmlsec1** (through python-xmlsec) and **signxml**, neither of
 which shares code with the JDK's XMLDSig (Apache Santuario). It is test tooling only, licensed
 Apache-2.0.
@@ -11,17 +11,15 @@ Build it locally, or in CI with `load: true` and `push: false`.
 
 ## Current scope
 
-The 2026-10-28 dependency refresh uses Python 3.13.16 / Alpine 3.24.2,
-cryptography 50.0.2, signxml 5.2.0, cffi 2.1.1, pycparser 3.11 and certifi
-2026.10.19. The wheel hashes were checked against PyPI and the image build,
-`pip check`, libxml2 pairing check and all producer selftests passed on both
-linux/amd64 and linux/arm64. lxml 6.0.2 and xmlsec 1.3.17 remain paired on
-libxml2 2.14.6; upgrading lxml alone would violate that requirement. The newer
-Python 3.13.18 image, certifi 2026.10.23 and pycparser 3.12 were still inside
-the seven-day release cooldown. `SPIKE-RESULTS.md` records the original producer
-versions and remains historical evidence for those captures.
+The image uses Python 3.13.16 / Alpine 3.24.2, cryptography 50.0.2,
+signxml 5.2.0, cffi 2.1.1, pycparser 3.11 and certifi 2026.10.19. Wheel hashes
+are checked against PyPI. Validate any dependency update with the image build,
+`pip check`, the libxml2 pairing check and all producer selftests on both
+linux/amd64 and linux/arm64, and adopt new upstream releases only after a
+seven-day cooldown. lxml 6.0.2 and xmlsec 1.3.17 stay paired on libxml2 2.14.6;
+upgrading lxml alone would violate that requirement.
 
-`serve` offers HTTPS endpoints for health, SP registration, metadata, stateless response minting,
+`serve` offers HTTPS endpoints for health, service provider (SP) registration, metadata, stateless response minting,
 armed Redirect/POST SSO, Redirect/POST SLO in both directions, template signing/encryption, and
 libxmlsec signature/decryption oracles. It checks Revetsec's AuthnRequests and supplied
 SP metadata against pinned, offline OASIS/W3C XSDs. It verifies signed SP Redirect
@@ -31,11 +29,11 @@ offline corpus covers 120 fixed-key cases: the 54-case signature/digest/placemen
 36 additional GCM/OAEP/coverage combinations, five sibling-key cases, four signed
 encryption negatives, and the original
 RSA, ECDSA, signxml, GCM/OAEP and guarded CBC cases. `selftest --out DIR`
-still runs the original M0 producer checks.
+runs the original producer checks from the [producer spike](#producer-spike).
 
-The broader hostile-structure and remaining encryption-negative matrix,
-real-product captures, and RC-2 differential work remain open. This
-test partner is not an identity service for applications.
+The broader hostile-structure and encryption-negative matrix, real-product
+captures and SAML differential comparison are outside this partner's coverage.
+This test partner is not an identity service for applications.
 
 ## Template controls
 
@@ -111,14 +109,10 @@ mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true test-compile \
   -Dit.test=ScriptedIdpSsoIT,KeycloakSamlIT
 ```
 
-Local verification on 2026-10-14 used Corretto 17.0.20.1 and the locally built
-`revetsec-scripted-idp:post-slo-local` image. The command above, with
-`-Dscripted-idp.image=revetsec-scripted-idp:post-slo-local`, executed all 20
-`ScriptedIdpSsoIT` cases and all five `KeycloakSamlIT` cases: 25 total, zero
-failures, errors or skips. Three scripted cases and two real-Keycloak cases are
-new POST logout coverage; the other 20 cases retain the existing SSO, Redirect
-SLO and independent-oracle checks. The source snapshot used for these tests had
-the exact-root XML signature verifier and authentication's RESPONSE-kind guards.
+The command runs 20 `ScriptedIdpSsoIT` cases and five `KeycloakSamlIT` cases. To
+use a differently tagged local image, add `-Dscripted-idp.image=<tag>`. Three
+scripted cases and two real-Keycloak cases cover POST logout; the other 20 cover
+SSO, Redirect SLO and independent-oracle checks.
 
 `mint_slo_corpus.py` uses the same pinned signer and fixed test key to regenerate
 the 23 offline Redirect queries compared with OpenSAML in `differential/`. The nine
@@ -134,7 +128,7 @@ writes it. The corpus includes the valid request/response pair and the same
 destination, issuer, timing, correlation, identity and structure negatives as
 the Redirect corpus. These POST fixtures supply offline SP regression and fuzz
 coverage; they are separate from the existing OpenSAML Redirect comparison.
-The 2026-10-14 corpus was reproduced byte-for-byte with SHA-256
+Regenerating the corpus reproduces the committed file byte for byte; its SHA-256 is
 `d3ee983d41c67bbfa40aca48e95b1b51a687080eed0dbd0a832990845359b417`.
 
 To regenerate it, mount this directory as `/producer:ro`, the fixed test fixture
@@ -214,11 +208,11 @@ docker run --rm --network "container:$NAMESPACE_CONTAINER" --user pwuser \
   node /probe/playground_browser_probe.mjs
 ```
 
-The probe arms its own SSO/SLO responses, then checks two browser logins, SP-initiated logout, preservation of the app session for a verified LogoutRequest with a different `SessionIndex`, and termination for the matching index. It also checks the IdP's independent signature/schema receipts, private browser cleanup and secure session cookie. Output contains only redacted route/status and outcome facts. This local scripted-partner smoke does not close RC-2's independent-IdP, differential, fuzz, review or manual pentest gates.
+The probe arms its own SSO/SLO responses, then checks two browser logins, SP-initiated logout, preservation of the app session for a verified LogoutRequest with a different `SessionIndex`, and termination for the matching index. It also checks the IdP's independent signature/schema receipts, private browser cleanup and secure session cookie. Output contains only redacted route/status and outcome facts. This local scripted-partner smoke test does not replace testing against an independent IdP, differential comparison, fuzzing, review or manual penetration testing.
 
 ## Keys
 
-The M0 selftest generates throwaway keys on every run and writes their certificates, plus
+The selftest generates throwaway keys on every run and writes their certificates, plus
 the throwaway SP decryption key, to `DIR/keys/` for the JDK cross-check. Live mode loads
 the test IdP's signing key and SP's public encryption certificate under
 `src/test/resources/fixtures/keys/`, supplied through a read-only mount or copied in file
@@ -255,7 +249,7 @@ shasum -a 256 wheels/*/*.whl
 Then check each hash against `https://pypi.org/pypi/<name>/<version>/json` and edit
 `requirements.txt`.
 
-## M0 spike
+## Producer spike
 
 ```sh
 python3 spike/run_spike.py --java-home "$JAVA_17_HOME" [--java-home ...] [--no-cache]
@@ -271,4 +265,4 @@ java spike/Crosscheck.java <selftest-output-dir>   # JDK-only cross-check on its
 4. Confirms that the cross-check fails on a tampered copy.
 5. Times `serve` from `docker run` to the first good `/health`.
 
-The results are in `SPIKE-RESULTS.md`.
+The script prints its results.

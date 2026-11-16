@@ -40,6 +40,12 @@ ARTIFACTS = {
 	"revetsec-servlet-jakarta": "revetsec-servlet-jakarta",
 	"revetsec-servlet-javax": "revetsec-servlet-javax",
 }
+JAVADOC_BASE_URLS = {
+	"revetsec": "https://javadoc.revetsec.com",
+	"revetsec-soklet": "https://soklet.javadoc.revetsec.com",
+	"revetsec-servlet-jakarta": "https://jakarta.javadoc.revetsec.com",
+	"revetsec-servlet-javax": "https://javax.javadoc.revetsec.com",
+}
 ACCEPTANCE_KEYS = {
 	"finalQ5",
 	"compatibility",
@@ -1293,8 +1299,8 @@ def verify_evidence(record, evidence_root):
 		raise ReleaseRecordError("documentation receipt uses a different claims audit")
 
 	api = require_mapping(documentation["api"], "documentation api")
-	require_exact_keys(api, {"baseUrl", "components", "result"}, "documentation api")
-	if api["baseUrl"] != "https://javadoc.revetsec.com" or api["result"] != "PASS":
+	require_exact_keys(api, {"components", "result"}, "documentation api")
+	if api["result"] != "PASS":
 		raise ReleaseRecordError("documentation API verification is incomplete")
 	api_components = api["components"]
 	if not isinstance(api_components, list) or len(api_components) != len(components_by_coordinates):
@@ -1304,13 +1310,16 @@ def verify_evidence(record, evidence_root):
 		api_component = require_mapping(api_component, "documentation API component")
 		require_exact_keys(
 			api_component,
-			{"coordinates", "centralReceipt", "javadocJar", "pages"},
+			{"coordinates", "baseUrl", "centralReceipt", "javadocJar", "pages"},
 			"documentation API component",
 		)
 		coordinates = api_component["coordinates"]
 		if coordinates not in central_by_coordinates or coordinates in seen_api_components:
 			raise ReleaseRecordError(f"documentation API component is unexpected or duplicated: {coordinates!r}")
 		seen_api_components.add(coordinates)
+		repository = components_by_coordinates[coordinates]["repository"]
+		if api_component["baseUrl"] != JAVADOC_BASE_URLS.get(repository):
+			raise ReleaseRecordError(f"documentation API host differs for {coordinates}")
 		central_reference = require_mapping(
 			api_component["centralReceipt"], "documentation API centralReceipt"
 		)

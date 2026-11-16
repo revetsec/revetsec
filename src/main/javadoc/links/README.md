@@ -15,5 +15,4 @@ update the link target in `pom.xml` and the local directory, and record the new 
 checksums. Never fetch a mutable "latest" index during release packaging.
 
 Java API links target Java 26, the pinned Javadoc JDK. The library's compile and runtime floor stays
-Java 17. The Javadoc JAR is built from M1 on; until then every build passes
-`-Dmaven.javadoc.skip=true`.
+Java 17.

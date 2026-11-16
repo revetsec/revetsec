@@ -110,7 +110,7 @@ class ReleaseDocumentationTests(unittest.TestCase):
 			mapping[url] = jar
 			with zipfile.ZipFile(io.BytesIO(jar)) as archive:
 				for page in archive.namelist():
-					mapping[f"{VERIFIER.API_BASE_URL}/{page}"] = archive.read(page)
+					mapping[f"{specification['baseUrl']}/{page}"] = archive.read(page)
 		return claims, site, receipts, mapping
 
 	def verify(self, root, mutate=None):
@@ -132,6 +132,15 @@ class ReleaseDocumentationTests(unittest.TestCase):
 		self.assertEqual(result["result"], "PASS")
 		self.assertEqual(result["api"]["result"], "PASS")
 		self.assertEqual(len(result["api"]["components"]), 4)
+		self.assertEqual(
+			{component["coordinates"]: component["baseUrl"] for component in result["api"]["components"]},
+			{
+				f"com.revetsec:revetsec:{VERSION}": "https://javadoc.revetsec.com",
+				f"com.revetsec:revetsec-soklet:{VERSION}": "https://soklet.javadoc.revetsec.com",
+				f"com.revetsec:revetsec-servlet-jakarta:{VERSION}": "https://jakarta.javadoc.revetsec.com",
+				f"com.revetsec:revetsec-servlet-javax:{VERSION}": "https://javax.javadoc.revetsec.com",
+			},
+		)
 		self.assertTrue(result["website"]["allFilesMatchExport"])
 		self.assertEqual(
 			result["website"]["export"]["manifestSha256"],
@@ -140,11 +149,20 @@ class ReleaseDocumentationTests(unittest.TestCase):
 
 	def test_deployed_javadoc_must_equal_signed_jar_page(self):
 		def mutate(claims, site, receipts, mapping):
-			mapping[f"{VERIFIER.API_BASE_URL}/com/revetsec/StateSealer.html"] = b"changed"
+			mapping["https://javadoc.revetsec.com/com/revetsec/StateSealer.html"] = b"changed"
 		with tempfile.TemporaryDirectory() as temporary:
 			with self.assertRaises(VERIFIER.DocumentationPolicyError) as raised:
 				self.verify(temporary, mutate)
 		self.assertIn("differs from the signed JAR", str(raised.exception))
+
+	def test_adapter_javadoc_is_read_from_its_own_host(self):
+		url = "https://soklet.javadoc.revetsec.com/com/revetsec/soklet/SokletOAuth.html"
+		def mutate(claims, site, receipts, mapping):
+			mapping[url] = b"changed"
+		with tempfile.TemporaryDirectory() as temporary:
+			with self.assertRaises(VERIFIER.DocumentationPolicyError) as raised:
+				self.verify(temporary, mutate)
+		self.assertIn(url, str(raised.exception))
 
 	def test_javadoc_jar_must_equal_central_receipt_hash(self):
 		def mutate(claims, site, receipts, mapping):

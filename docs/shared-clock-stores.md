@@ -2,11 +2,7 @@
 
 TOTP, WebAuthn and the OAuth issuer share the store contract described here. TOTP records use the TTR3 format and WebAuthn records use WAR2. Neither has a conversion path from another format, and any other format fails closed. Persisted issuer records that predate their current format require the closed migration procedure before activation; compiling the API does not migrate a namespace or permit mixed old and new writers.
 
-The unpublished [closed migration/restore fixture](../verification/shared-clock-migration/README.md) rehearses that issuer procedure with bounded administrative inventory, exact prepared batches and a disposable PostgreSQL database. Its TOTP and WebAuthn lanes are historical and are not upgrade procedures. Its structural activation remains separate from timed admission. It does not qualify an actual deployment, establish a real-data fit report or authorize migration of another target.
-
-This document describes the joined source contract. Local fixture checks do not establish approved UTC accuracy, witness ownership, platform durability, old-writer exclusion or a production shared-store profile. The bounded volatile stores remain process-local examples.
-
-The unpublished [focused qualification fixture](../verification/shared-clock-qualification/README.md) joins current source/test identities and records separate native measurements for distinct buckets, bucket collisions and the same entity. Its scripted backend evidence and production-source guard calibrations contribute bounded assertions; they do not replace the required real witness/platform profile or close missing case lanes.
+This document describes the store contract. Local fixture checks do not establish approved UTC accuracy, witness ownership, platform durability, old-writer exclusion or a production shared-store profile. The bounded volatile stores remain process-local examples.
 
 ## Store observations and receipts
 
@@ -184,4 +180,4 @@ The shared-clock delta adds 15 store declarations and 15 service leaves. The new
 
 The two forced-public bridge declarations are internal. The separate rules and crypto/migration support classes remain internal too. No public signature exposes them; they are outside the compatibility boundary. No new builder, proof factory, key kind, public clock callback or generic recovery controller is added.
 
-Use one recorded core/adapter artifact set when qualifying applications. The source/consumer acceptance of this delta does not substitute for release-owner approval, retained-data migration or shared-profile qualification. See the [TOTP guide](totp-recovery.md), [issuer application contract](oauth-server-application-contracts.md), [WebAuthn source contract](reviews/rc-wa-public-api-contract-2026-10-16.md) and [compatibility policy](../COMPATIBILITY.md).
+Qualify an application against one fixed set of core and adapter artifacts. Passing these contract checks does not establish retained-data migration or a qualified shared-store deployment. See the [TOTP guide](totp-recovery.md), [issuer application contract](oauth-server-application-contracts.md), [WebAuthn browser compatibility](webauthn-browser-compatibility.md) and [compatibility policy](../COMPATIBILITY.md).

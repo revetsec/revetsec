@@ -1,4 +1,4 @@
-# M5 resource-provider fixtures (TEST ONLY)
+# Resource-provider fixtures (TEST ONLY)
 
 The integration profile runs `NodeAccessTokenIT` and `KeycloakAccessTokenIT`; ordinary tests start no provider. Their helper generates a new two-day localhost/127.0.0.1 SAN certificate at each class start, trusts only that certificate through a scoped TLS context, and retains normal hostname verification. Containers bind only 127.0.0.1, use cached images with a never-pull policy, and are stopped after the class. Temporary TLS material is removed. No global trust store changes.
 

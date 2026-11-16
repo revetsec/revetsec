@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-"""Build-time selftest: the M0 spike cases 1-6 (see SPIKE-RESULTS.md).
+"""Build-time selftest: the producer spike cases 1-6.
 
 Each case builds a SAML Response, signs or encrypts it with libxmlsec1 (python-xmlsec),
 serializes it once to <out>/<case>.xml, then parses those bytes back and verifies or

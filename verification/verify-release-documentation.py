@@ -38,7 +38,6 @@ CENTRAL_REPOSITORIES = {
 	"https://repo.maven.apache.org/maven2",
 	"https://repo1.maven.org/maven2",
 }
-API_BASE_URL = "https://javadoc.revetsec.com"
 WEBSITE_BASE_URL = "https://revetsec.com"
 WEBSITE_REPOSITORY = "https://github.com/revetsec/revetsec.com"
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?")
@@ -52,20 +51,25 @@ MAX_JAVADOC_ENTRIES = 20_000
 MAX_WEBSITE_FILES = 20_000
 MAX_WEBSITE_BYTES = 1024 * 1024 * 1024
 
+# Each component's Javadoc is deployed to its own host.
 COMPONENTS = {
 	"revetsec": {
+		"baseUrl": "https://javadoc.revetsec.com",
 		"package": "com/revetsec/",
 		"representative": "com/revetsec/StateSealer.html",
 	},
 	"revetsec-soklet": {
+		"baseUrl": "https://soklet.javadoc.revetsec.com",
 		"package": "com/revetsec/soklet/",
 		"representative": "com/revetsec/soklet/SokletOAuth.html",
 	},
 	"revetsec-servlet-jakarta": {
+		"baseUrl": "https://jakarta.javadoc.revetsec.com",
 		"package": "com/revetsec/servlet/jakarta/",
 		"representative": "com/revetsec/servlet/jakarta/ServletOAuth.html",
 	},
 	"revetsec-servlet-javax": {
+		"baseUrl": "https://javax.javadoc.revetsec.com",
 		"package": "com/revetsec/servlet/javax/",
 		"representative": "com/revetsec/servlet/javax/ServletOAuth.html",
 	},
@@ -337,7 +341,7 @@ def verify_documentation(
 		raise DocumentationPolicyError("Central receipts do not name all four release components")
 
 	api_components = []
-	for artifact_id in COMPONENTS:
+	for artifact_id, specification in COMPONENTS.items():
 		receipt_path, receipt, receipt_sha, javadoc_entry = receipts[artifact_id]
 		jar_data = fetcher(javadoc_entry["url"], MAX_JAVADOC_JAR_BYTES, timeout_seconds)
 		if sha256(jar_data) != javadoc_entry["sha256"]:
@@ -345,13 +349,14 @@ def verify_documentation(
 		pages = safe_javadoc_pages(jar_data, artifact_id)
 		page_hashes = {}
 		for path, expected in sorted(pages.items()):
-			url = f"{API_BASE_URL}/{urllib.parse.quote(path, safe='/._~-')}"
+			url = f"{specification['baseUrl']}/{urllib.parse.quote(path, safe='/._~-')}"
 			deployed = fetcher(url, MAX_DOCUMENT_BYTES, timeout_seconds)
 			if deployed != expected:
 				raise DocumentationPolicyError(f"deployed Javadoc differs from the signed JAR: {url}")
 			page_hashes[path] = sha256(deployed)
 		api_components.append({
 			"coordinates": receipt["coordinates"],
+			"baseUrl": specification["baseUrl"],
 			"centralReceipt": {"path": str(receipt_path), "sha256": receipt_sha},
 			"javadocJar": {"url": javadoc_entry["url"], "sha256": javadoc_entry["sha256"]},
 			"pages": {
@@ -385,7 +390,6 @@ def verify_documentation(
 		"version": version,
 		"claimsAudit": {"path": str(claims_audit), "sha256": sha256(claims_data)},
 		"api": {
-			"baseUrl": API_BASE_URL,
 			"components": api_components,
 			"result": "PASS",
 		},

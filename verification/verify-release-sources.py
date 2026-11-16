@@ -121,8 +121,6 @@ def require_no_active_snapshot(repository, version):
 		is_test_source = any(parts[index:index + 2] == ("src", "test") for index in range(len(parts) - 1))
 		if (
 			is_test_source
-			or parts[:2] == ("docs", "reviews")
-			or parts[:2] == ("verification", "shared-clock-migration")
 			or "target" in parts
 			or path.name.startswith("test_")
 		):

@@ -9,8 +9,8 @@ is reported to [`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/S
 verification context and enforces its signature allowlists even when the JVM policy differs.
 The application owns its users, account links, browser sessions, pending-state transport,
 and the decision to end a session. SAML support is part of Revetsec 1.0.0; the scripted IdP and a
-pinned Keycloak container exercise bounded browser flows. [RC-2 SAML readiness](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14)
-closed on 2026-10-14 as historical supporting evidence, not an independent audit or universal provider qualification.
+pinned Keycloak container exercise bounded browser flows. These checks are not an independent audit or a
+qualification of every provider.
 
 Configure [`SamlServiceProvider.Builder`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProvider.Builder.html)`.observer(`[`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html)`)` to receive one start and
 one terminal event for each SP operation. Events contain fixed operation and
@@ -474,7 +474,7 @@ also carry ordinary query fields. All three paths reject binding-field name coll
 empty field names, unencoded spaces, decoded control characters, and malformed percent-encoding or UTF-8
 in names or values.
 
-The Soklet adapter's [`SokletSaml`](https://javadoc.revetsec.com/com/revetsec/soklet/SokletSaml.html) and both Servlet adapters' [`ServletSaml`](https://javadoc.revetsec.com/com/revetsec/servlet/jakarta/ServletSaml.html) pass raw
+The Soklet adapter's [`SokletSaml`](https://soklet.javadoc.revetsec.com/com/revetsec/soklet/SokletSaml.html) and both Servlet adapters' [`ServletSaml`](https://jakarta.javadoc.revetsec.com/com/revetsec/servlet/jakarta/ServletSaml.html) pass raw
 request fields to core and write prepared Redirect/form responses. Their dedicated
 `postLogoutBindingResultFor` helper preserves the POST logout boundary, and typed
 POST logout request/response form helpers preserve the core-rendered fields and headers. The

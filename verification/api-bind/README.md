@@ -1,7 +1,7 @@
 # Typed binding public-API verification
 
-This fixture checks the API-BIND boundary using an exact current core JAR and an exact pre-change
-baseline JAR. The positive consumer compiles every affected high-level family with
+This fixture checks the typed browser/operation binding boundary using an exact current core JAR
+and an exact baseline JAR built before the typed bindings were introduced. The positive consumer compiles every affected high-level family with
 `BrowserBinding` or `OperationBinding` and executes the carrier boundaries. A legacy external
 consumer using raw `String` bindings must compile against the baseline and fail against the
 current JAR. Cross-role consumers must also fail against the current JAR.
@@ -21,7 +21,7 @@ python3 run.py \
   --output /private/tmp/new-api-bind-check
 ```
 
-The selected compatibility loss is exact: well-formed OAuth/OIDC pending bindings over 65,536
+The compatibility change is exact: well-formed OAuth/OIDC pending bindings over 65,536
 Java UTF-16 code units that were accepted by a sufficiently provisioned in-memory or custom store
 are no longer accepted by the high-level API. Only deployments retaining such a live pending
 attempt or its server-session correlation need to expire, clear or rotate that state before

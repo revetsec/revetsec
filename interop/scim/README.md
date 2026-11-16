@@ -60,9 +60,9 @@ compiler baseline; core retains Java 17 compatibility. The runtime pin is
 checked against the Playground compiler release before qualification.
 The source for the [tester](https://github.com/python-scim/scim2-tester) and
 [authentik outbound provider](https://docs.goauthentik.io/add-secure-apps/providers/scim/)
-is independent of Revetsec. Authentik's September 2026 published advisories are
-patched in 2026.8.2; the selected release is 2026.8.3. This dated review does
-not promise that future advisories or dependency vulnerabilities cannot arise.
+is independent of Revetsec. The advisories authentik published through September
+2026 are fixed in 2026.8.2; the pinned release is 2026.8.3. That advisory check
+does not promise that future advisories or dependency vulnerabilities cannot arise.
 
 Build current core, the Soklet adapter and the unpublished Playground according
 to `examples/README.md`. Use a task-private Python environment:
@@ -127,11 +127,11 @@ remain supported and are covered by the application tests.
 `.github/workflows/scim-interop.yml` runs tester-only qualification on relevant
 pull requests (`run.py --mode tester`), and both clients on scheduled/manual
 runs. The outbound nightly result is advisory, not a new PR-required status.
-Nightly CI is ongoing coverage with no minimum-duration or consecutive-run
-release gate. The workflow and M12 empty-body bridge repair are pushed. The exact
-adapter source guard and checkout revision are kept together; after a reviewed
-adapter update is pushed, refresh both. The pinned source also includes the
-API-freeze documentation for overflow handling and host-owned response headers.
+Nightly CI is ongoing coverage; no minimum duration or number of consecutive
+passing runs is required. The exact adapter source guard and checkout revision
+are kept together; after a reviewed adapter update is pushed, refresh both. The
+pinned adapter source includes the empty-body bridge fix and the documentation
+for overflow handling and host-owned response headers.
 A configured schedule is not evidence that a particular run passed.
 Collect the authoritative GitHub REST workflow-run history, including failures
 and skips, and download each matching run's qualification artifact to
@@ -151,15 +151,13 @@ and missing or mismatched receipts remain explicit. Manual runs remain separate
 from scheduled history. Use authoritative history rather than a success-only
 list. The `test_*.py` harness tests check provenance, exact upstream-defect
 dispositions, runtime compatibility and startup diagnostics.
-This ongoing coverage does not replace owner API freeze, external review,
-penetration testing or the complete release assurance matrix.
+This ongoing coverage does not replace API review, external review,
+penetration testing or the full release test matrix.
 
-The local qualification on 2026-10-13 completed both clients on the actual
-containerized Soklet routes: default tester **129 SUCCESS / 2 optional SKIPPED /
-2 identified fixture ERROR**, configured tester **131 SUCCESS / 2 optional
-SKIPPED / zero ERROR**, and authentik AWS mode **eight required outcomes / 22
-actual HTTP calls**. The skipped checks are the unsupported optional aggregate
-search, for User and Group. The default tester and authentik default-mode
-defects remain explicit. These are local runs, separate from nightly CI history.
-Exact artifact/tooling hashes, reports, failed attempt history and dispositions
-are preserved in the private M12 evidence record rather than copied into source.
+With the pinned tools, a passing run against the containerized Soklet routes
+shows the default tester with exactly the two identified fixture ERROR rows, the
+configured tester with zero ERROR rows, and all eight required authentik AWS-mode
+outcomes. Both tester profiles record two optional SKIPPED checks: the unsupported
+aggregate search, for User and Group. The default tester and authentik
+default-mode defects remain explicit. Local runs are separate from nightly CI
+history.

@@ -8,7 +8,7 @@
 
 ### Administrative interoperability fixture
 
-The separate `example.playground.ScimPlayground` entrypoint retains the earlier single-administrative-principal fixture for dated independent-client qualification. It is not the complete Playground startup profile and does not expose the new tenant aliases:
+The separate `example.playground.ScimPlayground` entrypoint runs a single-administrative-principal fixture for independent-client interoperability tests. It is not the complete Playground startup profile and does not expose the new tenant aliases:
 
 ```sh
 export SCIM_BEARER_TOKEN='<private ASCII credential, 32–256 characters>'
@@ -21,7 +21,7 @@ java -cp "examples/playground/target/playground-1.0.0.jar:examples/playground/ta
 
 Install matching core, adapter and Soklet dependencies using the [Maven setup instructions](../examples/README.md#build-with-maven), then run `mvn -f examples/playground/pom.xml verify` from the core repository root. An HTTPS edge with a scoped CA and hostname verification is required. The interoperability runner provisions that private edge automatically. The internal HTTP host is configurable for an isolated container network; its default is loopback.
 
-The authenticated synthetic principal owns one local provisioning tenant. The credential is application configuration, never a query parameter or browser cookie. Each request must have exactly one Authorization occurrence. Discovery is GET-only. User and Group routes implement create, get, replace, PATCH, delete, list and resource-specific POST `.search`. Aggregate `.search` returns a fixed SCIM 501; unknown resource roots return a fixed SCIM 404; unsupported methods on known discovery roots return SCIM 405. The fixture explicitly selects only `PATCH_EXTENSION_SCHEMA_ROOT` for registered extension-object URI roots. That named interoperability profile is outside the literal PATCH path ABNF; strict/Entra/Okta presets continue to reject it. The operation exposes the distinct target through `ScimPatchOperation.getExtensionSchemaId()`, and authorization receives canonical child paths. This profile choice and additive getter/enum are reviewable M12 API deltas. The fixture advertises filtering, PATCH, ETags and password changes in its synthetic profile; it does not advertise Bulk, sorting or cursor pagination.
+The authenticated synthetic principal owns one local provisioning tenant. The credential is application configuration, never a query parameter or browser cookie. Each request must have exactly one Authorization occurrence. Discovery is GET-only. User and Group routes implement create, get, replace, PATCH, delete, list and resource-specific POST `.search`. Aggregate `.search` returns a fixed SCIM 501; unknown resource roots return a fixed SCIM 404; unsupported methods on known discovery roots return SCIM 405. The fixture explicitly selects only `PATCH_EXTENSION_SCHEMA_ROOT` for registered extension-object URI roots. That named interoperability profile is outside the literal PATCH path ABNF; strict/Entra/Okta presets continue to reject it. The operation exposes the distinct target through `ScimPatchOperation.getExtensionSchemaId()`, and authorization receives canonical child paths. The getter and enum constant are additive API for this profile. The fixture advertises filtering, PATCH, ETags and password changes in its synthetic profile; it does not advertise Bulk, sorting or cursor pagination.
 
 The local store has a maximum of 128 combined resources. Soklet bounds the materialized body to 16KiB and the complete request to 32KiB; the core provider uses the same body cap. Default page size and maximums come from the configured provider, and totalResults is accurate even for count=0. Collection execution uses `ScimFilterEvaluator` against the configured default-deny policies. All matching uses the same provider strategy as PATCH. Username input is restricted to printable non-space ASCII of at most 128 characters, and matching is an explicitly synthetic ASCII profile. It is not a Unicode/PRECIS production default. A deployment must choose authoritative preparation/matching/uniqueness together.
 
@@ -61,12 +61,12 @@ one shared work budget, preserving requested order and retained protected metada
 application's keyed reducer execution must continue to honor the same add-existing,
 remove/re-add and replacement contracts. Qualify the actual ID lengths, member counts,
 metadata and operation mix; byte ceilings alone do not promise semantic acceptance. Original
-body admission and complete JSON output now charge started 16-byte blocks on the same work
-carrier; validation/matching and header/framing charges remain, and projection shares immutable
+body admission and complete JSON output charge started 16-byte blocks on the same work
+carrier; validation/matching and header/framing charges also apply, and projection shares immutable
 scalars without an extra content-length penalty. No allowance resets per page member or phase.
 The default 8 MiB prepared-response ceiling is reachable for qualified linear pages, including
-header/framing overhead; the recipe's own smaller transport/storage limits still apply. Requalify
-its actual profiles after the accounting change. No partial candidate or rejected prepared response
+header/framing overhead; the recipe's own smaller transport/storage limits still apply. Qualify
+its actual profiles against this accounting. No partial candidate or rejected prepared response
 is eligible for persistence.
 
 Standard Group PUT also supports rows without a member ID. It preserves a current anonymous
@@ -93,4 +93,4 @@ The paired adapter `verification/scim-container` sources compile and run in actu
 
 `differential` compares typed syntax trees with pinned UnboundID. Exact grammar/parser differences have individual dispositions; unexplained divergence fails. This lane provides syntax/AST evidence, not evaluator, authorization, PATCH or persistence assurance.
 
-The nightly authentik workflow provides ongoing interoperability coverage with required outcomes and source-bound evidence for every run. There is no minimum-duration or consecutive-run release gate. Failures, missing artifacts and source/pin mismatches remain observable failures; successful reruns must match their actual run identity and attempt. The workflow and example manifest pin the owner-delivered adapter checkpoint containing the qualified SCIM transport repairs. Future source changes require an explicit reviewed pin refresh; an uncommitted candidate uses recorded source snapshots for local qualification. RC3 still requires the planned mutation/calibration/review/pentest, complete exact-source exit matrix and owner API freeze.
+The nightly authentik workflow provides ongoing interoperability coverage with required outcomes and source-bound evidence for every run. No minimum duration or number of consecutive passing runs is required. Failures, missing artifacts and source/pin mismatches remain observable failures; successful reruns must match their actual run identity and attempt. The workflow and example manifest pin an exact adapter revision that contains the SCIM transport fixes. Changing that pin requires an explicit reviewed update; local runs against uncommitted source record the exact source files they used. This interoperability coverage does not replace SCIM mutation testing, review, penetration testing or the full release test matrix.
