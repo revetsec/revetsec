@@ -2,7 +2,7 @@
 
 This unpublished Java 21 integration wires the [common Java 17 application recipe](../provider-backend-tokens/README.md) to real Soklet request, route and cookie types. It preserves header/cookie multiplicity, complete raw form bytes, body-discard flags, exact raw path, actual socket peer and separate response cookies. The common implementation owns provider/nonce/CSRF checks, one-use attempts, bounded sessions, rotation and current account/tenant/owner authorization; the application supplies its real account and admission callbacks.
 
-Build after installing a matching core and the checksum-pinned framework described in [the examples guide](../README.md):
+Build after installing a matching core; Maven resolves Soklet 4.0.0 from Maven Central as described in [the examples guide](../README.md):
 
 ```sh
 mvn -B -ntp -f examples/pom.xml -pl provider-backend-tokens-soklet -am verify

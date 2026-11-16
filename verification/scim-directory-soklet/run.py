@@ -2,25 +2,41 @@
 # Copyright 2026 Revetware LLC.
 # SPDX-License-Identifier: Apache-2.0
 """Owned loopback acceptance of the restrictive Playground service-client profile."""
-import argparse, hashlib, http.client, json, os, pathlib, secrets, socket, subprocess, time
+import argparse, hashlib, http.client, json, os, pathlib, secrets, socket, subprocess, time, zipfile
+
+FRAMEWORK_COORDINATES = "com.soklet:soklet:4.0.0"
+DIGESTED = ("application", "core", "adapter")
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+def framework_coordinates(jar):
+    """Return the groupId:artifactId:version that Maven embedded in the framework JAR, or None."""
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            text = archive.read("META-INF/maven/com.soklet/soklet/pom.properties").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
+        return None
+    values = dict(line.split("=", 1) for line in text.splitlines() if "=" in line and not line.startswith("#"))
+    return ":".join(values.get(key, "").strip() for key in ("groupId", "artifactId", "version"))
 
 def arguments(parser=None):
     if parser is None:
         parser = argparse.ArgumentParser(description=__doc__)
     for name in ("application", "core", "adapter", "framework"):
         parser.add_argument("--" + name + "-jar", required=True, type=pathlib.Path)
-        parser.add_argument("--" + name + "-sha256", required=True)
+        if name in DIGESTED:
+            parser.add_argument("--" + name + "-sha256", required=True)
     parser.add_argument("--java-home", required=True, type=pathlib.Path)
     parser.add_argument("--annotations-jar", required=True, type=pathlib.Path)
     parser.add_argument("--output", required=True, type=pathlib.Path)
     args = parser.parse_args()
-    for name in ("application", "core", "adapter", "framework"):
+    for name in DIGESTED:
         path = getattr(args, name + "_jar")
         if not path.is_file() or len(getattr(args, name + "_sha256")) != 64 or digest(path) != getattr(args, name + "_sha256"):
             parser.error("Selected " + name + " artifact hash mismatch")
+    if not args.framework_jar.is_file() or framework_coordinates(args.framework_jar) != FRAMEWORK_COORDINATES:
+        parser.error("Selected framework artifact is not " + FRAMEWORK_COORDINATES)
     if not args.annotations_jar.is_file() or not (args.java_home / "bin/java").is_file():
         parser.error("Explicit compilation annotations and JDK required")
     if args.output.exists():
@@ -44,8 +60,10 @@ def run(args):
         env[setting] = tokens[name]
     env.pop("SCIM_BASE_URI", None)
     for name in ("application", "core", "adapter", "framework"):
-        env["SCIM_" + name.upper() + "_JAR"] = str(getattr(args, name + "_jar").resolve())
-        env["SCIM_" + name.upper() + "_SHA256"] = getattr(args, name + "_sha256")
+        path = getattr(args, name + "_jar")
+        env["SCIM_" + name.upper() + "_JAR"] = str(path.resolve())
+        # The fixture confirms each class loaded from the file checked here, unchanged since.
+        env["SCIM_" + name.upper() + "_SHA256"] = getattr(args, name + "_sha256") if name in DIGESTED else digest(path)
     with socket.socket() as selection:
         selection.bind(("127.0.0.1", 0))
         port = selection.getsockname()[1]
@@ -140,7 +158,7 @@ def run(args):
         _, payload=request("final no hostile allocation","GET",base+"/Users","reader")
         assert json.loads(payload)["totalResults"] == 2
         result={"status":"PASS","observations":observations,"javaHome":str(args.java_home),"runtimeAnnotations":False,
-                "artifacts":{name:getattr(args,name+"_sha256") for name in ("application","core","adapter","framework")},
+                "artifacts":{name:getattr(args,name+"_sha256") for name in DIGESTED},"frameworkCoordinates":FRAMEWORK_COORDINATES,
                 "scope":"Owned HTTP loopback with fixed HTTPS Host contract; no TLS/browser/durable/external qualification"}
         (args.output/"RESULT.json").write_text(json.dumps(result,indent=2)+"\n")
         print("PASS",len(observations),"named native observations")

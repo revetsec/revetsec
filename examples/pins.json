@@ -11,8 +11,6 @@
     "repository": "https://repo.maven.apache.org/maven2",
     "coordinates": "com.soklet:soklet:4.0.0",
     "version": "4.0.0",
-    "jar_sha256": "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce",
-    "pom_sha256": "496cdb065ffc2db4b17a6c1ced6262d261a752883e689fdfc72c52143b99b8ba",
     "minimum_java": 21
   },
   "examplesUnpublished": true

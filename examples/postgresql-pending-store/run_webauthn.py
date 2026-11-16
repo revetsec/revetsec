@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 import time
 
-from run import FRAMEWORK_PIN, IMAGE, ROOT, check as original_check, docker as original_docker, java_release_for
+from run import FRAMEWORK_PIN, IMAGE, ROOT, framework_coordinates, check as original_check, docker as original_docker, java_release_for
 
 RECEIPT = {"success": False, "checks": []}
 OUTPUT = None
@@ -63,7 +63,7 @@ def main() -> None:
     for name in ("java-home", "core-jar", "pyranid-jar", "driver-jar", "jspecify-jar", "jsr305-jar"):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--soklet-jar", type=Path,
-                        help="pinned Soklet 4.0.0 JAR for the optional application lane")
+                        help="Maven Central Soklet 4.0.0 JAR for the optional application lane")
     for name in ("browser-node", "browser-chrome", "browser-openssl"):
         parser.add_argument("--" + name, type=Path,
                             help="absolute tool path for the optional durable Chrome browser lane")
@@ -82,9 +82,8 @@ def main() -> None:
         parser.error("The browser lane requires --soklet-jar and absolute existing tool paths")
     jars = [args.core_jar, args.pyranid_jar, args.driver_jar, args.jspecify_jar, args.jsr305_jar]
     if args.soklet_jar is not None:
-        if not args.soklet_jar.is_file() or hashlib.sha256(args.soklet_jar.read_bytes()).hexdigest() \
-                != FRAMEWORK_PIN["jar_sha256"]:
-            parser.error("--soklet-jar must be the pinned Soklet 4.0.0 artifact")
+        if not args.soklet_jar.is_file() or framework_coordinates(args.soklet_jar) != FRAMEWORK_PIN["coordinates"]:
+            parser.error("--soklet-jar must be the published " + FRAMEWORK_PIN["coordinates"] + " artifact")
         jars.append(args.soklet_jar)
         RECEIPT["artifacts"][args.soklet_jar.name]=hashlib.sha256(args.soklet_jar.read_bytes()).hexdigest()
     if not all(path.is_file() for path in jars) or not (args.java_home / "bin/javac").is_file():

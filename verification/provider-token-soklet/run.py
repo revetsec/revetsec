@@ -14,6 +14,18 @@ import zipfile
 from matrix import exercise
 
 ROOT = Path(__file__).resolve().parents[2]
+FRAMEWORK_COORDINATES = "com.soklet:soklet:4.0.0"
+
+
+def framework_coordinates(jar):
+    """Return the groupId:artifactId:version that Maven embedded in the framework JAR, or None."""
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            text = archive.read("META-INF/maven/com.soklet/soklet/pom.properties").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
+        return None
+    values = dict(line.split("=", 1) for line in text.splitlines() if "=" in line and not line.startswith("#"))
+    return ":".join(values.get(key, "").strip() for key in ("groupId", "artifactId", "version"))
 
 
 def digest(path):
@@ -35,8 +47,10 @@ def inputs(args):
     for path in [common, carrier, core, framework]:
         if path.stat().st_size > 16_777_216:
             raise ValueError("Built input exceeds verification ceiling")
-    if digest(core) != args.core_sha256 or digest(framework) != args.framework_sha256:
+    if digest(core) != args.core_sha256:
         raise ValueError("Selected runtime artifact digest mismatch")
+    if framework_coordinates(framework) != FRAMEWORK_COORDINATES:
+        raise ValueError("Selected framework is not " + FRAMEWORK_COORDINATES)
     if not (fixtures / "example/provider/soklet/ProviderSokletSocketFixture.class").is_file():
         raise ValueError("Private socket fixture is unavailable")
     if any((fixtures / "com/revetsec").rglob("*.class")):
@@ -62,7 +76,6 @@ def main():
     parser.add_argument("--examples-root", type=Path, default=ROOT / "examples")
     parser.add_argument("--java-home", type=Path, required=True)
     parser.add_argument("--core-sha256", required=True)
-    parser.add_argument("--framework-sha256", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -85,7 +98,7 @@ def main():
     receipt = {
         "status": "IN_PROGRESS", "success": False, "qualifiedProfile": False,
         "checks": [], "requests": [], "sourceHashesBefore": before,
-        "selectedCoreSha256": args.core_sha256, "selectedFrameworkSha256": args.framework_sha256,
+        "selectedCoreSha256": args.core_sha256, "selectedFrameworkCoordinates": FRAMEWORK_COORDINATES,
         "classpath": [str(path) for path in [common, carrier, fixtures, core, framework]],
         "runtimeAnnotationsAndJUnitAbsent": True,
         "scope": "Actual owned Soklet/fake-JWKS application components; trusted TLS/query-rejection edge, browser, hosted provider and distributed/profile qualification remain open."

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = Path(__file__).resolve().parent
@@ -18,7 +19,18 @@ CADDY_IMAGE = "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc2406
 JAVA_IMAGE = "sha256:b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87"
 NODE_IMAGE = "sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d"
 ALPINE_IMAGE = "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
-FRAMEWORK_SHA256 = "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce"
+FRAMEWORK_COORDINATES = "com.soklet:soklet:4.0.0"
+
+
+def framework_coordinates(jar):
+    """Return the groupId:artifactId:version that Maven embedded in the framework JAR, or None."""
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            text = archive.read("META-INF/maven/com.soklet/soklet/pom.properties").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
+        return None
+    values = dict(line.split("=", 1) for line in text.splitlines() if "=" in line and not line.startswith("#"))
+    return ":".join(values.get(key, "").strip() for key in ("groupId", "artifactId", "version"))
 
 
 def digest(path):
@@ -154,8 +166,8 @@ def main():
     if any(not path.is_file() for path in [*artifact_paths.values(), *sources]) or not test_classes.is_dir():
         parser.error("Build current candidate artifacts and test classes first")
     selection = {"artifacts": {key: {"path": str(path), "sha256": digest(path)} for key, path in artifact_paths.items()}, "testClasses": str(test_classes), "sourceSha256": {str(path.relative_to(ROOT)): digest(path) for path in sources}, "images": {name: image_id(value) for name, value in {"caddy": CADDY_IMAGE, "java21": JAVA_IMAGE, "node24": NODE_IMAGE, "alpine": ALPINE_IMAGE}.items()}, "frameworkPinExpected": FRAMEWORK_SHA256}
-    if selection["artifacts"]["framework"]["sha256"] != FRAMEWORK_SHA256:
-        parser.error("Pinned Soklet framework differs")
+    if framework_coordinates(artifact_paths["framework"]) != FRAMEWORK_COORDINATES:
+        parser.error("The framework JAR is not " + FRAMEWORK_COORDINATES)
     args.output.mkdir(parents=True)
     (args.output / "SELECTED-INPUTS.json").write_text(json.dumps(selection, indent=2) + "\n")
     receipt = {"status": "FAILED", "productionSourceChanged": False, "actualDeploymentDesignated": False, "ownerDeploymentGate": "OPEN", "selectedInputSha256": digest(args.output / "SELECTED-INPUTS.json")}

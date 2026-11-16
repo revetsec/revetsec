@@ -63,7 +63,7 @@ compatibility relaxation of the SP's logout validation.
 
 `run_playground_browser.sh` starts a disposable browser fixture after the current core
 and Soklet adapter JARs and Playground classes have been built. Set `SOKLET_JAR` to the
-checksum-pinned Soklet 4.0.0 JAR and `BROWSER_SECCOMP` to the private derived profile
+Soklet 4.0.0 JAR from Maven Central and `BROWSER_SECCOMP` to the private derived profile
 from [the browser setup](../inspector-auth/linux/README.md), then run
 `bash interop/keycloak/run_playground_browser.sh` from the core repository. The runner
 uses only locally cached images, prints a bounded JSON result, and removes its owned

@@ -23,6 +23,11 @@ import re
 import shutil
 import subprocess
 
+try:
+    import framework_artifact
+except ModuleNotFoundError:  # Also support importing the builder from repository-root tests.
+    from verification.examples import framework_artifact
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -60,8 +65,8 @@ def main():
     args.core_source = args.core_source.resolve()
     args.adapter_source = args.adapter_source.resolve()
     framework = json.loads((args.core_source / "examples/pins.json").read_text())["framework"]
-    if framework["version"] != "4.0.0" or digest(args.framework_jar) != framework["jar_sha256"]:
-        parser.error("Use the pinned Soklet framework JAR")
+    if framework["version"] != "4.0.0" or framework_artifact.jar_coordinates(args.framework_jar) != framework["coordinates"]:
+        parser.error("Use the published " + framework["coordinates"] + " framework JAR")
     if (not args.work.is_absolute() or args.work.exists() or not args.maven.is_file()
             or not (args.java_home / "bin/keytool").is_file() or not (args.java_home / "bin/javac").is_file()
             or args.work.resolve().is_relative_to(args.core_source)

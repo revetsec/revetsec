@@ -14,19 +14,29 @@ import argparse,concurrent.futures,hashlib,html.parser,http.client,json,os,re,se
 from pathlib import Path
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+FRAMEWORK_COORDINATES='com.soklet:soklet:4.0.0'
+def framework_coordinates(jar):
+ """Return the groupId:artifactId:version that Maven embedded in the framework JAR, or None."""
+ try:
+  with zipfile.ZipFile(jar) as archive:text=archive.read('META-INF/maven/com.soklet/soklet/pom.properties').decode('utf-8')
+ except (OSError,KeyError,zipfile.BadZipFile,UnicodeDecodeError):return None
+ values=dict(line.split('=',1) for line in text.splitlines() if '=' in line and not line.startswith('#'))
+ return ':'.join(values.get(key,'').strip() for key in ('groupId','artifactId','version'))
 
 def main():
  parser=argparse.ArgumentParser(description=__doc__)
  if not __debug__:parser.error('Python optimization disables assertions')
  parser.add_argument('--examples-root',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True)
- for name in ['core','adapter','framework','application']:parser.add_argument('--'+name+'-sha256',required=True)
+ for name in ['core','adapter','application']:parser.add_argument('--'+name+'-sha256',required=True)
  parser.add_argument('--repository',type=Path,default=Path.home()/'.m2/repository');parser.add_argument('--binding',choices=['post','redirect'],default='post');parser.add_argument('--output',type=Path,required=True)
  args=parser.parse_args();fixture=Path(__file__).resolve().parent;module=args.examples_root/'playground';jar=module/'target/playground-1.0.0.jar';libs=module/'target/lib'
  inputs={'APPLICATION':jar,'CORE':libs/'revetsec-1.0.0.jar','ADAPTER':libs/'revetsec-soklet-1.0.0.jar','FRAMEWORK':libs/'soklet-4.0.0.jar'}
  annotations=[args.repository/'org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar',args.repository/'com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar']
  sources=[fixture/'PlaygroundPostSloFixture.java',Path(__file__),*sorted((module/'src').rglob('*.java')),*sorted((module/'src/test/resources/saml').glob('*.pem')),module/'pom.xml',args.examples_root/'pom.xml']
  for name,path in inputs.items():
-  if not path.is_file() or not re.fullmatch('[0-9a-f]{64}',getattr(args,name.lower()+'_sha256')) or digest(path)!=getattr(args,name.lower()+'_sha256'):parser.error('Selected '+name+' artifact mismatch before resources')
+  if name=='FRAMEWORK':
+   if not path.is_file() or framework_coordinates(path)!=FRAMEWORK_COORDINATES:parser.error('Selected FRAMEWORK artifact is not '+FRAMEWORK_COORDINATES+' before resources')
+  elif not path.is_file() or not re.fullmatch('[0-9a-f]{64}',getattr(args,name.lower()+'_sha256')) or digest(path)!=getattr(args,name.lower()+'_sha256'):parser.error('Selected '+name+' artifact mismatch before resources')
  for p in [*annotations,*sources]:
   if not p.is_file():parser.error('Missing exact fixture/source input')
  if args.output.exists():parser.error('Fresh output required')

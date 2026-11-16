@@ -32,8 +32,8 @@ password, RSA, key-import, common logout and provider-token recipes retain Java 
 `JAVA_HOME` and put its `bin` directory on `PATH` so Maven and Java agree.
 
 Revetsec core 1.0.0, the Revetsec Soklet adapter 1.0.0 and Soklet 4.0.0 are
-published Maven Central coordinates. Soklet's coordinates and artifact hashes
-are recorded in [pins.json](pins.json). From the core repository root:
+published Maven Central coordinates. Soklet's coordinates are recorded in
+[pins.json](pins.json). From the core repository root:
 
 ```sh
 mvn -B -ntp -f examples/pom.xml verify
@@ -73,7 +73,7 @@ are test tools, separate from the normal Maven build.
 
 Additional source-pin, published-artifact, nullability and annotation-free runtime audits
 live under [verification/examples](../verification/examples/README.md).
-CI retains the exact adapter source pin and checksum-bound Central framework artifacts, including the explicit
+CI retains the exact adapter source pin and resolves the framework from Maven Central, including the explicit
 [test-only adapter compatibility bridge](compatibility/soklet-shared-clock/README.md).
 Revetsec has not been independently audited.
 

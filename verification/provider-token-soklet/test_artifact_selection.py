@@ -23,24 +23,42 @@ class SelectedArtifactTests(unittest.TestCase):
         self.core = self.common.parent / "lib/revetsec-1.0.0.jar"
         self.framework = self.carrier.parent / "lib/soklet-4.0.0.jar"
         self.core_hash = hashlib.sha256(self.core.read_bytes()).hexdigest()
-        self.framework_hash = hashlib.sha256(self.framework.read_bytes()).hexdigest()
 
-    def invoke(self, root, output, core_hash, framework_hash):
+    def invoke(self, root, output, core_hash):
         return subprocess.run(["python3", str(HERE / "run.py"), "--examples-root", str(root),
                                "--java-home", str(self.java), "--core-sha256", core_hash,
-                               "--framework-sha256", framework_hash, "--output", str(output)],
+                               "--output", str(output)],
                               capture_output=True, text=True, timeout=15)
 
-    def test_runtime_mismatch_refuses_before_output(self):
+    def copy_selected(self, tree):
+        for original in [self.common, self.core, self.carrier, self.framework]:
+            selected = tree / original.relative_to(self.examples)
+            selected.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(original, selected)
+        return tree / self.framework.relative_to(self.examples)
+
+    def test_core_mismatch_refuses_before_output(self):
         with tempfile.TemporaryDirectory(prefix="revetsec-soklet-pins-") as work:
-            for name, core, framework in [("core", "0" * 64, self.framework_hash),
-                                          ("framework", self.core_hash, "0" * 64)]:
-                with self.subTest(name=name):
-                    output = Path(work) / name
-                    result = self.invoke(self.examples, output, core, framework)
-                    self.assertEqual(result.returncode, 2)
-                    self.assertIn("Selected runtime artifact digest mismatch", result.stderr)
-                    self.assertFalse(output.exists())
+            output = Path(work) / "core"
+            result = self.invoke(self.examples, output, "0" * 64)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("Selected runtime artifact digest mismatch", result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_framework_without_published_coordinates_refuses_before_output(self):
+        for name, properties in [("other-version", "groupId=com.soklet\nartifactId=soklet\nversion=4.0.1\n"),
+                                 ("no-coordinates", None)]:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix="revetsec-soklet-coordinates-") as work:
+                framework = self.copy_selected(Path(work) / "examples")
+                with zipfile.ZipFile(framework, "w") as archive:
+                    archive.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\n\r\n")
+                    if properties is not None:
+                        archive.writestr("META-INF/maven/com.soklet/soklet/pom.properties", properties)
+                output = Path(work) / "refused"
+                result = self.invoke(Path(work) / "examples", output, self.core_hash)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("Selected framework is not com.soklet:soklet:4.0.0", result.stderr)
+                self.assertFalse(output.exists())
 
     def test_manifest_cannot_add_an_unselected_runtime(self):
         with tempfile.TemporaryDirectory(prefix="revetsec-soklet-manifest-") as work:
@@ -61,7 +79,7 @@ class SelectedArtifactTests(unittest.TestCase):
             fixtures.mkdir(parents=True)
             (fixtures / "ProviderSokletSocketFixture.class").write_bytes(b"not executed")
             output = Path(work) / "refused"
-            result = self.invoke(tree, output, self.core_hash, self.framework_hash)
+            result = self.invoke(tree, output, self.core_hash)
             self.assertEqual(result.returncode, 2)
             self.assertIn("Unselected manifest runtime dependency", result.stderr)
             self.assertFalse(output.exists())

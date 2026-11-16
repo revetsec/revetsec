@@ -26,8 +26,9 @@ import sys
 
 try:
     import adapter_compatibility
+    import framework_artifact
 except ModuleNotFoundError:  # Also support importing the builder from repository-root tests.
-    from verification.examples import adapter_compatibility
+    from verification.examples import adapter_compatibility, framework_artifact
 
 ROOT = Path(__file__).resolve().parents[2]
 PINS = json.loads((ROOT / "examples/pins.json").read_text())
@@ -108,16 +109,16 @@ def main():
     run("core-install", command + ["-DskipTests", "clean", "install"], core)
     framework_jar = args.framework_jar.resolve()
     framework_pom = args.framework_pom.resolve()
-    if sha(framework_jar) != pins["framework"]["jar_sha256"]:
-        raise RuntimeError("Framework JAR checksum does not match the published Central artifact")
-    if sha(framework_pom) != pins["framework"]["pom_sha256"]:
-        raise RuntimeError("Framework POM checksum does not match the published Central artifact")
+    if framework_artifact.jar_coordinates(framework_jar) != pins["framework"]["coordinates"]:
+        raise RuntimeError("Framework JAR is not " + pins["framework"]["coordinates"])
+    if framework_artifact.pom_coordinates(framework_pom) != pins["framework"]["coordinates"]:
+        raise RuntimeError("Framework POM is not " + pins["framework"]["coordinates"])
     framework_path = repo / "com/soklet/soklet/4.0.0"
     framework_path.mkdir(parents=True, exist_ok=True)
     shutil.copy2(framework_jar, framework_path / "soklet-4.0.0.jar")
     shutil.copy2(framework_pom, framework_path / "soklet-4.0.0.pom")
     # The adapter's Soklet dependency is provided scope, but javac still needs
-    # the checksum-bound Central framework artifact in this private repository.
+    # the published Central framework artifact in this private repository.
     compatibility = adapter_compatibility.prepare_adapter(core, adapter, pins["adapter"]["revision"])
     compatibility_path = args.work / "ADAPTER-COMPATIBILITY.json"
     compatibility_path.write_text(json.dumps(compatibility, indent=2) + "\n")
@@ -155,8 +156,8 @@ def main():
         if len(dependencies) != 3 or {x.name for x in dependencies} != expected:
             raise RuntimeError("Unexpected runtime dependencies for " + name)
         framework_dependency = next(x for x in dependencies if x.name.startswith("soklet-"))
-        if sha(framework_dependency) != pins["framework"]["jar_sha256"]:
-            raise RuntimeError("Published framework artifact changed")
+        if framework_artifact.jar_coordinates(framework_dependency) != pins["framework"]["coordinates"]:
+            raise RuntimeError("Runtime framework artifact is not " + pins["framework"]["coordinates"])
         artifacts = [*dependencies, *sorted((example / "target").glob("*.jar"))]
         result["examples"][name] = {"directory": str(example), "runtimeDependencies": [str(x) for x in dependencies],
                                     "nullability": json.loads((example / "target/nullability-audit.json").read_text()),

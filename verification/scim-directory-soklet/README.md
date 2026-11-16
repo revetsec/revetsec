@@ -8,7 +8,8 @@ Use the normal application distribution with its matching lib directory, since
 its manifest also declares those dependencies.
 
 Build the example with its matching core/adapter/framework dependencies. Supply
-each artifact path and its expected SHA-256 explicitly:
+each artifact path, and the expected SHA-256 of the application, core and adapter
+JARs. The Soklet JAR must carry the `com.soklet:soklet:4.0.0` Maven coordinates:
 
     python3 verification/scim-directory-soklet/run.py \
       --application-jar examples/playground/target/playground-1.0.0.jar \
@@ -18,7 +19,6 @@ each artifact path and its expected SHA-256 explicitly:
       --adapter-jar examples/playground/target/lib/revetsec-soklet-1.0.0.jar \
       --adapter-sha256 EXPECTED_ADAPTER_SHA256 \
       --framework-jar examples/playground/target/lib/soklet-4.0.0.jar \
-      --framework-sha256 EXPECTED_FRAMEWORK_SHA256 \
       --annotations-jar /path/to/jspecify-1.0.1.jar \
       --java-home /path/to/jdk21 \
       --output /private/tmp/scim-directory-owned-run

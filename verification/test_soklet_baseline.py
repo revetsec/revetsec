@@ -27,6 +27,7 @@ from types import SimpleNamespace
 import unittest
 from unittest import mock
 import xml.etree.ElementTree as ET
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +63,18 @@ def matrix(job_text, key):
     return [int(value) for value in re.findall(r"['\"](\d+)['\"]", match.group(1))]
 
 
+def write_framework_jar(path, version):
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("META-INF/maven/com.soklet/soklet/pom.properties",
+                         "artifactId=soklet\ngroupId=com.soklet\nversion=" + version + "\n")
+
+
+def write_framework_pom(path, version):
+    path.write_text('<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>'
+                    "<groupId>com.soklet</groupId><artifactId>soklet</artifactId><version>" + version
+                    + "</version></project>")
+
+
 def compiler_releases(pom):
     root = ET.fromstring(pom)
     ns = {"m": "http://maven.apache.org/POM/4.0.0"}
@@ -80,9 +93,8 @@ def check_configuration(files, pins):
         raise AssertionError("Framework repository must be canonical Maven Central")
     if pins["framework"]["coordinates"] != "com.soklet:soklet:4.0.0":
         raise AssertionError("Framework coordinates drift")
-    for name in ("jar_sha256", "pom_sha256"):
-        if re.fullmatch(r"[0-9a-f]{64}", pins["framework"].get(name, "")) is None:
-            raise AssertionError("Framework published checksum is invalid: " + name)
+    if any("sha" in key.lower() for key in pins["framework"]):
+        raise AssertionError("Framework pin must name Central coordinates, not a checksum")
     for path, expected in (("pom.xml", core_release), ("examples/rsa-oidc/pom.xml", core_release),
                            *(("examples/" + name + "/pom.xml", minimum)
                              for name in ("barebones-oidc", "playground", "self-issued", "passkeys-soklet", "totp-soklet"))):
@@ -110,9 +122,12 @@ def check_configuration(files, pins):
                           ".example-inputs/framework", "-f soklet/pom.xml"):
             if forbidden in workflow:
                 raise AssertionError(label + " retains a Soklet source-commit pin")
-        for name in ("jar_sha256", "pom_sha256"):
-            if pins["framework"][name] not in workflow:
-                raise AssertionError(label + " framework checksum drift: " + name)
+        if "-Dartifact=" + pins["framework"]["coordinates"] + " " not in workflow:
+            raise AssertionError(label + " framework coordinates drift")
+        if not re.search(r"^\s*mvn\b[^\n]*\s--strict-checksums\s", workflow, re.M):
+            raise AssertionError(label + " must verify Central's published checksums")
+        if re.search(r"[0-9a-f]{64}\s+\S*soklet-", workflow):
+            raise AssertionError(label + " retains a framework checksum pin")
         if "https://repo.maven.apache.org/maven2" not in workflow:
             raise AssertionError(label + " framework repository drift")
         if label == "examples":
@@ -136,10 +151,12 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
     def test_guard_detects_independent_pin_and_central_artifact_drift(self):
         replacements = (
             (".github/workflows/ci.yml", PINS["adapter"]["revision"], "a" * 40, "checkout pin"),
-            (".github/workflows/ci.yml", PINS["framework"]["jar_sha256"], "c" * 64, "checksum"),
-            (".github/workflows/ci.yml", PINS["framework"]["pom_sha256"], "d" * 64, "checksum"),
-            (".github/workflows/scim-interop.yml", PINS["framework"]["jar_sha256"], "e" * 64, "checksum"),
-            (".github/workflows/scim-interop.yml", PINS["framework"]["pom_sha256"], "f" * 64, "checksum"),
+            (".github/workflows/ci.yml", "-Dartifact=com.soklet:soklet:4.0.0", "-Dartifact=com.soklet:soklet:4.0.1",
+             "coordinates"),
+            (".github/workflows/scim-interop.yml", "-Dartifact=com.soklet:soklet:4.0.0",
+             "-Dartifact=com.soklet:soklet:4.0.1", "coordinates"),
+            (".github/workflows/ci.yml", "--strict-checksums ", "", "published checksums"),
+            (".github/workflows/scim-interop.yml", "--strict-checksums ", "", "published checksums"),
             (".github/workflows/scim-interop.yml", "https://repo.maven.apache.org/maven2",
              "https://example.invalid/maven2", "repository"),
         )
@@ -166,6 +183,14 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
                 self.assertNotEqual(altered[path], self.files[path])
                 with self.assertRaisesRegex(AssertionError, reason):
                     check_configuration(altered, PINS)
+
+    def test_guard_rejects_reintroduced_framework_checksum_pin(self):
+        path = ".github/workflows/scim-interop.yml"
+        pin = '\n          echo "' + "a" * 64 + '  $artifact/soklet-4.0.0.jar" | sha256sum --check --strict\n'
+        with self.assertRaisesRegex(AssertionError, "checksum pin"):
+            check_configuration({**self.files, path: self.files[path] + pin}, PINS)
+        with self.assertRaisesRegex(AssertionError, "not a checksum"):
+            check_configuration(self.files, {**PINS, "framework": {**PINS["framework"], "jar_sha256": "a" * 64}})
 
     def test_guard_rejects_reintroduced_framework_source_checkout(self):
         path = ".github/workflows/scim-interop.yml"
@@ -194,13 +219,10 @@ class SokletBaselineRunnerTests(unittest.TestCase):
         for name in ("core", "framework", "adapter", "pyranid", "driver", "jspecify", "jsr305"):
             self.jars[name] = self.work / (name + ".jar")
             self.jars[name].write_bytes(name.encode())
+        write_framework_jar(self.jars["framework"], "4.0.0")
         self.framework_pom = self.work / "framework.pom"
-        self.framework_pom.write_bytes(b"published framework POM")
-        self.framework_pin = {
-            **PINS["framework"],
-            "jar_sha256": hashlib.sha256(self.jars["framework"].read_bytes()).hexdigest(),
-            "pom_sha256": hashlib.sha256(self.framework_pom.read_bytes()).hexdigest(),
-        }
+        write_framework_pom(self.framework_pom, "4.0.0")
+        self.framework_pin = PINS["framework"]
         self.maven = self.work / "mvn"
         self.maven.touch()
         for name in ("core-source", "adapter-source"):
@@ -281,10 +303,11 @@ class SokletBaselineRunnerTests(unittest.TestCase):
         def run(command, **unused):
             calls.append(command)
             return SimpleNamespace(returncode=0)
+        write_framework_jar(self.jars["framework"], "4.0.1")
         with mock.patch.object(sys, "argv", self.examples_arguments()), mock.patch.object(
                 self.examples.subprocess, "check_output", side_effect=check_output), mock.patch.object(
                 self.examples.subprocess, "run", side_effect=run):
-            with self.assertRaisesRegex(RuntimeError, "Framework JAR checksum"):
+            with self.assertRaisesRegex(RuntimeError, "Framework JAR is not"):
                 self.examples.main()
         maven_calls = [command for command in calls if command[0] == str(self.maven)]
         self.assertEqual(len(maven_calls), 1)  # Only core installation precedes JAR admission.
@@ -299,18 +322,45 @@ class SokletBaselineRunnerTests(unittest.TestCase):
         def run(command, **unused):
             calls.append(command)
             return SimpleNamespace(returncode=0)
-        framework = {**PINS["framework"], "jar_sha256": hashlib.sha256(
-            self.jars["framework"].read_bytes()).hexdigest()}
+        write_framework_pom(self.framework_pom, "4.0.1")
         with mock.patch.object(sys, "argv", self.examples_arguments()), mock.patch.object(
                 self.examples.subprocess, "check_output", side_effect=check_output), mock.patch.object(
-                self.examples.subprocess, "run", side_effect=run), mock.patch.object(
-                self.examples, "PINS", {**PINS, "framework": framework}):
-            with self.assertRaisesRegex(RuntimeError, "Framework POM checksum"):
+                self.examples.subprocess, "run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "Framework POM is not"):
                 self.examples.main()
         maven_calls = [command for command in calls if command[0] == str(self.maven)]
         self.assertEqual(len(maven_calls), 1)
         self.assertFalse((self.work / "output/examples").exists())
 
+
+class FrameworkArtifactTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.artifact = load_script("baseline_framework_artifact", "verification/examples/framework_artifact.py")
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="revetsec-framework-artifact-test-")
+        self.addCleanup(self.temporary.cleanup)
+        self.work = Path(self.temporary.name)
+
+    def test_reads_embedded_and_declared_coordinates(self):
+        write_framework_jar(self.work / "soklet.jar", "4.0.0")
+        write_framework_pom(self.work / "soklet.pom", "4.0.0")
+        self.assertEqual(self.artifact.jar_coordinates(self.work / "soklet.jar"), PINS["framework"]["coordinates"])
+        self.assertEqual(self.artifact.pom_coordinates(self.work / "soklet.pom"), PINS["framework"]["coordinates"])
+
+    def test_unidentifiable_artifacts_have_no_coordinates(self):
+        (self.work / "plain.jar").write_bytes(b"not a zip")
+        (self.work / "plain.pom").write_bytes(b"not a pom")
+        with zipfile.ZipFile(self.work / "empty.jar", "w") as archive:
+            archive.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        with zipfile.ZipFile(self.work / "shaded.jar", "w") as archive:
+            for group in ("com.soklet", "com.example"):
+                archive.writestr("META-INF/maven/" + group + "/soklet/pom.properties", "version=4.0.0\n")
+        for name in ("plain.jar", "empty.jar", "shaded.jar", "missing.jar"):
+            with self.subTest(name=name):
+                self.assertIsNone(self.artifact.jar_coordinates(self.work / name))
+        self.assertIsNone(self.artifact.pom_coordinates(self.work / "plain.pom"))
 
 
 class SelfIssuedInventoryTests(unittest.TestCase):

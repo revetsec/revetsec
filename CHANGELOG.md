@@ -4,7 +4,7 @@ All notable changes to Revetsec are recorded in this file.
 
 Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, Security and Migration Notes sections as needed. A released security fix names its GHSA or CVE ID when assigned; pre-release hardening without an advisory names its review. Changes that reject previously accepted insecure input, or that remove an algorithm from a default, are listed under Security (see the security-tightening policy in [COMPATIBILITY.md](COMPATIBILITY.md)).
 
-## 1.0.0 (2026-11-15)
+## 1.0.0 (2026-11-16)
 
 First release.
 
@@ -26,6 +26,7 @@ First release.
 - SAML service provider (SP) support, including HTTP-POST Single Logout in both directions with exact-root XML signatures, strict logout semantics and a shared atomic replay domain across POST and Redirect, explicit POST endpoints and metadata, logout form parsing, and Soklet and Servlet transport helpers. See the [SAML SP guide](docs/saml-sp.md).
 - SCIM registered schemas and immutable resources, create/PUT validation, schema-bound filter policies, GET/SearchRequest queries, projection, index/cursor page framing, conditional headers, discovery and bounded response preparation. Ordered atomic PATCH and conservative membership reduction include explicit string matching, attempted/effective/supplied paths and PATCH response policy. `ScimResourceType.userInstance()` registers only the core User schema; register `ScimSchema.enterpriseUserInstance()` through `schemaExtensions(...)` to support Enterprise User attributes. The optional `ScimFilterEvaluator` evaluates a policy-approved filter against one resource; applications own collection retrieval, authorization and persistence. See [SCIM server primitives](docs/scim-server-primitives.md).
 - Bounded SCIM filter and attribute-path syntax parsing with sealed results and fixed errors, an immutable six-kind AST, a Java 17 visitor, explicit serialization and default-deny policy configuration. Syntax success grants no query permission; the provider binds schemas and enforces complete policies. See [SCIM filter syntax](docs/scim-filters.md).
+- Builder configuration diagnostics: `TotpAuthenticator.Builder`, `WebAuthnRelyingParty.Builder` and `OAuthAuthorizationServer.Builder` expose `configurationDiagnostics()`, an immutable list of fixed `ConfigurationDiagnostic` codes for the current configuration. Codes never include configured values, and inspection performs no I/O or collaborator calls. An empty list does not establish that storage, keys or recovery admission are ready. See [builder configuration diagnostics](docs/builder-diagnostics.md).
 - Unpublished runnable examples: a self-issued Soklet MCP issuer with app-owned login and consent, a playground with OIDC, SAML and SCIM routes, and OIDC, logout, passkey, TOTP, password, key-import, provider-token and PostgreSQL store examples. They keep their documented state, session and recovery limitations; see [runnable examples](examples/README.md).
 
 ### Security

@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 from urllib.parse import parse_qs
+import zipfile
 from urllib.parse import urlencode
 from urllib.parse import urlsplit
 from urllib.error import HTTPError
@@ -34,6 +35,17 @@ ROOT = Path(__file__).resolve().parent
 APP_ROOT = ROOT.parent / "self-issued"
 IMAGE = "sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
 FRAMEWORK_PIN = json.loads((ROOT.parent / "pins.json").read_text())["framework"]
+
+
+def framework_coordinates(jar: Path) -> str | None:
+    """Return the groupId:artifactId:version that Maven embedded in a framework JAR, or None."""
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            text = archive.read("META-INF/maven/com.soklet/soklet/pom.properties").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
+        return None
+    values = dict(line.split("=", 1) for line in text.splitlines() if "=" in line and not line.startswith("#"))
+    return ":".join(values.get(key, "").strip() for key in ("groupId", "artifactId", "version"))
 
 
 def java_release_for(java_home: Path, soklet_enabled: bool) -> str:
@@ -82,8 +94,8 @@ def main() -> None:
         paths.extend((args.adapter_jar, args.framework_jar))
     if not all(path.is_file() for path in paths) or not (args.java_home / "bin/java").is_file():
         parser.error("All input JARs and the Java home must exist")
-    if app_lane and hashlib.sha256(args.framework_jar.read_bytes()).hexdigest() != FRAMEWORK_PIN["jar_sha256"]:
-        parser.error("Use the pinned Soklet 4.0.0 framework JAR for the application lane")
+    if app_lane and framework_coordinates(args.framework_jar) != FRAMEWORK_PIN["coordinates"]:
+        parser.error("Use the published " + FRAMEWORK_PIN["coordinates"] + " framework JAR for the application lane")
     java_release = java_release_for(args.java_home, app_lane)
     check(docker("image", "inspect", "--format", "{{.Id}}", IMAGE) == IMAGE, "cached-image")
 

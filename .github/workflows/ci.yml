@@ -492,17 +492,14 @@ jobs:
           distribution: corretto
           java-version: ${{ matrix.java }}
 
-      - name: Download checksum-bound Soklet 4.0.0 from Maven Central
+      # Maven checks the download against Central's published checksums (--strict-checksums).
+      - name: Resolve Soklet 4.0.0 from Maven Central
         run: |
-          destination="$RUNNER_TEMP/soklet-central"
-          base="https://repo.maven.apache.org/maven2/com/soklet/soklet/4.0.0"
-          mkdir -p "$destination"
-          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
-            "$base/soklet-4.0.0.jar" --output "$destination/soklet-4.0.0.jar"
-          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
-            "$base/soklet-4.0.0.pom" --output "$destination/soklet-4.0.0.pom"
-          echo "9dd10e8a1d7cad0824349d54220bf81d4933da987851ee7423a8f69703b2c1ce  $destination/soklet-4.0.0.jar" | sha256sum --check --strict
-          echo "496cdb065ffc2db4b17a6c1ced6262d261a752883e689fdfc72c52143b99b8ba  $destination/soklet-4.0.0.pom" | sha256sum --check --strict
+          mvn -B -ntp --strict-checksums org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
+            -Dartifact=com.soklet:soklet:4.0.0 -Dtransitive=false \
+            -DremoteRepositories=central::default::https://repo.maven.apache.org/maven2
+          test -f "$HOME/.m2/repository/com/soklet/soklet/4.0.0/soklet-4.0.0.jar"
+          test -f "$HOME/.m2/repository/com/soklet/soklet/4.0.0/soklet-4.0.0.pom"
 
       - name: Build exact artifacts and verify both unpublished examples
         run: |
@@ -512,8 +509,8 @@ jobs:
             --core-source "$GITHUB_WORKSPACE/.example-inputs/core" \
             --core-revision "$GITHUB_SHA" \
             --adapter-source "$GITHUB_WORKSPACE/.example-inputs/adapter" \
-            --framework-jar "$RUNNER_TEMP/soklet-central/soklet-4.0.0.jar" \
-            --framework-pom "$RUNNER_TEMP/soklet-central/soklet-4.0.0.pom"
+            --framework-jar "$HOME/.m2/repository/com/soklet/soklet/4.0.0/soklet-4.0.0.jar" \
+            --framework-pom "$HOME/.m2/repository/com/soklet/soklet/4.0.0/soklet-4.0.0.pom"
 
       - name: Build and test the complete Maven examples reactor
         run: |

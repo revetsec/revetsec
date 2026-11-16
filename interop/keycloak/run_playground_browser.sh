@@ -14,12 +14,12 @@
 # limitations under the License.
 
 # Run only with previously built local core, adapter and Playground artifacts.
-# SOKLET_JAR is the checksum-pinned Soklet 4.0.0 JAR; BROWSER_SECCOMP is the
+# SOKLET_JAR is the Maven Central Soklet 4.0.0 JAR; BROWSER_SECCOMP is the
 # private derived Playwright profile described in inspector-auth/linux/README.md.
 set -euo pipefail
 umask 077
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-SOKLET_JAR=${SOKLET_JAR:?Set SOKLET_JAR to the pinned Soklet 4.0.0 JAR}
+SOKLET_JAR=${SOKLET_JAR:?Set SOKLET_JAR to the Maven Central Soklet 4.0.0 JAR}
 BROWSER_SECCOMP=${BROWSER_SECCOMP:?Set BROWSER_SECCOMP to the derived browser seccomp profile}
 CORE_JAR=${CORE_JAR:-$ROOT/target/revetsec-1.0.0.jar}
 ADAPTER_JAR=${ADAPTER_JAR:-$ROOT/../revetsec-soklet/target/revetsec-soklet-1.0.0.jar}
@@ -31,11 +31,16 @@ if [ ! -f "$PLAYGROUND_CLASSES/example/playground/Playground.class" ]; then
   echo 'Build the Playground before running the browser probe.' >&2; exit 1
 fi
 python3 - "$SOKLET_JAR" "$ROOT/examples/pins.json" <<'PY'
-import hashlib, json, pathlib, sys
-actual = hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()
-expected = json.loads(pathlib.Path(sys.argv[2]).read_text())['framework']['jar_sha256']
-if actual != expected:
-    raise SystemExit('Soklet JAR does not match the pinned 4.0.0 artifact.')
+import json, pathlib, sys, zipfile
+expected = json.loads(pathlib.Path(sys.argv[2]).read_text())['framework']['coordinates']
+try:
+    with zipfile.ZipFile(sys.argv[1]) as archive:
+        text = archive.read('META-INF/maven/com.soklet/soklet/pom.properties').decode('utf-8')
+except (OSError, KeyError, zipfile.BadZipFile, UnicodeDecodeError):
+    text = ''
+values = dict(line.split('=', 1) for line in text.splitlines() if '=' in line and not line.startswith('#'))
+if ':'.join(values.get(key, '').strip() for key in ('groupId', 'artifactId', 'version')) != expected:
+    raise SystemExit('SOKLET_JAR is not the ' + expected + ' artifact.')
 PY
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/revetsec-keycloak-playground.XXXXXX")
